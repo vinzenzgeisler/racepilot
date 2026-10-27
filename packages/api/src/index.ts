@@ -43,6 +43,15 @@ const configSchema = z.object({
     }
   }),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  MAIL_PROVIDER: z.enum(['disabled', 'smtp']).default('disabled'),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
+  SMTP_SECURE: z.enum(['true', 'false']).default('false'),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASSWORD: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
+  STORAGE_PROVIDER: z.enum(['disabled', 'local']).default('disabled'),
+  STORAGE_LOCAL_ROOT: z.string().optional(),
 });
 export function loadConfig(env: NodeJS.ProcessEnv) {
   const parsed = configSchema.safeParse(env);
@@ -54,8 +63,27 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     ];
     throw new Error(`Invalid configuration variables: ${names.join(', ')}`);
   }
+  if (
+    parsed.data.MAIL_PROVIDER === 'smtp' &&
+    (!parsed.data.SMTP_HOST ||
+      !parsed.data.SMTP_PORT ||
+      !parsed.data.SMTP_FROM ||
+      Boolean(parsed.data.SMTP_USER) !== Boolean(parsed.data.SMTP_PASSWORD))
+  ) {
+    throw new Error(
+      'Invalid configuration variables: SMTP_HOST, SMTP_PORT, SMTP_FROM, SMTP_USER, SMTP_PASSWORD',
+    );
+  }
+  if (
+    parsed.data.STORAGE_PROVIDER === 'local' &&
+    !parsed.data.STORAGE_LOCAL_ROOT
+  ) {
+    throw new Error('Invalid configuration variables: STORAGE_LOCAL_ROOT');
+  }
   return {
     ...parsed.data,
+    mailEnabled: parsed.data.MAIL_PROVIDER === 'smtp',
+    storageEnabled: parsed.data.STORAGE_PROVIDER === 'local',
     deploymentMode: parseDeploymentMode(parsed.data.DEPLOYMENT_MODE),
   };
 }
