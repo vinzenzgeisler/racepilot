@@ -83,6 +83,10 @@ security assessment.
 
 ## Marketing site: verified coupling and claim risks
 
+Paths prefixed with `racepilot/` refer to the separate marketing-site repository as it
+was named at snapshot time, not to this repository (see the
+[repository naming note](repository-module-map.md#repository-naming-note)).
+
 | ID | Verified finding and evidence paths | Architectural impact | Follow-up obligation |
 |---|---|---|---|
 | M-01 | MSC reference and Dreiecksrennen copy is embedded in `racepilot/components/Hero.tsx:23`, `SocialProof.tsx:21-29`, and `ProductShowcase.tsx:232`; the contact placeholder references an MSC example in `Contact.tsx:53`. | This is intentional marketing/reference content rather than tenant runtime data, but accuracy and consent still need ownership. | Keep it out of product runtime modules; review reference permission and claims separately. |
