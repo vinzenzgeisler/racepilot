@@ -62,3 +62,11 @@ The package boundaries follow [ADR 0002](docs/adr/0002-product-repository-clean-
 Local development PostgreSQL is available through `docker compose -f compose.dev.yaml up -d` (Docker is optional; tests can use any PostgreSQL 16 instance). Configure `DATABASE_URL`, `DEPLOYMENT_MODE=community`, `COMMUNITY_ORGANIZATION_SLUG`, `COMMUNITY_ORGANIZATION_NAME`, `COMMUNITY_ORGANIZATION_TIMEZONE`, and `COMMUNITY_ORGANIZATION_LOCALE`; `PORT` defaults to 3000. Run `npm run db:migrate` and `npm run db:seed`. Integration tests use `RACEPILOT_TEST_DATABASE_URL`.
 
 To enable Community OIDC, set `OIDC_PROVIDER=oidc`, `OIDC_ISSUER_URL`, `OIDC_AUDIENCE`, `OIDC_CLIENT_ID`, and `OIDC_REDIRECT_URI`. Configure exactly one initial-admin selector: `OIDC_BOOTSTRAP_SUBJECT` (matched together with the configured issuer) or `OIDC_BOOTSTRAP_EMAIL` (matched only to a verified email from that issuer). `/auth/config` exposes only the public web-client settings. The API verifies bearer tokens against issuer discovery/JWKS and grants admin permissions only from an active database membership; provider role/group claims are ignored. Leave `OIDC_PROVIDER` unset to keep authentication disabled.
+
+## Produktseite
+
+Die eigenständige deutsche Produkt-/Marketingseite liegt in `packages/site`; sie ist
+kein Teil der Veranstaltungsanwendung und macht keine Live-Demo verfügbar. Lokal
+starten: `npm run dev:site` (Vite bindet an `127.0.0.1`). Einen statischen Build
+erstellen: `npm run build --workspace @racepilot/site`; veröffentlichbar ist
+`packages/site/dist/`.
