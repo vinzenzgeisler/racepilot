@@ -17,10 +17,20 @@ Status terms follow the definitions in the [repository README](../../README.md).
 | AWS infrastructure | `MSC-Event-Backend/infra` | **Current fact:** AWS CDK config and Auth, Data, Storage, API, and Migration Runner stacks. Evidence: `infra/bin/app.ts` and `infra/lib/stacks/*.ts`. It currently packages API and worker deployments together. |
 | Frontend deployment automation | `MSC-Event-Frontend/.github/workflows/ci-cd.yml`, `vercel.json`, `scripts/cleanup-vercel-preview-deployments.mjs` | **Current fact:** Vercel-specific build/deploy/promotion and preview cleanup. |
 | Backend deployment automation | `MSC-Event-Backend/.github/workflows/ci-cd.yml`, `scripts` | **Current fact:** AWS credentials, CDK synth/deploy/destroy, RDS lifecycle, migration, and seed automation. |
-| Marketing site | `racepilot/app`, `racepilot/components` | **Current fact:** separate Next.js site containing product, Community, Cloud, pricing, contact, and MSC reference copy. It contains no product API or control plane. |
-| Architecture coordination | `race-pilot` (this repository) | **Current fact:** documentation-only issues #34/#38 baseline, including a machine-readable tenant resource inventory and its validator. No production module or deployment exists here. |
+| Marketing site | `racepilot/app`, `racepilot/components` (the separate marketing repository at snapshot time; see the [naming note](#repository-naming-note)) | **Current fact:** separate Next.js site containing product, Community, Cloud, pricing, contact, and MSC reference copy. It contains no product API or control plane. |
+| Architecture coordination | `racepilot` (this repository; named `race-pilot` at snapshot time) | **Current fact:** documentation-only issues #34/#38 baseline, including a machine-readable tenant resource inventory and its validator. No production module or deployment exists here. |
 | Community distribution | None found | **Current fact:** no Docker Compose, Helm chart, container build, or generic self-host bundle was found in the inspected repositories. |
 | Cloud control plane | None found | **Current fact:** no organization lifecycle, tenant/domain registry, subscription, billing, or entitlement module was found in the inspected repositories. |
+
+### Repository naming note
+
+This repository was renamed from `vinzenzgeisler/race-pilot` to
+`vinzenzgeisler/racepilot` after the 2026-08-15 snapshot. At snapshot time the name
+`racepilot` belonged to the separate Next.js marketing-site repository. Paths prefixed
+with `racepilot/` in this map and in the [coupling inventory](current-couplings.md)
+refer to that marketing snapshot, not to this repository. The marketing commit listed
+under [evidence scope](#evidence-scope) is not reachable under the current
+`vinzenzgeisler/racepilot` name.
 
 The planning evidence is consistent with these observations:
 `reports/racepilot-projektmasterplan-2026-08-13.md` lines 30–48 describe the
@@ -35,7 +45,7 @@ implementation have happened.
 
 | Concern | Target repository/module assignment | Visibility | Migration obligation |
 |---|---|---|---|
-| Architecture, cross-repository contracts, and decision index | `vinzenzgeisler/race-pilot` (`docs`, future versioned contracts only after a separate implementation decision) | Public | Keep this repository documentation-first for issue #34. Do not place speculative product code here. |
+| Architecture, cross-repository contracts, and decision index | `vinzenzgeisler/racepilot` (`docs`, future versioned contracts only after a separate implementation decision) | Public | Keep this repository documentation-first for issue #34. Do not place speculative product code here. |
 | Backend domain core and HTTP application | Current `MSC-Event-Backend/api`, renamed or transferred to a public RacePilot product repository later | Public | Split internal modules into `core` (domain/use cases/ports), `application` (HTTP/context), and provider adapters. Remove MSC identity and Cloud provider dependencies from `core`. |
 | Database schema and migrations | Same public backend product repository | Public | Add organization ownership and tenant-safe migrations; Community and Cloud consume the same schema contract, with mode-specific deployment profiles. |
 | Domain workers | Same public backend product repository under an explicit `workers` boundary | Public | Preserve shared job behavior; require server-issued organization context and provider ports. Do not copy worker logic into the Cloud control plane. |
@@ -43,7 +53,7 @@ implementation have happened.
 | Community deployment and infrastructure examples | A public `community` deployment module/repository owned by RacePilot Core maintainers; physical repository creation is a follow-up | Public | Compose first: web, API, workers, PostgreSQL, and reference OIDC/SMTP/storage adapters. Include upgrades, migrations, backup/restore, and health checks. |
 | Cloud runtime adapters | Private Cloud runtime/infrastructure repository, depending only on public ports/contracts | Private | Move production AWS/Vercel assembly and operational policy out of the shared core boundary. A provider adapter may remain public when reusable and secret-free. |
 | Cloud control plane | Private `racepilot-cloud-control-plane` repository/module | Private | Implement tenant and membership lifecycle, domain mapping, subscriptions/entitlements, billing integration, platform support, and audit. It calls public product contracts; it does not own copied domain logic. |
-| Marketing | Current `racepilot` repository | Public by default; separate deployable | Keep independent of product uptime and authentication. Claims about Community/Cloud availability must track release evidence. |
+| Marketing | The separate marketing-site repository (named `racepilot` at snapshot time) | Public by default; separate deployable | Keep independent of product uptime and authentication. Claims about Community/Cloud availability must track release evidence. |
 
 Names for not-yet-created physical repositories are allocation labels. Creating or
 renaming them requires a separate, reviewed change. Until then, directory-level
@@ -76,7 +86,7 @@ inspection workspace.
 |---|---|---|---|
 | [`vinzenzgeisler/MSC-Event-Backend`](https://github.com/vinzenzgeisler/MSC-Event-Backend) | `fix/editor-class-filter` | `4a96266f13f43b43fc76292193924d491bdf8673` | [Inspected commit](https://github.com/vinzenzgeisler/MSC-Event-Backend/commit/4a96266f13f43b43fc76292193924d491bdf8673) |
 | [`vinzenzgeisler/MSC-Event-Frontend`](https://github.com/vinzenzgeisler/MSC-Event-Frontend) | `feat/marshal-planning-refinements` | `b42ab84f2123a4860f4dbc9ad1c5a24f4d1b14cb` | [Inspected commit](https://github.com/vinzenzgeisler/MSC-Event-Frontend/commit/b42ab84f2123a4860f4dbc9ad1c5a24f4d1b14cb) |
-| [`vinzenzgeisler/racepilot`](https://github.com/vinzenzgeisler/racepilot) | `main` | `33364c9d8dd0c5cfe6c53e987e876f55439dd39a` | [Inspected commit](https://github.com/vinzenzgeisler/racepilot/commit/33364c9d8dd0c5cfe6c53e987e876f55439dd39a) |
+| `vinzenzgeisler/racepilot` (marketing site at snapshot time; name since reassigned, see the [naming note](#repository-naming-note)) | `main` | `33364c9d8dd0c5cfe6c53e987e876f55439dd39a` | Not reachable under the current repository name |
 
 The sources were inspected at these local read-only evidence paths:
 
