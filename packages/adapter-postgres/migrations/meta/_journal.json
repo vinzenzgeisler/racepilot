@@ -8,6 +8,13 @@
       "when": 1793098507622,
       "tag": "0000_cultured_marten_broadcloak",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1793099965647,
+      "tag": "0001_fixed_menace",
+      "breakpoints": true
     }
   ]
 }

@@ -164,6 +164,24 @@ export interface ExternalIdentity {
 export interface IdentityProvider {
   verify(credential: string): Promise<ExternalIdentity>;
 }
+export type MembershipRole = 'admin' | 'member';
+export interface MembershipBootstrap {
+  readonly issuer: string;
+  readonly subject?: string;
+  readonly email?: string;
+}
+export interface MembershipRepository {
+  resolvePermissions(
+    identity: ExternalIdentity,
+    organizationId: OrganizationId,
+    bootstrap?: MembershipBootstrap,
+  ): Promise<ReadonlySet<string>>;
+}
+export function permissionsForRole(role: MembershipRole): ReadonlySet<string> {
+  return role === 'admin'
+    ? new Set(['organization:read', 'organization:update', 'event:read'])
+    : new Set();
+}
 export interface MailMessage {
   readonly organizationId: OrganizationId;
   readonly to: string;

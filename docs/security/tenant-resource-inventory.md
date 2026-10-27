@@ -3,8 +3,8 @@
 This document is the human-readable security contract for RacePilot issue #38. The
 normative, versioned artifacts are:
 
-- [tenant resource inventory v1](tenant-resource-inventory.v1.json), containing 109
-  classified resource records;
+- [tenant resource inventory v1](tenant-resource-inventory.v1.json), containing 111
+  classified resource records (including the two RacePilot authentication tables);
 - [two-tenant fixture v1](fixtures/two-tenant.v1.json), containing synthetic
   organizations A and B; and
 - [tenant isolation-test matrix v1](tenant-isolation-test-matrix.v1.json), containing
