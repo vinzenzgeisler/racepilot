@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   font-family: system-ui, sans-serif;
   --status-success: #16794a;
   --status-warning: #8a4b08;
@@ -65,11 +65,5 @@ a:focus-visible {
 @media (prefers-reduced-motion: no-preference) {
   a {
     transition: color 120ms ease;
-  }
-}
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #111820;
-    color: #f4f6f8;
   }
 }
