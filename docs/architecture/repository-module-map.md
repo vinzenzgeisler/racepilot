@@ -40,24 +40,26 @@ billing as future work rather than implemented modules.
 
 ## Target repository and module ownership
 
-These are **target decisions**, not claims that repository renames, extraction, or
-implementation have happened.
+These are **target decisions**, not claims that extraction or implementation has
+happened. [ADR 0002](../adr/0002-product-repository-clean-start-and-package-boundaries.md)
+replaced the earlier plan to rename or transfer the MSC repositories: RacePilot is a
+clean rebuild in this repository, and the MSC repositories remain read-only references.
 
-| Concern | Target repository/module assignment | Visibility | Migration obligation |
+| Concern | Target repository/module assignment | Visibility | Obligation |
 |---|---|---|---|
-| Architecture, cross-repository contracts, and decision index | `vinzenzgeisler/racepilot` (`docs`, future versioned contracts only after a separate implementation decision) | Public | Keep this repository documentation-first for issue #34. Do not place speculative product code here. |
-| Backend domain core and HTTP application | Current `MSC-Event-Backend/api`, renamed or transferred to a public RacePilot product repository later | Public | Split internal modules into `core` (domain/use cases/ports), `application` (HTTP/context), and provider adapters. Remove MSC identity and Cloud provider dependencies from `core`. |
-| Database schema and migrations | Same public backend product repository | Public | Add organization ownership and tenant-safe migrations; Community and Cloud consume the same schema contract, with mode-specific deployment profiles. |
-| Domain workers | Same public backend product repository under an explicit `workers` boundary | Public | Preserve shared job behavior; require server-issued organization context and provider ports. Do not copy worker logic into the Cloud control plane. |
-| Product frontend | Current `MSC-Event-Frontend`, renamed or transferred to a public RacePilot product repository later | Public | Consume a server bootstrap and shared API contracts. Remove client-owned authority and MSC defaults. One build serves organizations; no per-customer build. |
-| Community deployment and infrastructure examples | A public `community` deployment module/repository owned by RacePilot Core maintainers; physical repository creation is a follow-up | Public | Compose first: web, API, workers, PostgreSQL, and reference OIDC/SMTP/storage adapters. Include upgrades, migrations, backup/restore, and health checks. |
-| Cloud runtime adapters | Private Cloud runtime/infrastructure repository, depending only on public ports/contracts | Private | Move production AWS/Vercel assembly and operational policy out of the shared core boundary. A provider adapter may remain public when reusable and secret-free. |
-| Cloud control plane | Private `racepilot-cloud-control-plane` repository/module | Private | Implement tenant and membership lifecycle, domain mapping, subscriptions/entitlements, billing integration, platform support, and audit. It calls public product contracts; it does not own copied domain logic. |
+| Architecture, contracts, and decision index | `vinzenzgeisler/racepilot` (`docs`, `packages/contracts`) | Public | Keep ADRs, the tenant inventory, and versioned contracts next to the code they govern. |
+| Backend domain core and HTTP application | `vinzenzgeisler/racepilot` (`packages/core`, `packages/api`) | Public | `core` holds domain, use cases, and ports without provider SDKs or MSC identity. `api` resolves server-side context and maps contracts to use cases. |
+| Database schema and migrations | `vinzenzgeisler/racepilot` (PostgreSQL adapter package) | Public | Organization ownership and tenant-safe migrations from the first table. Community and Cloud consume the same schema contract. |
+| Domain workers | `vinzenzgeisler/racepilot` (`packages/worker`) | Public | Require server-issued organization context and provider ports. Do not copy worker logic into the Cloud control plane. |
+| Product frontend | `vinzenzgeisler/racepilot` (`packages/app`) | Public | Consume the server bootstrap and API contracts only. No client-owned authority, no MSC defaults, one build for all organizations. |
+| Provider adapters | `vinzenzgeisler/racepilot` (`packages/adapter-*`) | Public | Community references (OIDC, SMTP, local/S3-compatible storage) and reusable, secret-free AWS adapters (Cognito, SES, S3). |
+| Community distribution | `vinzenzgeisler/racepilot` (`deploy/community`) | Public | Container images and Compose first: web, API, workers, PostgreSQL, and reference adapters. Include upgrades, migrations, backup/restore, and health checks. |
+| Cloud runtime assembly and AWS infrastructure | Private `vinzenzgeisler/racepilot-cloud` | Private | AWS CDK, environment configuration, deployment workflows, and runtime entry points. Depends only on released public artifacts, ports, and contracts. |
+| Cloud control plane | Private `vinzenzgeisler/racepilot-cloud` | Private | Tenant and membership lifecycle, domain mapping, subscriptions/entitlements, billing integration, platform support, and audit. It calls public product contracts; it does not own copied domain logic. |
 | Marketing | The separate marketing-site repository (named `racepilot` at snapshot time) | Public by default; separate deployable | Keep independent of product uptime and authentication. Claims about Community/Cloud availability must track release evidence. |
 
 Names for not-yet-created physical repositories are allocation labels. Creating or
-renaming them requires a separate, reviewed change. Until then, directory-level
-boundaries in the existing backend and frontend are authoritative.
+renaming them requires a separate, reviewed change.
 
 ## Dependency direction
 
