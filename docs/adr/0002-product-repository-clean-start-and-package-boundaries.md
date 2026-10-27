@@ -133,7 +133,9 @@ boundary.
 ## Open decisions
 
 These choices are needed before the work that depends on them. Each one needs its own
-ADR or an explicit decision on its issue:
+ADR or an explicit decision on its issue. The HTTP framework, job mechanism, and
+database tooling are decided in
+[ADR 0003](0003-http-jobs-and-database-tooling.md); the license is tracked in #68.
 
 - HTTP framework for `api` (before the first endpoint, #54)
 - job and outbox mechanism for `worker`; a PostgreSQL-backed queue avoids additional
