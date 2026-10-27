@@ -15,6 +15,7 @@
     "@racepilot/contracts": "*",
     "@racepilot/core": "*",
     "hono": "4.13.14",
-    "@racepilot/adapter-postgres": "*"
+    "@racepilot/adapter-postgres": "*",
+    "@racepilot/adapter-oidc": "*"
   }
 }

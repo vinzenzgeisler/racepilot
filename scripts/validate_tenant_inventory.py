@@ -132,6 +132,7 @@ audit.cli-passkey-bootstrap audit.runtime-cloudwatch-logs
 metric.custom.none-found support.cli-readonly-admin-query
 support.cli-approved-mutations support.backend-object-repair-restore
 support.backend-migration-seed support.signing-terminal
+db.table.user-identity db.table.organization-membership
 """.split())
 EXPECTED_RESOURCE_IDS = (
     EXPECTED_BACKEND_TABLE_IDS | EXPECTED_CLI_SQLITE_IDS | EXPECTED_OTHER_RESOURCE_IDS

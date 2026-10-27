@@ -36,12 +36,11 @@ function deps(): ApiDeps {
       authenticate: async () => ({
         issuer: 'test',
         subject: 'user',
-        permissions: new Set([
-          'organization:read',
-          'organization:update',
-          'event:read',
-        ]),
       }),
+    },
+    memberships: {
+      resolvePermissions: async () =>
+        new Set(['organization:read', 'organization:update', 'event:read']),
     },
   };
 }
@@ -151,6 +150,22 @@ describe('admin organization routes', () => {
         }).request('/admin/organization')
       ).status,
     ).toBe(401);
+  });
+  it('fails closed when a verified identity has no active server-side membership', async () => {
+    const api = deps();
+    api.authenticator = {
+      authenticate: async () =>
+        ({
+          issuer: 'test',
+          subject: 'member',
+          role: 'admin',
+          permissions: ['*'],
+        }) as never,
+    };
+    api.memberships = { resolvePermissions: async () => new Set() };
+    expect((await createApp(api).request('/admin/organization')).status).toBe(
+      403,
+    );
   });
   it('does not leak config values', () => {
     expect(() => loadConfig({ DATABASE_URL: 'secret-value' })).toThrow(

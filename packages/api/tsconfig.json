@@ -10,6 +10,9 @@
     },
     {
       "path": "../adapter-postgres"
+    },
+    {
+      "path": "../adapter-oidc"
     }
   ],
   "compilerOptions": {

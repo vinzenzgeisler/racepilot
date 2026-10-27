@@ -10,6 +10,9 @@ import {
   type OrganizationRepository,
   type EventRepository,
   type OrganizationPatch,
+  type MembershipRepository,
+  type MembershipBootstrap,
+  type ExternalIdentity,
 } from '@racepilot/core';
 import {
   healthResponseSchema,
@@ -52,6 +55,13 @@ const configSchema = z.object({
   SMTP_FROM: z.string().optional(),
   STORAGE_PROVIDER: z.enum(['disabled', 'local']).default('disabled'),
   STORAGE_LOCAL_ROOT: z.string().optional(),
+  OIDC_PROVIDER: z.enum(['disabled', 'oidc']).default('disabled'),
+  OIDC_ISSUER_URL: z.string().optional(),
+  OIDC_AUDIENCE: z.string().optional(),
+  OIDC_CLIENT_ID: z.string().optional(),
+  OIDC_REDIRECT_URI: z.string().url().optional(),
+  OIDC_BOOTSTRAP_SUBJECT: z.string().optional(),
+  OIDC_BOOTSTRAP_EMAIL: z.string().email().optional(),
 });
 export function loadConfig(env: NodeJS.ProcessEnv) {
   const parsed = configSchema.safeParse(env);
@@ -74,6 +84,30 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
       'Invalid configuration variables: SMTP_HOST, SMTP_PORT, SMTP_FROM, SMTP_USER, SMTP_PASSWORD',
     );
   }
+  if (parsed.data.OIDC_PROVIDER === 'oidc') {
+    const d = parsed.data;
+    if (
+      !d.OIDC_ISSUER_URL ||
+      !d.OIDC_AUDIENCE ||
+      !d.OIDC_CLIENT_ID ||
+      !d.OIDC_REDIRECT_URI ||
+      Boolean(d.OIDC_BOOTSTRAP_SUBJECT) === Boolean(d.OIDC_BOOTSTRAP_EMAIL)
+    )
+      throw new Error(
+        'Invalid configuration variables: OIDC_ISSUER_URL, OIDC_AUDIENCE, OIDC_CLIENT_ID, OIDC_REDIRECT_URI, OIDC_BOOTSTRAP_SUBJECT or OIDC_BOOTSTRAP_EMAIL',
+      );
+    try {
+      const issuer = new URL(d.OIDC_ISSUER_URL);
+      if (
+        !['https:', 'http:'].includes(issuer.protocol) ||
+        issuer.username ||
+        issuer.password
+      )
+        throw new Error();
+    } catch {
+      throw new Error('Invalid configuration variables: OIDC_ISSUER_URL');
+    }
+  }
   if (
     parsed.data.STORAGE_PROVIDER === 'local' &&
     !parsed.data.STORAGE_LOCAL_ROOT
@@ -88,49 +122,50 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
   };
 }
 export interface Authenticator {
-  authenticate(request: Request): Promise<{
-    issuer: string;
-    subject: string;
-    permissions: ReadonlySet<string>;
-  } | null>;
+  authenticate(request: Request): Promise<ExternalIdentity | null>;
 }
 export interface ApiDeps {
   config: { deploymentMode: 'community'; organizationId: string };
   organizations: OrganizationRepository;
   events: EventRepository;
   authenticator?: Authenticator;
-}
-export function createCommunityContextResolver(
-  config: ApiDeps['config'],
-  identity: {
-    issuer: string;
-    subject: string;
-    permissions: ReadonlySet<string>;
-  } | null,
-) {
-  return createRequestContext({
-    deploymentMode: 'community',
-    organizationId: organizationId(config.organizationId),
-    ...(identity
-      ? { subject: { issuer: identity.issuer, subject: identity.subject } }
-      : {}),
-    permissions: identity?.permissions ?? new Set(),
-    capabilities: new Set(),
-    correlationId: crypto.randomUUID(),
-  });
+  memberships?: MembershipRepository;
+  bootstrap?: MembershipBootstrap;
+  oidcClient?: { issuerUrl: string; clientId: string; redirectUri: string };
 }
 export function createApp(deps: ApiDeps) {
   const app = new Hono();
   app.get('/health', (c) => c.json({ status: 'ok' }));
+  app.get('/auth/config', (c) => c.json({ oidc: deps.oidcClient ?? null }));
+  const resolveContext = async (request: Request) => {
+    const identity =
+      (await deps.authenticator?.authenticate(request).catch(() => null)) ??
+      null;
+    if (!identity) return null;
+    const permissions =
+      (await deps.memberships
+        ?.resolvePermissions(
+          identity,
+          organizationId(deps.config.organizationId),
+          deps.bootstrap,
+        )
+        .catch(() => new Set<string>())) ?? new Set<string>();
+    return createRequestContext({
+      deploymentMode: 'community',
+      organizationId: organizationId(deps.config.organizationId),
+      subject: { issuer: identity.issuer, subject: identity.subject },
+      permissions,
+      capabilities: new Set(),
+      correlationId: crypto.randomUUID(),
+    });
+  };
   app.get('/admin/organization', async (c) => {
-    const identity = await (deps.authenticator?.authenticate(c.req.raw) ??
-      Promise.resolve(null));
-    if (!identity) return c.json({ error: 'Unauthorized' }, 401);
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
     try {
-      const org = await getOrganization(
-        createCommunityContextResolver(deps.config, identity),
-        { organizations: deps.organizations },
-      );
+      const org = await getOrganization(context, {
+        organizations: deps.organizations,
+      });
       return org
         ? c.json(OrganizationResponse.parse(org))
         : c.json({ error: 'Not found' }, 404);
@@ -139,15 +174,14 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.patch('/admin/organization', async (c) => {
-    const identity = await (deps.authenticator?.authenticate(c.req.raw) ??
-      Promise.resolve(null));
-    if (!identity) return c.json({ error: 'Unauthorized' }, 401);
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
     const body = await c.req.json().catch(() => null);
     const parsed = UpdateOrganizationRequest.safeParse(body);
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
     try {
       const org = await updateOrganization(
-        createCommunityContextResolver(deps.config, identity),
+        context,
         parsed.data as OrganizationPatch,
         { organizations: deps.organizations },
       );
@@ -159,18 +193,13 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.get('/admin/events/:eventId', async (c) => {
-    const identity = await (deps.authenticator?.authenticate(c.req.raw) ??
-      Promise.resolve(null));
-    if (!identity) return c.json({ error: 'Unauthorized' }, 401);
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
     const eventId = c.req.param('eventId');
     if (!z.string().uuid().safeParse(eventId).success)
       return c.json({ error: 'Invalid event ID' }, 400);
     try {
-      const event = await getEvent(
-        createCommunityContextResolver(deps.config, identity),
-        eventId,
-        { events: deps.events },
-      );
+      const event = await getEvent(context, eventId, { events: deps.events });
       return event ? c.json(event) : c.json({ error: 'Not found' }, 404);
     } catch {
       return c.json({ error: 'Forbidden' }, 403);
