@@ -255,6 +255,18 @@ export function createMembershipRepository(db: Database): MembershipRepository {
       bootstrap?: MembershipBootstrap,
     ) =>
       db.transaction(async (tx) => {
+        const isBootstrapCandidate =
+          bootstrap?.issuer === identity.issuer &&
+          (bootstrap.subject === identity.subject ||
+            (bootstrap.email?.toLowerCase() === identity.email?.toLowerCase() &&
+              identity.emailVerified === true));
+        if (isBootstrapCandidate) {
+          // Serialize first-admin attempts per organization. Disabled memberships
+          // still count as history and must permanently close bootstrap.
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${`racepilot.membership.bootstrap:${orgId}`}, 0))`,
+          );
+        }
         const [stored] = await tx
           .insert(userIdentities)
           .values({
@@ -275,23 +287,23 @@ export function createMembershipRepository(db: Database): MembershipRepository {
           })
           .returning();
         if (!stored) return new Set<string>();
-        const subjectMatch =
-          bootstrap?.issuer === identity.issuer &&
-          bootstrap.subject === identity.subject;
-        const verifiedEmailMatch =
-          bootstrap?.issuer === identity.issuer &&
-          bootstrap.email?.toLowerCase() === identity.email?.toLowerCase() &&
-          identity.emailVerified === true;
-        if (subjectMatch || verifiedEmailMatch) {
-          await tx
-            .insert(organizationMemberships)
-            .values({
-              organizationId: orgId,
-              userIdentityId: stored.id,
-              role: 'admin',
-              status: 'active',
-            })
-            .onConflictDoNothing();
+        if (isBootstrapCandidate) {
+          const [existingMembership] = await tx
+            .select({ userIdentityId: organizationMemberships.userIdentityId })
+            .from(organizationMemberships)
+            .where(eq(organizationMemberships.organizationId, orgId))
+            .limit(1);
+          if (!existingMembership) {
+            await tx
+              .insert(organizationMemberships)
+              .values({
+                organizationId: orgId,
+                userIdentityId: stored.id,
+                role: 'admin',
+                status: 'active',
+              })
+              .onConflictDoNothing();
+          }
         }
         const [membership] = await tx
           .select({ role: organizationMemberships.role })

@@ -1,4 +1,4 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { organizationId } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
@@ -73,7 +73,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           orgId,
           emailBootstrap,
         )),
-      ]).toContain('organization:update');
+      ]).toEqual([]);
       expect([
         ...(await repository.resolvePermissions(
           {
@@ -118,6 +118,140 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
             `first-admin-${suffix}`,
             `email-admin-${suffix}`,
             `unverified-${suffix}`,
+          ]),
+        );
+      await pool.end();
+    }
+  });
+  it('serializes concurrent verified-email bootstrap and grants only one admin', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          slug: `bootstrap-race-${suffix}`,
+          name: 'Bootstrap race',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const orgId = organizationId(org!.id);
+      const repository = createMembershipRepository(db);
+      const bootstrap = {
+        issuer: 'https://issuer.example',
+        email: 'initial-admin@example.test',
+      };
+      const candidates = ['first', 'second', 'third'].map((subject) => ({
+        issuer: bootstrap.issuer,
+        subject: `${subject}-${suffix}`,
+        email: bootstrap.email,
+        emailVerified: true,
+      }));
+      const permissions = await Promise.all(
+        candidates.map((identity) =>
+          repository.resolvePermissions(identity, orgId, bootstrap),
+        ),
+      );
+      expect(
+        permissions.filter((granted) => granted.has('organization:update')),
+      ).toHaveLength(1);
+      expect(
+        await db
+          .select()
+          .from(organizationMemberships)
+          .where(eq(organizationMemberships.organizationId, orgId)),
+      ).toHaveLength(1);
+      expect(
+        await db
+          .select()
+          .from(organizationMemberships)
+          .where(
+            and(
+              eq(organizationMemberships.organizationId, orgId),
+              eq(organizationMemberships.role, 'admin'),
+            ),
+          ),
+      ).toHaveLength(1);
+      expect(
+        await repository.resolvePermissions(
+          { ...candidates[0]!, subject: `later-${suffix}` },
+          orgId,
+          bootstrap,
+        ),
+      ).toEqual(new Set());
+    } finally {
+      await db
+        .delete(organizations)
+        .where(eq(organizations.slug, `bootstrap-race-${suffix}`));
+      await db
+        .delete(userIdentities)
+        .where(
+          inArray(userIdentities.subject, [
+            `first-${suffix}`,
+            `second-${suffix}`,
+            `third-${suffix}`,
+            `later-${suffix}`,
+          ]),
+        );
+      await pool.end();
+    }
+  });
+  it('does not promote the configured subject after any membership exists', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          slug: `bootstrap-subject-${suffix}`,
+          name: 'Subject bootstrap',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [priorIdentity] = await db
+        .insert(userIdentities)
+        .values({
+          issuer: 'https://issuer.example',
+          subject: `prior-${suffix}`,
+        })
+        .returning();
+      const orgId = organizationId(org!.id);
+      await db.insert(organizationMemberships).values({
+        organizationId: orgId,
+        userIdentityId: priorIdentity!.id,
+        role: 'admin',
+        status: 'disabled',
+      });
+      const repository = createMembershipRepository(db);
+      const bootstrap = {
+        issuer: 'https://issuer.example',
+        subject: `configured-${suffix}`,
+      };
+      expect(
+        await repository.resolvePermissions(
+          { issuer: bootstrap.issuer, subject: bootstrap.subject },
+          orgId,
+          bootstrap,
+        ),
+      ).toEqual(new Set());
+      expect(
+        await db
+          .select()
+          .from(organizationMemberships)
+          .where(eq(organizationMemberships.organizationId, orgId)),
+      ).toHaveLength(1);
+    } finally {
+      await db
+        .delete(organizations)
+        .where(eq(organizations.slug, `bootstrap-subject-${suffix}`));
+      await db
+        .delete(userIdentities)
+        .where(
+          inArray(userIdentities.subject, [
+            `prior-${suffix}`,
+            `configured-${suffix}`,
           ]),
         );
       await pool.end();
