@@ -7,6 +7,14 @@ import {
   getOrganization,
   getEvent,
   updateOrganization,
+  createEvent,
+  updateEvent,
+  transitionEvent,
+  getPublicEvent,
+  createEventClass,
+  updateEventClass,
+  type EventClassRepository,
+  type EventClassInput,
   type OrganizationRepository,
   type EventRepository,
   type OrganizationPatch,
@@ -18,6 +26,10 @@ import {
   healthResponseSchema,
   OrganizationResponse,
   UpdateOrganizationRequest,
+  CreateEventRequest,
+  EventResponse,
+  CreateEventClassRequest,
+  UpdateEventClassRequest,
 } from '@racepilot/contracts';
 export function health(version: string) {
   return healthResponseSchema.parse({ status: 'ok', version });
@@ -128,6 +140,7 @@ export interface ApiDeps {
   config: { deploymentMode: 'community'; organizationId: string };
   organizations: OrganizationRepository;
   events: EventRepository;
+  classes?: EventClassRepository;
   authenticator?: Authenticator;
   memberships?: MembershipRepository;
   bootstrap?: MembershipBootstrap;
@@ -203,6 +216,148 @@ export function createApp(deps: ApiDeps) {
       return event ? c.json(event) : c.json({ error: 'Not found' }, 404);
     } catch {
       return c.json({ error: 'Forbidden' }, 403);
+    }
+  });
+  app.get('/admin/events', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    return c.json(await deps.events.listByOrganization(context));
+  });
+  app.post('/admin/events', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const parsed = CreateEventRequest.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      return c.json(
+        EventResponse.parse(
+          await createEvent(
+            context,
+            parsed.data as import('@racepilot/core').EventInput,
+            { events: deps.events },
+          ),
+        ),
+        201,
+      );
+    } catch {
+      return c.json({ error: 'Forbidden or invalid request' }, 403);
+    }
+  });
+  app.patch('/admin/events/:eventId', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    try {
+      const result = await updateEvent(
+        context,
+        c.req.param('eventId'),
+        await c.req.json(),
+        { events: deps.events },
+      );
+      return result
+        ? c.json(EventResponse.parse(result))
+        : c.json({ error: 'Not found' }, 404);
+    } catch {
+      return c.json({ error: 'Forbidden or invalid request' }, 403);
+    }
+  });
+  app.post('/admin/events/:eventId/transitions', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const body = await c.req.json().catch(() => null);
+    const status = z
+      .enum(['open', 'closed', 'archived'])
+      .safeParse(body?.status);
+    if (!status.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      const result = await transitionEvent(
+        context,
+        c.req.param('eventId'),
+        status.data,
+        new Date(),
+        { events: deps.events },
+      );
+      return result
+        ? c.json(EventResponse.parse(result))
+        : c.json({ error: 'Not found' }, 404);
+    } catch {
+      return c.json({ error: 'Forbidden or invalid transition' }, 403);
+    }
+  });
+  app.get('/public/events/:organizationId/:slug', async (c) => {
+    const orgId = c.req.param('organizationId');
+    if (
+      !z.string().uuid().safeParse(orgId).success ||
+      orgId !== deps.config.organizationId
+    )
+      return c.json({ error: 'Not found' }, 404);
+    const context = createRequestContext({
+      deploymentMode: 'community',
+      organizationId: organizationId(deps.config.organizationId),
+      permissions: new Set(),
+      capabilities: new Set(),
+      correlationId: crypto.randomUUID(),
+    });
+    const event = await getPublicEvent(
+      context,
+      c.req.param('slug'),
+      new Date(),
+      { events: deps.events },
+    );
+    return event ? c.json(event) : c.json({ error: 'Not found' }, 404);
+  });
+  app.post('/admin/events/:eventId/classes', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!deps.classes) return c.json({ error: 'Not found' }, 404);
+    const parsed = CreateEventClassRequest.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      return c.json(
+        await createEventClass(context, c.req.param('eventId'), parsed.data, {
+          events: deps.events,
+          classes: deps.classes,
+        }),
+        201,
+      );
+    } catch {
+      return c.json({ error: 'Forbidden or invalid request' }, 403);
+    }
+  });
+  app.get('/admin/events/:eventId/classes', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.classes) return c.json({ error: 'Not found' }, 404);
+    return c.json(
+      await deps.classes.listByEvent(context, c.req.param('eventId')),
+    );
+  });
+  app.patch('/admin/events/:eventId/classes/:classId', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!deps.classes) return c.json({ error: 'Not found' }, 404);
+    const parsed = UpdateEventClassRequest.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      const result = await updateEventClass(
+        context,
+        c.req.param('eventId'),
+        c.req.param('classId'),
+        parsed.data as Partial<EventClassInput>,
+        { events: deps.events, classes: deps.classes },
+      );
+      return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
+    } catch {
+      return c.json({ error: 'Forbidden or invalid request' }, 403);
     }
   });
   return app;

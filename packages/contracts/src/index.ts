@@ -4,6 +4,70 @@ export const healthResponseSchema = z.object({
   version: z.string().min(1),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+export const EventStatusSchema = z.enum([
+  'draft',
+  'open',
+  'closed',
+  'archived',
+]);
+export const EventClassSchema = z
+  .object({
+    id: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    name: z.string(),
+    code: z.string(),
+    vehicleType: z.enum(['car', 'motorcycle', 'kart', 'other']),
+    sortOrder: z.number().int(),
+    maxParticipants: z.number().int().positive().nullable(),
+    closed: z.boolean(),
+  })
+  .strict();
+export const EventSchema = z
+  .object({
+    id: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    slug: z.string(),
+    name: z.string(),
+    startsOn: z.string(),
+    endsOn: z.string(),
+    status: EventStatusSchema,
+    registrationOpensAt: z.string().datetime({ offset: true }).nullable(),
+    registrationClosesAt: z.string().datetime({ offset: true }).nullable(),
+    openedAt: z.string().datetime({ offset: true }).nullable(),
+    closedAt: z.string().datetime({ offset: true }).nullable(),
+    archivedAt: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict();
+export const CreateEventRequest = z
+  .object({
+    slug: z.string(),
+    name: z.string(),
+    startsOn: z.string(),
+    endsOn: z.string(),
+    registrationOpensAt: z
+      .string()
+      .datetime({ offset: true })
+      .nullable()
+      .optional(),
+    registrationClosesAt: z
+      .string()
+      .datetime({ offset: true })
+      .nullable()
+      .optional(),
+  })
+  .strict();
+export const EventResponse = EventSchema;
+export const PublicEventResponse = EventSchema.extend({
+  classes: z.array(EventClassSchema),
+}).strict();
+export const CreateEventClassRequest = EventClassSchema.omit({
+  id: true,
+  organizationId: true,
+  eventId: true,
+}).strict();
+export const UpdateEventClassRequest =
+  CreateEventClassRequest.partial().strict();
 export const OrganizationResponse = z
   .object({
     id: z.string().uuid(),

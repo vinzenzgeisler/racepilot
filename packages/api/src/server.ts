@@ -6,6 +6,7 @@ import {
   ensureCommunityOrganization,
   createOrganizationRepository,
   createEventRepository,
+  createEventClassRepository,
   createMembershipRepository,
 } from '@racepilot/adapter-postgres';
 import { createApp } from './index.js';
@@ -31,6 +32,7 @@ serve({
     config: { deploymentMode: 'community', organizationId: org.id },
     organizations: createOrganizationRepository(db),
     events: createEventRepository(db),
+    classes: createEventClassRepository(db),
     memberships: createMembershipRepository(db),
     ...(identityProvider
       ? {

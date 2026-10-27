@@ -5,8 +5,10 @@ import {
   createDatabase,
   ensureCommunityOrganization,
   createEventRepository,
+  createEventClassRepository,
   organizations,
   events,
+  eventClasses,
   createMembershipRepository,
   userIdentities,
   organizationMemberships,
@@ -268,6 +270,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         locale: 'en',
       });
       const repo = createEventRepository(db);
+      const classRepo = createEventClassRepository(db);
       const ctx = {
         deploymentMode: 'cloud' as const,
         organizationId: a.id,
@@ -295,6 +298,22 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         })
         .returning();
       expect(await repo.getById(ctx, foreignEvent!.id)).toBeNull();
+      const [foreignClass] = await db
+        .insert(eventClasses)
+        .values({
+          organizationId: b!.id,
+          eventId: foreignEvent!.id,
+          name: 'Foreign class',
+          code: 'FOREIGN',
+          vehicleType: 'car',
+        })
+        .returning();
+      expect(
+        await classRepo.update(ctx, foreignEvent!.id, foreignClass!.id, {
+          closed: true,
+        }),
+      ).toBeNull();
+      expect(await classRepo.listByEvent(ctx, foreignEvent!.id)).toEqual([]);
       await expect(
         ensureCommunityOrganization(db, {
           slug: 'tenant-a-test',
