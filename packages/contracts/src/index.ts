@@ -4,6 +4,72 @@ export const healthResponseSchema = z.object({
   version: z.string().min(1),
 });
 export type HealthResponse = z.infer<typeof healthResponseSchema>;
+const safeRuntimeUrl = z
+  .string()
+  .url()
+  .refine((value) => {
+    try {
+      return ['https:', 'http:'].includes(new URL(value).protocol);
+    } catch {
+      return false;
+    }
+  });
+const hexColor = z.string().regex(/^#[\da-fA-F]{6}$/);
+const luminance = (color: string) => {
+  const channels =
+    color
+      .slice(1)
+      .match(/../g)
+      ?.map((channel) => parseInt(channel, 16) / 255) ?? [];
+  const [r, g, b] = channels.map((value) =>
+    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4,
+  );
+  return 0.2126 * (r ?? 0) + 0.7152 * (g ?? 0) + 0.0722 * (b ?? 0);
+};
+const primaryColor = hexColor.refine(
+  (color) => 1.05 / (luminance(color) + 0.05) >= 4.5,
+);
+const brandAccentColor = hexColor.refine(
+  (color) => 1.05 / (luminance(color) + 0.05) >= 3,
+);
+export const RuntimeBootstrapResponse = z
+  .object({
+    schemaVersion: z.literal(1),
+    configurationVersion: z.string().min(1),
+    deploymentMode: z.enum(['community', 'cloud']),
+    organization: z
+      .object({
+        id: z.string().uuid(),
+        slug: z.string().min(1),
+        name: z.string().min(1),
+      })
+      .strict(),
+    branding: z
+      .object({
+        logoUrl: safeRuntimeUrl.nullable(),
+        primaryColor,
+        accentColor: brandAccentColor,
+        contactEmail: z.string().email().nullable(),
+        eventImageUrl: safeRuntimeUrl.nullable(),
+      })
+      .strict(),
+    locale: z.string().min(1),
+    activeEvent: z
+      .object({ id: z.string().uuid(), slug: z.string(), name: z.string() })
+      .strict()
+      .nullable(),
+    capabilities: z.array(z.string()).max(100),
+    legalLinks: z
+      .array(
+        z.object({ label: z.string().min(1), href: safeRuntimeUrl }).strict(),
+      )
+      .max(20),
+  })
+  .strict();
+export type RuntimeBootstrapResponse = z.infer<typeof RuntimeBootstrapResponse>;
+export const RuntimeBootstrapError = z
+  .object({ error: z.literal('Runtime unavailable') })
+  .strict();
 export const EventStatusSchema = z.enum([
   'draft',
   'open',

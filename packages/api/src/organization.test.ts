@@ -45,6 +45,36 @@ function deps(): ApiDeps {
   };
 }
 describe('admin organization routes', () => {
+  it('bootstraps the configured Community tenant and ignores untrusted host/organization selectors', async () => {
+    const response = await createApp(deps()).request(
+      '/runtime/bootstrap?organizationId=foreign',
+      {
+        headers: {
+          host: 'untrusted.example',
+          'x-organization-id': '20000000-0000-4000-8000-000000000002',
+        },
+      },
+    );
+    expect(response.status).toBe(200);
+    const payload = await response.json();
+    expect(payload.organization.id).toBe(config.organizationId);
+    expect(payload.deploymentMode).toBe('community');
+    expect(payload.activeEvent).toBeNull();
+  });
+  it('returns the neutral unavailable response for unknown or disabled installations', async () => {
+    const api = deps();
+    api.organizations = { ...api.organizations, getById: async () => null };
+    const missing = await createApp(api).request('/runtime/bootstrap');
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toEqual({ error: 'Runtime unavailable' });
+    api.organizations = {
+      ...api.organizations,
+      getById: async () => ({ ...org, status: 'disabled' }),
+    };
+    const disabled = await createApp(api).request('/runtime/bootstrap');
+    expect(disabled.status).toBe(404);
+    expect(await disabled.json()).toEqual({ error: 'Runtime unavailable' });
+  });
   it('uses the synthetic two-tenant fixture for cloud contexts and denies foreign IDs', async () => {
     const fixture = JSON.parse(
       readFileSync(
