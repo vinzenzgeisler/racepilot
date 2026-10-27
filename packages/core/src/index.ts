@@ -132,3 +132,70 @@ export async function updateOrganization(
   validatePatch(patch);
   return deps.organizations.update(ctx, patch);
 }
+
+/** Stable provider failures; messages must never contain credentials or tenant data. */
+export type ProviderErrorCode =
+  | 'not_configured'
+  | 'invalid_input'
+  | 'unauthorized'
+  | 'forbidden'
+  | 'not_found'
+  | 'unavailable'
+  | 'conflict'
+  | 'internal';
+export class ProviderError extends Error {
+  constructor(
+    readonly code: ProviderErrorCode,
+    message: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, options);
+    this.name = 'ProviderError';
+  }
+}
+export interface ExternalIdentity {
+  readonly issuer: string;
+  readonly subject: string;
+  readonly email?: string;
+  readonly emailVerified?: boolean;
+  readonly displayName?: string;
+}
+/** Verifies credentials but does not grant roles or permissions. */
+export interface IdentityProvider {
+  verify(credential: string): Promise<ExternalIdentity>;
+}
+export interface MailMessage {
+  readonly organizationId: OrganizationId;
+  readonly to: string;
+  readonly subject: string;
+  readonly text: string;
+  readonly html?: string;
+  readonly idempotencyKey: string;
+}
+export interface MailProvider {
+  send(message: MailMessage): Promise<void>;
+}
+export interface StoredObjectRef {
+  readonly organizationId: OrganizationId;
+  readonly objectId: string;
+  readonly contentType: string;
+  readonly size: number;
+  readonly sha256: string;
+}
+export interface StoredObject {
+  readonly ref: StoredObjectRef;
+  readonly body: Uint8Array;
+}
+/** Object identifiers are issued by the adapter; callers never supply paths/keys. */
+export interface ObjectStorageProvider {
+  put(input: {
+    readonly organizationId: OrganizationId;
+    readonly body: Uint8Array;
+    readonly contentType: string;
+  }): Promise<StoredObjectRef>;
+  get(
+    organizationId: OrganizationId,
+    objectId: string,
+  ): Promise<StoredObject | null>;
+  delete(organizationId: OrganizationId, objectId: string): Promise<void>;
+}
