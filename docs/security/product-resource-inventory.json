@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "resources": [
+    {"id":"organization","kind":"table","tenantKey":"id (context organizationId)","isolation":"repository filters by server RequestContext.organizationId","negativeTests":[{"file":"packages/core/src/organization.test.ts","name":"requires read permission"}]},
+    {"id":"event","kind":"table","tenantKey":"organization_id","isolation":"repository queries always filter context organizationId","negativeTests":[{"file":"packages/adapter-postgres/src/integration.test.ts","name":"bootstraps idempotently and filters foreign event IDs"}]},
+    {"id":"admin-organization-get","kind":"route","tenantKey":"server-resolved organizationId","isolation":"Community resolver ignores client tenant; authenticated permission required","negativeTests":[{"file":"packages/api/src/organization.test.ts","name":"ignores client tenant and privilege values"}]},
+    {"id":"admin-organization-patch","kind":"route","tenantKey":"server-resolved organizationId","isolation":"strict request schema and authenticated permission required","negativeTests":[{"file":"packages/api/src/organization.test.ts","name":"production-style default denies access"}]},
+    {"id":"job-envelope","kind":"job-payload","tenantKey":"organizationId","isolation":"schema validation and active organization lookup before JobContext","negativeTests":[{"file":"packages/worker/src/context.test.ts","name":"rejects missing, unknown, and disabled organizations"}]}
+  ]
+}

@@ -6,7 +6,8 @@
       "@racepilot/contracts": ["packages/contracts/src/index.ts"],
       "@racepilot/api": ["packages/api/src/index.ts"],
       "@racepilot/worker": ["packages/worker/src/index.ts"],
-      "@racepilot/app": ["packages/app/src/index.ts"]
+      "@racepilot/app": ["packages/app/src/index.ts"],
+      "@racepilot/adapter-postgres": ["packages/adapter-postgres/src/index.ts"]
     }
   }
 }
