@@ -174,7 +174,7 @@ export function App() {
         <section className="hero" id="start">
           <div className="hero-copy">
             <div className="eyebrow">
-              <span className="live-dot" /> OPEN SOURCE · IM AUFBAU
+              <span className="live-dot" /> ÖFFENTLICH ENTWICKELT · IM AUFBAU
             </div>
             <h1>
               Motorsport.
@@ -301,8 +301,8 @@ export function App() {
               <h3>Community</h3>
               <p>
                 Selbst betreiben, volle Kontrolle behalten. Die
-                Community-Ausgabe ist als kostenlos nutzbare
-                Open-Source-Software geplant.
+                Community-Ausgabe ist als kostenlos nutzbare Software geplant.
+                Die Lizenz wird vor der Veröffentlichung festgelegt.
               </p>
               <a href="https://github.com/vinzenzgeisler/racepilot/blob/main/docs/adr/0001-editions-shared-core-and-deployment-modes.md">
                 Architekturentscheidung lesen <span aria-hidden="true">↗</span>
