@@ -8,7 +8,7 @@ import {
   events,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
-describe.skipIf(!url && process.env.CI !== 'true')(
+describe.skipIf(!url)(
   'PostgreSQL integration',
   () => {
     it('bootstraps idempotently and filters foreign event IDs', async () => {

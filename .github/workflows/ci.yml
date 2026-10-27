@@ -114,6 +114,7 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - run: npm run typecheck
       - run: npm run db:migrate
       - run: npm test -- --run packages/adapter-postgres/src/integration.test.ts
 
