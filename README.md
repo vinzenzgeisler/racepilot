@@ -1,8 +1,10 @@
-# RacePilot architecture
+# RacePilot
 
-This repository currently contains the documentation-first architecture baseline for
-RacePilot issues #34 and #38. It does **not** contain a deployable product, a Community
-distribution, a Cloud control plane, or an active cross-edition CI implementation.
+This is the single product repository for RacePilot, a clean rebuild that uses the MSC
+event application only as a read-only reference. It currently contains the
+architecture baseline from issues #34 and #38. It does **not** yet contain a deployable
+product, a Community distribution, or an active cross-edition CI implementation. Cloud
+infrastructure and the control plane live in a separate private repository.
 
 RacePilot is one product with one shared domain core and two explicit deployment
 modes:
@@ -13,6 +15,7 @@ modes:
 The following documents form the baseline:
 
 - [ADR 0001: editions, shared core, and deployment modes](docs/adr/0001-editions-shared-core-and-deployment-modes.md)
+- [ADR 0002: product repository, clean start, and package boundaries](docs/adr/0002-product-repository-clean-start-and-package-boundaries.md)
 - [Repository and module map](docs/architecture/repository-module-map.md)
 - [Current coupling inventory](docs/architecture/current-couplings.md)
 - [Required CI coverage and ownership](docs/architecture/ci-coverage.md)
