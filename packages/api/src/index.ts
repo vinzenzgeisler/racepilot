@@ -289,11 +289,14 @@ export function createApp(deps: ApiDeps) {
   });
   app.get('/public/events/:organizationId/:slug', async (c) => {
     const orgId = c.req.param('organizationId');
-    if (!z.string().uuid().safeParse(orgId).success)
+    if (
+      !z.string().uuid().safeParse(orgId).success ||
+      orgId !== deps.config.organizationId
+    )
       return c.json({ error: 'Not found' }, 404);
     const context = createRequestContext({
       deploymentMode: 'community',
-      organizationId: organizationId(orgId),
+      organizationId: organizationId(deps.config.organizationId),
       permissions: new Set(),
       capabilities: new Set(),
       correlationId: crypto.randomUUID(),

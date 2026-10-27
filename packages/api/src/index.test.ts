@@ -76,4 +76,29 @@ describe('api entry', () => {
       },
     });
   });
+  it('does not resolve a public event using a caller-supplied foreign organization', async () => {
+    const configuredOrg = '11111111-1111-4111-8111-111111111111';
+    const foreignOrg = '22222222-2222-4222-8222-222222222222';
+    const seen: string[] = [];
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: configuredOrg },
+      organizations: { getById: async () => null, update: async () => null },
+      events: {
+        listByOrganization: async () => [],
+        getById: async () => null,
+        getPublicBySlug: async (ctx) => {
+          seen.push(ctx.organizationId);
+          return null;
+        },
+      },
+    });
+    expect(
+      (await app.request(`/public/events/${foreignOrg}/anything`)).status,
+    ).toBe(404);
+    expect(seen).toEqual([]);
+    expect(
+      (await app.request(`/public/events/${configuredOrg}/anything`)).status,
+    ).toBe(404);
+    expect(seen).toEqual([configuredOrg]);
+  });
 });

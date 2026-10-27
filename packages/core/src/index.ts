@@ -71,6 +71,7 @@ export interface EventRepository {
   transition?(
     ctx: RequestContext,
     eventId: string,
+    from: EventStatus,
     status: EventStatus,
     now: Date,
   ): Promise<Event | null>;
@@ -182,7 +183,10 @@ export async function updateEvent(
   deps: { events: EventRepository },
 ): Promise<Event | null> {
   if (!ctx.permissions.has('event:write')) throw new Error('Forbidden');
+  const current = await deps.events.getById(ctx, eventId);
+  if (!current) return null;
   validateEventInput(patch, true);
+  validateEventInput({ ...current, ...patch });
   if (!deps.events.update) throw new Error('Event updates unavailable');
   return deps.events.update(ctx, eventId, patch);
 }
@@ -198,7 +202,7 @@ export async function transitionEvent(
   if (!event) return null;
   assertEventTransition(event.status, status);
   if (!deps.events.transition) throw new Error('Event transitions unavailable');
-  return deps.events.transition(ctx, eventId, status, now);
+  return deps.events.transition(ctx, eventId, event.status, status, now);
 }
 function validateEventInput(
   input: EventInput | EventPatch,

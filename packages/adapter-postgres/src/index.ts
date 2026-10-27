@@ -388,7 +388,7 @@ export function createEventRepository(db: Database): EventRepository {
         .returning();
       return row ? mapEvent(row) : null;
     },
-    transition: async (ctx, eventId, status, now) => {
+    transition: async (ctx, eventId, from, status, now) => {
       const timeField =
         status === 'open'
           ? { openedAt: now, closedAt: null }
@@ -402,6 +402,7 @@ export function createEventRepository(db: Database): EventRepository {
           and(
             eq(events.organizationId, ctx.organizationId),
             eq(events.id, eventId),
+            eq(events.status, from),
           ),
         )
         .returning();
