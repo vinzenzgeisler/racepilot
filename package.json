@@ -11,7 +11,7 @@
   "packageManager": "npm@11.19.1",
   "scripts": {
     "lint": "eslint .",
-    "format:check": "prettier --check README.md package.json package-lock.json tsconfig.base.json tsconfig.json eslint.config.js .dependency-cruiser.cjs .dependency-cruiser.tsconfig.json .prettierrc.json .github/workflows/ci.yml packages scripts/check-boundaries.mjs scripts/validate-repo-identity.test.mjs vitest.config.ts",
+    "format:check": "prettier --check .",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "build": "tsc -b && npm run build --workspace @racepilot/app",

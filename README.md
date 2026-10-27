@@ -1,10 +1,10 @@
 # RacePilot
 
 This is the single product repository for RacePilot, a clean rebuild that uses the MSC
-event application only as a read-only reference. It currently contains the
-architecture baseline from issues #34 and #38. It does **not** yet contain a deployable
-product, a Community distribution, or an active cross-edition CI implementation. Cloud
-infrastructure and the control plane live in a separate private repository.
+event application only as a read-only reference. It contains the architecture baseline
+from issues #34 and #38 and the monorepo foundation from issue #52. It does **not** yet
+contain product functionality, a Community distribution, or the cross-edition CI matrix.
+Cloud infrastructure and the control plane live in a separate private repository.
 
 RacePilot is one product with one shared domain core and two explicit deployment
 modes:
@@ -32,16 +32,13 @@ All architecture documents use these labels deliberately:
 - **Follow-up obligation:** work that must be implemented and verified before the
   affected mode can be called ready.
 
-## Non-goals of this baseline
+## What the current checks prove
 
-No product code, deployment manifests, billing code, tenant migration, repository
-move, or product CI workflow is introduced here. In particular, this repository does
-not make the current MSC application multi-tenant merely by documenting a target
-design.
-
-The only active workflow added by issue #38 validates the documentation inventory,
-fixture, test references, global rationales, and relative links. It does not run or
-claim product-level tenant isolation.
+The [CI workflow](.github/workflows/ci.yml) runs lint, typecheck, tests, build, the
+package-boundary check, and the documentation validators. The documentation
+validators check the tenant inventory, fixture, test references, global rationales,
+and relative links. None of these checks runs or claims product-level tenant
+isolation; the Community/Cloud matrix follows with the request-context seam (#58).
 
 ## Development
 

@@ -12,6 +12,7 @@ from urllib.parse import unquote
 ROOT = Path(__file__).resolve().parents[1]
 LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 HEADING = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
+SKIPPED_DIRECTORIES = {".git", "node_modules", "dist"}
 
 
 def heading_anchors(text: str) -> set[str]:
@@ -32,7 +33,7 @@ def main() -> int:
     failures: list[str] = []
     checked = 0
     for markdown in sorted(ROOT.rglob("*.md")):
-        if ".git" in markdown.parts:
+        if SKIPPED_DIRECTORIES.intersection(markdown.relative_to(ROOT).parts):
             continue
         text = markdown.read_text(encoding="utf-8")
         for match in LINK.finditer(text):

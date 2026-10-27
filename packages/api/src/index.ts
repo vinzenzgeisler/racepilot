@@ -1,4 +1,4 @@
-import { organizationId, type OrganizationId } from '@racepilot/core';
+import { parseDeploymentMode, type DeploymentMode } from '@racepilot/core';
 import {
   healthResponseSchema,
   type HealthResponse,
@@ -8,6 +8,7 @@ export function health(version: string): HealthResponse {
   return healthResponseSchema.parse({ status: 'ok', version });
 }
 
-export function resolveOrganizationId(value: string): OrganizationId {
-  return organizationId(value);
+/** Fixes the deployment mode from server configuration at process startup. */
+export function deploymentModeFromConfig(configured: string): DeploymentMode {
+  return parseDeploymentMode(configured);
 }

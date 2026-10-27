@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { processHealthCheck } from './index.js';
+import { deploymentModeFromConfig, processHealthCheck } from './index.js';
 
 describe('worker entry', () => {
   it('returns a validated health result', () =>
@@ -7,4 +7,6 @@ describe('worker entry', () => {
       status: 'ok',
       version: '1.0',
     }));
+  it('fails closed on an unknown deployment mode', () =>
+    expect(() => deploymentModeFromConfig('unknown')).toThrow());
 });
