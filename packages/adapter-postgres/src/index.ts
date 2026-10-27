@@ -11,6 +11,8 @@ import {
   unique,
   check,
   index,
+  integer,
+  foreignKey,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type {
@@ -19,6 +21,13 @@ import type {
   OrganizationPatch,
   Organization,
   EventRepository,
+  EventClassRepository,
+  Event,
+  EventClass,
+  EventStatus,
+  EventInput,
+  EventPatch,
+  EventClassInput,
   MembershipRepository,
   MembershipBootstrap,
   ExternalIdentity,
@@ -62,6 +71,15 @@ export const events = pgTable(
     startsOn: date('starts_on').notNull(),
     endsOn: date('ends_on').notNull(),
     status: text('status').notNull().default('draft'),
+    registrationOpensAt: timestamp('registration_opens_at', {
+      withTimezone: true,
+    }),
+    registrationClosesAt: timestamp('registration_closes_at', {
+      withTimezone: true,
+    }),
+    openedAt: timestamp('opened_at', { withTimezone: true }),
+    closedAt: timestamp('closed_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -77,6 +95,52 @@ export const events = pgTable(
       sql`${t.status} in ('draft','open','closed','archived')`,
     ),
     check('event_dates_check', sql`${t.endsOn} >= ${t.startsOn}`),
+  ],
+);
+export const eventClasses = pgTable(
+  'event_class',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    name: text('name').notNull(),
+    code: text('code').notNull(),
+    vehicleType: text('vehicle_type').notNull(),
+    sortOrder: integer('sort_order').notNull().default(0),
+    maxParticipants: integer('max_participants'),
+    closed: boolean('closed').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('event_class_org_event_id_unique').on(
+      t.organizationId,
+      t.eventId,
+      t.id,
+    ),
+    unique('event_class_org_event_code_unique').on(
+      t.organizationId,
+      t.eventId,
+      t.code,
+    ),
+    check(
+      'event_class_vehicle_type_check',
+      sql`${t.vehicleType} in ('car','motorcycle','kart','other')`,
+    ),
+    check('event_class_sort_order_check', sql`${t.sortOrder} >= 0`),
+    check(
+      'event_class_max_participants_check',
+      sql`${t.maxParticipants} is null or ${t.maxParticipants} > 0`,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'event_class_org_event_fk',
+    }).onDelete('cascade'),
   ],
 );
 export const userIdentities = pgTable(
@@ -225,12 +289,24 @@ export function createOrganizationRepository(
   };
 }
 export function createEventRepository(db: Database): EventRepository {
+  const mapEvent = (row: typeof events.$inferSelect): Event => ({
+    ...row,
+    organizationId: organizationId(row.organizationId),
+    status: row.status as EventStatus,
+    registrationOpensAt: row.registrationOpensAt?.toISOString() ?? null,
+    registrationClosesAt: row.registrationClosesAt?.toISOString() ?? null,
+    openedAt: row.openedAt?.toISOString() ?? null,
+    closedAt: row.closedAt?.toISOString() ?? null,
+    archivedAt: row.archivedAt?.toISOString() ?? null,
+  });
   return {
-    listByOrganization: (ctx) =>
-      db
-        .select()
-        .from(events)
-        .where(eq(events.organizationId, ctx.organizationId)),
+    listByOrganization: async (ctx) =>
+      (
+        await db
+          .select()
+          .from(events)
+          .where(eq(events.organizationId, ctx.organizationId))
+      ).map(mapEvent),
     getById: async (ctx, eventId) => {
       const [row] = await db
         .select()
@@ -241,9 +317,140 @@ export function createEventRepository(db: Database): EventRepository {
             eq(events.organizationId, ctx.organizationId),
           ),
         );
-      return row
-        ? { ...row, organizationId: organizationId(row.organizationId) }
-        : null;
+      return row ? mapEvent(row) : null;
+    },
+    getPublicBySlug: async (ctx, slug, now) => {
+      const [row] = await db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.slug, slug),
+            eq(events.status, 'open'),
+            sql`(${events.registrationOpensAt} is null or ${events.registrationOpensAt} <= ${now})`,
+            sql`(${events.registrationClosesAt} is null or ${events.registrationClosesAt} >= ${now})`,
+          ),
+        );
+      if (!row) return null;
+      const event = mapEvent(row);
+      const [classes] = await Promise.all([
+        createEventClassRepository(db).listByEvent(ctx, event.id),
+      ]);
+      return { ...event, classes };
+    },
+    create: async (ctx, input: EventInput) => {
+      const [row] = await db
+        .insert(events)
+        .values({
+          organizationId: ctx.organizationId,
+          ...input,
+          registrationOpensAt: input.registrationOpensAt
+            ? new Date(input.registrationOpensAt)
+            : null,
+          registrationClosesAt: input.registrationClosesAt
+            ? new Date(input.registrationClosesAt)
+            : null,
+        })
+        .returning();
+      return mapEvent(row!);
+    },
+    update: async (ctx, eventId, patch: EventPatch) => {
+      const [row] = await db
+        .update(events)
+        .set({
+          ...(patch.slug !== undefined ? { slug: patch.slug } : {}),
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.startsOn !== undefined ? { startsOn: patch.startsOn } : {}),
+          ...(patch.endsOn !== undefined ? { endsOn: patch.endsOn } : {}),
+          ...('registrationOpensAt' in patch
+            ? {
+                registrationOpensAt: patch.registrationOpensAt
+                  ? new Date(patch.registrationOpensAt)
+                  : null,
+              }
+            : {}),
+          ...('registrationClosesAt' in patch
+            ? {
+                registrationClosesAt: patch.registrationClosesAt
+                  ? new Date(patch.registrationClosesAt)
+                  : null,
+              }
+            : {}),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.id, eventId),
+          ),
+        )
+        .returning();
+      return row ? mapEvent(row) : null;
+    },
+    transition: async (ctx, eventId, status, now) => {
+      const timeField =
+        status === 'open'
+          ? { openedAt: now, closedAt: null }
+          : status === 'closed'
+            ? { closedAt: now }
+            : { archivedAt: now };
+      const [row] = await db
+        .update(events)
+        .set({ status, ...timeField, updatedAt: now })
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.id, eventId),
+          ),
+        )
+        .returning();
+      return row ? mapEvent(row) : null;
+    },
+  };
+}
+function mapEventClass(row: typeof eventClasses.$inferSelect): EventClass {
+  return {
+    ...row,
+    organizationId: organizationId(row.organizationId),
+    vehicleType: row.vehicleType as EventClass['vehicleType'],
+  };
+}
+export function createEventClassRepository(db: Database): EventClassRepository {
+  return {
+    listByEvent: async (ctx, eventId) =>
+      (
+        await db
+          .select()
+          .from(eventClasses)
+          .where(
+            and(
+              eq(eventClasses.organizationId, ctx.organizationId),
+              eq(eventClasses.eventId, eventId),
+            ),
+          )
+          .orderBy(eventClasses.sortOrder, eventClasses.name)
+      ).map(mapEventClass),
+    create: async (ctx, eventId, input: EventClassInput) => {
+      const [row] = await db
+        .insert(eventClasses)
+        .values({ ...input, organizationId: ctx.organizationId, eventId })
+        .returning();
+      return mapEventClass(row!);
+    },
+    update: async (ctx, eventId, classId, patch: Partial<EventClassInput>) => {
+      const [row] = await db
+        .update(eventClasses)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(
+          and(
+            eq(eventClasses.organizationId, ctx.organizationId),
+            eq(eventClasses.eventId, eventId),
+            eq(eventClasses.id, classId),
+          ),
+        )
+        .returning();
+      return row ? mapEventClass(row) : null;
     },
   };
 }

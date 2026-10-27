@@ -91,6 +91,11 @@ describe('admin organization routes', () => {
                 startsOn: '2027-01-01',
                 endsOn: '2027-01-02',
                 status: 'draft',
+                registrationOpensAt: null,
+                registrationClosesAt: null,
+                openedAt: null,
+                closedAt: null,
+                archivedAt: null,
               }
             : null;
         },
