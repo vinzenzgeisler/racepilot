@@ -42,3 +42,21 @@ design.
 The only active workflow added by issue #38 validates the documentation inventory,
 fixture, test references, global rationales, and relative links. It does not run or
 claim product-level tenant isolation.
+
+## Development
+
+Prerequisites: Node.js 24 and npm. Verify the checkout before local agent work with
+`bash scripts/validate-repo-identity.sh` (forks may set `RACEPILOT_EXPECTED_REPO`).
+Install dependencies with `npm ci`, then use the root commands `npm run lint`,
+`npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`, and
+`npm run check:boundaries`.
+
+| Package              | Responsibility                              | Allowed product dependencies |
+| -------------------- | ------------------------------------------- | ---------------------------- |
+| `packages/core`      | Domain, use cases, ports, and context types | None                         |
+| `packages/contracts` | Versioned wire and job schemas              | None                         |
+| `packages/api`       | HTTP application and API entry points       | `core`, `contracts`          |
+| `packages/worker`    | Job runtime and handlers                    | `core`, `contracts`          |
+| `packages/app`       | React/Vite web application                  | `contracts` only             |
+
+The package boundaries follow [ADR 0002](docs/adr/0002-product-repository-clean-start-and-package-boundaries.md).
