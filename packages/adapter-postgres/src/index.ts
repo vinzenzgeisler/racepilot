@@ -103,6 +103,9 @@ export async function ensureCommunityOrganization(
   config: { slug: string; name: string; timezone: string; locale: string },
 ): Promise<Organization> {
   return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext('racepilot.community.bootstrap'))`,
+    );
     const rows = await tx.select().from(organizations);
     if (rows.length > 1)
       throw new Error('Community deployment requires exactly one organization');
@@ -179,7 +182,9 @@ export function createEventRepository(db: Database): EventRepository {
             eq(events.organizationId, ctx.organizationId),
           ),
         );
-      return row ?? null;
+      return row
+        ? { ...row, organizationId: organizationId(row.organizationId) }
+        : null;
     },
   };
 }

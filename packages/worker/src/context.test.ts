@@ -29,4 +29,14 @@ describe('job tenant context', () => {
     });
     expect(ctx.organizationId).toBe(base.organizationId);
   });
+  it('rejects a foreign organization in community even when it is active', async () => {
+    await expect(
+      createJobContext(parseJobEnvelope(base), {
+        deploymentMode: 'community',
+        communityOrganizationId: '20000000-0000-4000-8000-000000000002',
+        jobId: 'job',
+        getOrganization: async () => ({ status: 'active' }),
+      }),
+    ).rejects.toThrow('Organization unavailable');
+  });
 });

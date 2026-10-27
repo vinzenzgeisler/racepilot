@@ -5,6 +5,7 @@ import {
   migrate,
   ensureCommunityOrganization,
   createOrganizationRepository,
+  createEventRepository,
 } from '@racepilot/adapter-postgres';
 import { createApp } from './index.js';
 const config = loadConfig(process.env);
@@ -20,6 +21,7 @@ serve({
   fetch: createApp({
     config: { deploymentMode: 'community', organizationId: org.id },
     organizations: createOrganizationRepository(db),
+    events: createEventRepository(db),
   }).fetch,
   port: config.PORT,
   hostname: '127.0.0.1',

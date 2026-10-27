@@ -23,10 +23,17 @@ export async function createJobContext(
   envelope: ReturnType<typeof parseJobEnvelope>,
   deps: {
     deploymentMode: DeploymentMode;
+    communityOrganizationId?: string;
     getOrganization(id: string): Promise<{ status: string } | null>;
     jobId: string;
   },
 ): Promise<JobContext> {
+  if (
+    deps.deploymentMode === 'community' &&
+    (!deps.communityOrganizationId ||
+      envelope.organizationId !== deps.communityOrganizationId)
+  )
+    throw new Error('Organization unavailable');
   const org = await deps.getOrganization(envelope.organizationId);
   if (!org || org.status !== 'active')
     throw new Error('Organization unavailable');

@@ -56,7 +56,24 @@ export interface OrganizationRepository {
 }
 export interface EventRepository {
   listByOrganization(ctx: RequestContext): Promise<unknown[]>;
-  getById(ctx: RequestContext, eventId: string): Promise<unknown | null>;
+  getById(ctx: RequestContext, eventId: string): Promise<Event | null>;
+}
+export interface Event {
+  id: string;
+  organizationId: OrganizationId;
+  slug: string;
+  name: string;
+  startsOn: string;
+  endsOn: string;
+  status: string;
+}
+export async function getEvent(
+  ctx: RequestContext,
+  eventId: string,
+  deps: { events: EventRepository },
+): Promise<Event | null> {
+  if (!ctx.permissions.has('event:read')) throw new Error('Forbidden');
+  return deps.events.getById(ctx, eventId);
 }
 export interface OrganizationDependencies {
   organizations: OrganizationRepository;

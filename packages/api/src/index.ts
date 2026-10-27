@@ -5,8 +5,10 @@ import {
   createRequestContext,
   organizationId,
   getOrganization,
+  getEvent,
   updateOrganization,
   type OrganizationRepository,
+  type EventRepository,
   type OrganizationPatch,
 } from '@racepilot/core';
 import {
@@ -25,8 +27,21 @@ const configSchema = z.object({
   DATABASE_URL: z.string().url(),
   COMMUNITY_ORGANIZATION_SLUG: z.string().min(1),
   COMMUNITY_ORGANIZATION_NAME: z.string().min(1),
-  COMMUNITY_ORGANIZATION_TIMEZONE: z.string().min(1),
-  COMMUNITY_ORGANIZATION_LOCALE: z.string().min(1),
+  COMMUNITY_ORGANIZATION_TIMEZONE: z.string().refine((value) => {
+    try {
+      new Intl.DateTimeFormat('en', { timeZone: value });
+      return true;
+    } catch {
+      return false;
+    }
+  }),
+  COMMUNITY_ORGANIZATION_LOCALE: z.string().refine((value) => {
+    try {
+      return Intl.getCanonicalLocales(value).length === 1;
+    } catch {
+      return false;
+    }
+  }),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
 });
 export function loadConfig(env: NodeJS.ProcessEnv) {
@@ -54,6 +69,7 @@ export interface Authenticator {
 export interface ApiDeps {
   config: { deploymentMode: 'community'; organizationId: string };
   organizations: OrganizationRepository;
+  events: EventRepository;
   authenticator?: Authenticator;
 }
 export function createCommunityContextResolver(
@@ -110,6 +126,24 @@ export function createApp(deps: ApiDeps) {
       return org
         ? c.json(OrganizationResponse.parse(org))
         : c.json({ error: 'Not found' }, 404);
+    } catch {
+      return c.json({ error: 'Forbidden' }, 403);
+    }
+  });
+  app.get('/admin/events/:eventId', async (c) => {
+    const identity = await (deps.authenticator?.authenticate(c.req.raw) ??
+      Promise.resolve(null));
+    if (!identity) return c.json({ error: 'Unauthorized' }, 401);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success)
+      return c.json({ error: 'Invalid event ID' }, 400);
+    try {
+      const event = await getEvent(
+        createCommunityContextResolver(deps.config, identity),
+        eventId,
+        { events: deps.events },
+      );
+      return event ? c.json(event) : c.json({ error: 'Not found' }, 404);
     } catch {
       return c.json({ error: 'Forbidden' }, 403);
     }
