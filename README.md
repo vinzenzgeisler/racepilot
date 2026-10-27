@@ -38,8 +38,7 @@ All architecture documents use these labels deliberately:
 The [CI workflow](.github/workflows/ci.yml) runs lint, typecheck, tests, build, the
 package-boundary check, and the documentation validators. The documentation
 validators check the tenant inventory, fixture, test references, global rationales,
-and relative links. None of these checks runs or claims product-level tenant
-isolation; the Community/Cloud matrix follows with the request-context seam (#58).
+and relative links.
 
 ## Development
 
@@ -49,12 +48,15 @@ Install dependencies with `npm ci`, then use the root commands `npm run lint`,
 `npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`, and
 `npm run check:boundaries`.
 
-| Package              | Responsibility                              | Allowed product dependencies |
-| -------------------- | ------------------------------------------- | ---------------------------- |
-| `packages/core`      | Domain, use cases, ports, and context types | None                         |
-| `packages/contracts` | Versioned wire and job schemas              | None                         |
-| `packages/api`       | HTTP application and API entry points       | `core`, `contracts`          |
-| `packages/worker`    | Job runtime and handlers                    | `core`, `contracts`          |
-| `packages/app`       | React/Vite web application                  | `contracts` only             |
+| Package                     | Responsibility                                | Allowed product dependencies |
+| --------------------------- | --------------------------------------------- | ---------------------------- |
+| `packages/core`             | Domain, use cases, ports, and context types   | None                         |
+| `packages/contracts`        | Versioned wire and job schemas                | None                         |
+| `packages/api`              | HTTP application and API entry points         | `core`, `contracts`          |
+| `packages/worker`           | Job runtime and handlers                      | `core`, `contracts`          |
+| `packages/app`              | React/Vite web application                    | `contracts` only             |
+| `packages/adapter-postgres` | Drizzle PostgreSQL persistence and migrations | `core` only                  |
 
 The package boundaries follow [ADR 0002](docs/adr/0002-product-repository-clean-start-and-package-boundaries.md).
+
+Local development PostgreSQL is available through `docker compose -f compose.dev.yaml up -d` (Docker is optional; tests can use any PostgreSQL 16 instance). Configure `DATABASE_URL`, `DEPLOYMENT_MODE=community`, `COMMUNITY_ORGANIZATION_SLUG`, `COMMUNITY_ORGANIZATION_NAME`, `COMMUNITY_ORGANIZATION_TIMEZONE`, and `COMMUNITY_ORGANIZATION_LOCALE`; `PORT` defaults to 3000. Run `npm run db:migrate` and `npm run db:seed`. Integration tests use `RACEPILOT_TEST_DATABASE_URL`.

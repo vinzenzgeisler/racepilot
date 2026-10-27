@@ -10,6 +10,7 @@ export default defineConfig({
     alias: {
       '@racepilot/core': source('core'),
       '@racepilot/contracts': source('contracts'),
+      '@racepilot/adapter-postgres': source('adapter-postgres'),
     },
   },
   test: {

@@ -1,0 +1,18 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: racepilot
+      POSTGRES_PASSWORD: racepilot
+      POSTGRES_DB: racepilot_dev
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - racepilot-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U racepilot -d racepilot_dev']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+volumes:
+  racepilot-postgres:

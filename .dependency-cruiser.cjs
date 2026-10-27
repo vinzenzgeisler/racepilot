@@ -7,6 +7,18 @@ module.exports = {
       to: { path: '^packages/(?!core/|contracts/)' },
     },
     {
+      name: 'adapter-core-only',
+      severity: 'error',
+      from: { path: '^packages/adapter-[^/]+/' },
+      to: { path: '^packages/(?!core/)' },
+    },
+    {
+      name: 'core-contracts-app-no-adapters',
+      severity: 'error',
+      from: { path: '^packages/(core|contracts|app)/' },
+      to: { path: '^packages/adapter-' },
+    },
+    {
       name: 'app-contracts-only',
       severity: 'error',
       from: { path: '^packages/app/' },

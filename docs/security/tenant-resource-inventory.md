@@ -184,3 +184,7 @@ git diff --check
 
 These checks validate the catalog and links only. They are not evidence that the
 future product-level isolation matrix has executed.
+
+## Product-owned inventory
+
+The frozen MSC snapshot in `tenant-resource-inventory.v1.json` is not edited for new RacePilot resources. The product-owned resources and linked negative tests are catalogued in [`product-resource-inventory.json`](product-resource-inventory.json) and checked by `scripts/validate_product_inventory.py`.
