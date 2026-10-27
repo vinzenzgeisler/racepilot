@@ -13,7 +13,7 @@ normative, versioned artifacts are:
 The standalone [inventory validator](../../scripts/validate_tenant_inventory.py)
 checks all three artifacts without installing dependencies. The
 [relative Markdown-link checker](../../scripts/check_relative_markdown_links.py) and
-[tenant inventory workflow](../../.github/workflows/tenant-inventory.yml) make the
+`docs` job of the [CI workflow](../../.github/workflows/ci.yml) make the
 documentation checks repository-native.
 
 The validator embeds the closed v1 resource/test manifests and the exact reconciled

@@ -1,10 +1,10 @@
 # RacePilot
 
 This is the single product repository for RacePilot, a clean rebuild that uses the MSC
-event application only as a read-only reference. It currently contains the
-architecture baseline from issues #34 and #38. It does **not** yet contain a deployable
-product, a Community distribution, or an active cross-edition CI implementation. Cloud
-infrastructure and the control plane live in a separate private repository.
+event application only as a read-only reference. It contains the architecture baseline
+from issues #34 and #38 and the monorepo foundation from issue #52. It does **not** yet
+contain product functionality, a Community distribution, or the cross-edition CI matrix.
+Cloud infrastructure and the control plane live in a separate private repository.
 
 RacePilot is one product with one shared domain core and two explicit deployment
 modes:
@@ -32,13 +32,28 @@ All architecture documents use these labels deliberately:
 - **Follow-up obligation:** work that must be implemented and verified before the
   affected mode can be called ready.
 
-## Non-goals of this baseline
+## What the current checks prove
 
-No product code, deployment manifests, billing code, tenant migration, repository
-move, or product CI workflow is introduced here. In particular, this repository does
-not make the current MSC application multi-tenant merely by documenting a target
-design.
+The [CI workflow](.github/workflows/ci.yml) runs lint, typecheck, tests, build, the
+package-boundary check, and the documentation validators. The documentation
+validators check the tenant inventory, fixture, test references, global rationales,
+and relative links. None of these checks runs or claims product-level tenant
+isolation; the Community/Cloud matrix follows with the request-context seam (#58).
 
-The only active workflow added by issue #38 validates the documentation inventory,
-fixture, test references, global rationales, and relative links. It does not run or
-claim product-level tenant isolation.
+## Development
+
+Prerequisites: Node.js 24 and npm. Verify the checkout before local agent work with
+`bash scripts/validate-repo-identity.sh` (forks may set `RACEPILOT_EXPECTED_REPO`).
+Install dependencies with `npm ci`, then use the root commands `npm run lint`,
+`npm run format:check`, `npm run typecheck`, `npm test`, `npm run build`, and
+`npm run check:boundaries`.
+
+| Package              | Responsibility                              | Allowed product dependencies |
+| -------------------- | ------------------------------------------- | ---------------------------- |
+| `packages/core`      | Domain, use cases, ports, and context types | None                         |
+| `packages/contracts` | Versioned wire and job schemas              | None                         |
+| `packages/api`       | HTTP application and API entry points       | `core`, `contracts`          |
+| `packages/worker`    | Job runtime and handlers                    | `core`, `contracts`          |
+| `packages/app`       | React/Vite web application                  | `contracts` only             |
+
+The package boundaries follow [ADR 0002](docs/adr/0002-product-repository-clean-start-and-package-boundaries.md).
