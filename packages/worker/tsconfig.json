@@ -7,6 +7,9 @@
     },
     {
       "path": "../contracts"
+    },
+    {
+      "path": "../adapter-postgres"
     }
   ],
   "compilerOptions": {
