@@ -2269,14 +2269,6 @@ export function createPublicRegistrationService(
           .limit(1);
         const unavailable = () => new Error('Registration unavailable');
         if (!event) throw unavailable();
-        if (
-          event.status !== 'open' ||
-          (event.registrationOpensAt &&
-            event.registrationOpensAt > receivedAt) ||
-          (event.registrationClosesAt &&
-            event.registrationClosesAt < receivedAt)
-        )
-          throw unavailable();
         const [existingSubmission] = await tx
           .select()
           .from(publicEntrySubmissions)
@@ -2289,6 +2281,14 @@ export function createPublicRegistrationService(
           )
           .limit(1);
         if (existingSubmission?.response) return existingSubmission.response;
+        if (
+          event.status !== 'open' ||
+          (event.registrationOpensAt &&
+            event.registrationOpensAt > receivedAt) ||
+          (event.registrationClosesAt &&
+            event.registrationClosesAt < receivedAt)
+        )
+          throw unavailable();
         if (!existingSubmission) {
           const [reservation] = await tx
             .insert(publicEntrySubmissions)
