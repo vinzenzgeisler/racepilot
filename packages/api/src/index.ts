@@ -2,6 +2,9 @@ import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
 import type { RequestContext, DeploymentMode } from '@racepilot/core';
 import { z } from 'zod';
+import { installModules, type ModuleApiDeps } from './modules.js';
+import { resolveOrganizationModuleCapabilities } from '@racepilot/core';
+export * from './modules.js';
 import { mailConfigSchema, validateMailConfig } from '@racepilot/contracts';
 import {
   parseDeploymentMode,
@@ -248,6 +251,8 @@ export interface ApiDeps {
     legalLinks?: { label: string; href: string }[];
     capabilities?: string[];
   };
+  /** Optional event modules (ADR 0004): registry, activation store, entitlements, routes. */
+  modules?: ModuleApiDeps;
   /** Server-owned context resolvers for multi-tenant assemblies. */
   contextResolvers?: {
     public(request: Request): Promise<RequestContext | null>;
@@ -406,6 +411,14 @@ export function createApp(deps: ApiDeps) {
       ]);
       if (bankTransferAvailable) capabilities.add('payment.bank_transfer');
       else capabilities.delete('payment.bank_transfer');
+      if (deps.modules) {
+        // Module availability is computed here; clients cannot supply it.
+        for (const key of await resolveOrganizationModuleCapabilities(
+          context,
+          deps.modules,
+        ).catch(() => []))
+          capabilities.add(key);
+      }
       const result = RuntimeBootstrapResponse.parse({
         schemaVersion: 1,
         configurationVersion:
@@ -1150,6 +1163,7 @@ export function createApp(deps: ApiDeps) {
       await deps.registrationSettings.update(context, parsed.data, actor),
     );
   });
+  if (deps.modules) installModules(app, deps.modules, resolveMemberContext);
   deps.mountAdditionalRoutes?.(app, {
     public: resolvePublicContext,
     member: resolveMemberContext,

@@ -80,3 +80,5 @@ export type {
   MailTemplateKey,
   MailLocale,
 } from './mail.js';
+export { createModuleTasks } from './modules.js';
+export type { ModuleTasksOptions, ModuleJobHandlerInput } from './modules.js';

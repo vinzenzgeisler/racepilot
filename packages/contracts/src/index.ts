@@ -400,3 +400,11 @@ export const standardRegistrationForm: StandardRegistrationForm = {
     },
   ],
 };
+export {
+  ModuleManifestSchema,
+  ModuleChangeRequest,
+  ModuleViewSchema,
+  ModuleListResponse,
+  ModuleJobPayload,
+} from './modules.js';
+export type { ModuleManifestData } from './modules.js';
