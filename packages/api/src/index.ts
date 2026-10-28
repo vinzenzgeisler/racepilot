@@ -15,6 +15,8 @@ import {
   updateEventClass,
   type EventClassRepository,
   type EventClassInput,
+  transitionEntry,
+  type EntryRepository,
   type OrganizationRepository,
   type EventRepository,
   type OrganizationPatch,
@@ -142,6 +144,7 @@ export interface ApiDeps {
   organizations: OrganizationRepository;
   events: EventRepository;
   classes?: EventClassRepository;
+  entries?: EntryRepository;
   authenticator?: Authenticator;
   memberships?: MembershipRepository;
   bootstrap?: MembershipBootstrap;
@@ -341,6 +344,46 @@ export function createApp(deps: ApiDeps) {
       return result
         ? c.json(EventResponse.parse(result))
         : c.json({ error: 'Not found' }, 404);
+    } catch {
+      return c.json({ error: 'Forbidden or invalid transition' }, 403);
+    }
+  });
+  app.get('/admin/entries/:entryId', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entries) return c.json({ error: 'Not found' }, 404);
+    const entry = await deps.entries.getById(context, c.req.param('entryId'));
+    return entry ? c.json(entry) : c.json({ error: 'Not found' }, 404);
+  });
+  app.post('/admin/entries/:entryId/transitions', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!deps.entries) return c.json({ error: 'Not found' }, 404);
+    const body = await c.req.json().catch(() => null);
+    const parsed = z
+      .object({
+        transition: z.enum(['verification', 'acceptance']),
+        status: z.string().min(1),
+        reason: z.string().trim().min(1).max(1000),
+      })
+      .strict()
+      .safeParse(body);
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      const result = await transitionEntry(
+        context,
+        c.req.param('entryId'),
+        parsed.data.transition,
+        parsed.data.status,
+        context.subject
+          ? `${context.subject.issuer}#${context.subject.subject}`
+          : context.correlationId,
+        parsed.data.reason,
+        { entries: deps.entries },
+      );
+      return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
     } catch {
       return c.json({ error: 'Forbidden or invalid transition' }, 403);
     }

@@ -1,14 +1,197 @@
 {
   "version": 1,
   "resources": [
-    {"id":"organization","kind":"table","tenantKey":"id (context organizationId)","isolation":"repository filters by server RequestContext.organizationId","negativeTests":[{"file":"packages/core/src/organization.test.ts","name":"requires read permission"}]},
-    {"id":"event","kind":"table","tenantKey":"organization_id","isolation":"repository queries always filter context organizationId","negativeTests":[{"file":"packages/adapter-postgres/src/integration.test.ts","name":"bootstraps idempotently and filters foreign event IDs"}]},
-    {"id":"admin-organization-get","kind":"route","tenantKey":"server-resolved organizationId","isolation":"Community resolver ignores client tenant; authenticated permission required","negativeTests":[{"file":"packages/api/src/organization.test.ts","name":"ignores client tenant and privilege values"}]},
-    {"id":"admin-organization-patch","kind":"route","tenantKey":"server-resolved organizationId","isolation":"strict request schema and authenticated permission required","negativeTests":[{"file":"packages/api/src/organization.test.ts","name":"production-style default denies access"}]},
-    {"id":"admin-event-get","kind":"route","tenantKey":"server-resolved organizationId","isolation":"event repository scopes the requested ID to the authenticated context","negativeTests":[{"file":"packages/api/src/organization.test.ts","name":"returns 404 for a foreign event ID through the API"}]},
-    {"id":"event-class","kind":"table","tenantKey":"organization_id + event_id","isolation":"composite foreign key and repository filters by server RequestContext.organizationId and event id","negativeTests":[{"file":"packages/adapter-postgres/src/integration.test.ts","name":"bootstraps idempotently and filters foreign event IDs"}]},
-    {"id":"admin-event-lifecycle","kind":"route","tenantKey":"server-resolved organizationId","isolation":"event:write from membership resolver and tenant-filtered repository","negativeTests":[{"file":"packages/api/src/organization.test.ts","name":"returns 404 for a foreign event ID through the API"}]},
-    {"id":"public-event-by-slug","kind":"route","tenantKey":"organizationId route segment","isolation":"slug lookup is scoped to organization and only exposes open/in-window events","negativeTests":[{"file":"packages/core/src/event.test.ts","name":"hides events outside registration window"}]},
-    {"id":"job-envelope","kind":"job-payload","tenantKey":"organizationId","isolation":"schema validation and active organization lookup before JobContext","negativeTests":[{"file":"packages/worker/src/context.test.ts","name":"rejects missing, unknown, and disabled organizations"}]}
+    {
+      "id": "organization",
+      "kind": "table",
+      "tenantKey": "id (context organizationId)",
+      "isolation": "repository filters by server RequestContext.organizationId",
+      "negativeTests": [
+        {
+          "file": "packages/core/src/organization.test.ts",
+          "name": "requires read permission"
+        }
+      ]
+    },
+    {
+      "id": "event",
+      "kind": "table",
+      "tenantKey": "organization_id",
+      "isolation": "repository queries always filter context organizationId",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "bootstraps idempotently and filters foreign event IDs"
+        }
+      ]
+    },
+    {
+      "id": "admin-organization-get",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Community resolver ignores client tenant; authenticated permission required",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "ignores client tenant and privilege values"
+        }
+      ]
+    },
+    {
+      "id": "admin-organization-patch",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "strict request schema and authenticated permission required",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "production-style default denies access"
+        }
+      ]
+    },
+    {
+      "id": "admin-event-get",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "event repository scopes the requested ID to the authenticated context",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "returns 404 for a foreign event ID through the API"
+        }
+      ]
+    },
+    {
+      "id": "event-class",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id",
+      "isolation": "composite foreign key and repository filters by server RequestContext.organizationId and event id",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "bootstraps idempotently and filters foreign event IDs"
+        }
+      ]
+    },
+    {
+      "id": "admin-event-lifecycle",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "event:write from membership resolver and tenant-filtered repository",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "returns 404 for a foreign event ID through the API"
+        }
+      ]
+    },
+    {
+      "id": "public-event-by-slug",
+      "kind": "route",
+      "tenantKey": "organizationId route segment",
+      "isolation": "slug lookup is scoped to organization and only exposes open/in-window events",
+      "negativeTests": [
+        {
+          "file": "packages/core/src/event.test.ts",
+          "name": "hides events outside registration window"
+        }
+      ]
+    },
+    {
+      "id": "job-envelope",
+      "kind": "job-payload",
+      "tenantKey": "organizationId",
+      "isolation": "schema validation and active organization lookup before JobContext",
+      "negativeTests": [
+        {
+          "file": "packages/worker/src/context.test.ts",
+          "name": "rejects missing, unknown, and disabled organizations"
+        }
+      ]
+    },
+    {
+      "id": "person",
+      "kind": "table",
+      "tenantKey": "organization_id",
+      "isolation": "Every lookup and duplicate search filters trusted RequestContext.organizationId; composite organization/id key; email uniqueness is organization-local.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates registration resources and serializes duplicate start numbers"
+        }
+      ]
+    },
+    {
+      "id": "vehicle",
+      "kind": "table",
+      "tenantKey": "organization_id",
+      "isolation": "Every lookup filters trusted RequestContext.organizationId; composite organization/id key and tenant-bound entry FK.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates registration resources and serializes duplicate start numbers"
+        }
+      ]
+    },
+    {
+      "id": "registration_group",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id",
+      "isolation": "Composite keys bind event and person ownership to the same organization.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates registration resources and serializes duplicate start numbers"
+        }
+      ]
+    },
+    {
+      "id": "entry",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id",
+      "isolation": "Repository reads use trusted organization; composite FKs enforce event, class, group, driver and vehicle ownership; partial unique event requested-number index.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates registration resources and serializes duplicate start numbers"
+        }
+      ]
+    },
+    {
+      "id": "entry_audit_event",
+      "kind": "table",
+      "tenantKey": "organization_id + entry_id",
+      "isolation": "Transition and audit insert commit atomically; composite FK scopes event to entry tenant.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "records no audit event when cross-tenant entry creation is rejected"
+        }
+      ]
+    },
+    {
+      "id": "admin-entry-get",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Permission-gated read calls tenant-filtered repository; foreign IDs are not found.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "returns 404 for a foreign entry ID"
+        }
+      ]
+    },
+    {
+      "id": "admin-entry-transition",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Permission-gated domain state machine and atomic tenant-scoped audit repository.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "does not transition a foreign entry ID"
+        }
+      ]
+    }
   ]
 }
