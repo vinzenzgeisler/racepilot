@@ -588,6 +588,20 @@ export interface RegistrationGroupRepository {
     input: RegistrationGroupInput,
   ): Promise<RegistrationGroup>;
 }
+export interface EntryExportRow {
+  readonly driver: string;
+  readonly vehicle: string;
+  readonly class: string;
+  readonly startNumber: string | null;
+  readonly status: EntryAcceptanceStatus;
+  readonly priceCents: number | null;
+}
+export interface EntryExportRepository {
+  listByEvent(
+    ctx: RequestContext,
+    eventId: string,
+  ): Promise<readonly EntryExportRow[]>;
+}
 export interface EntryRepository {
   create?(
     ctx: RequestContext,
@@ -1027,4 +1041,28 @@ export async function correctInvoicePayment(
   if (!actor.trim() || !reason.trim())
     throw new Error('Correction actor and reason are required');
   return deps.payments.correct(ctx, paymentId, actor.trim(), reason.trim());
+}
+
+export type EntryExportField =
+  'driver' | 'vehicle' | 'class' | 'startNumber' | 'status' | 'price';
+export const entryExportFields: readonly EntryExportField[] = [
+  'driver',
+  'vehicle',
+  'class',
+  'startNumber',
+  'status',
+  'price',
+];
+/** Protect spreadsheet consumers from formula execution, including control-character prefixes. */
+export function csvSafeCell(value: string | number | null | undefined): string {
+  let text = value == null ? '' : String(value);
+  if (/^[\t\r]/.test(text) || /^[=+\-@]/.test(text)) text = "'" + text;
+  return '"' + text.replaceAll('"', '""') + '"';
+}
+export function renderEntryCsv(
+  rows: readonly (readonly (string | number | null | undefined)[])[],
+): string {
+  return (
+    rows.map((row) => row.map(csvSafeCell).join(',')).join('\r\n') + '\r\n'
+  );
 }

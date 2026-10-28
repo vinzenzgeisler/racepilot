@@ -399,3 +399,31 @@ describe('api entry', () => {
     expect(called).toBe(false);
   });
 });
+
+describe('event CSV export', () => {
+  it('requires entry:read for CSV export', async () => {
+    const app = createApp({
+      config: {
+        deploymentMode: 'community',
+        organizationId: '11111111-1111-4111-8111-111111111111',
+      },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'viewer',
+        }),
+      },
+      memberships: { resolvePermissions: async () => new Set(['event:read']) },
+      entryExports: { listByEvent: async () => [] },
+    });
+    expect(
+      (
+        await app.request(
+          '/admin/events/22222222-2222-4222-8222-222222222222/entries.csv',
+        )
+      ).status,
+    ).toBe(403);
+  });
+});

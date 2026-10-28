@@ -11,10 +11,12 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "@racepilot/adapter-postgres": "*",
+    "@racepilot/adapter-smtp": "*",
     "@racepilot/contracts": "*",
     "@racepilot/core": "*",
     "graphile-worker": "^0.16.6",
-    "@racepilot/adapter-postgres": "*",
-    "@racepilot/adapter-smtp": "*"
+    "pdf-lib": "^1.17.1",
+    "qrcode": "^1.5.4"
   }
 }

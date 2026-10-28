@@ -57,3 +57,5 @@ export type {
   MailTemplateKey,
   MailLocale,
 } from './mail.js';
+export { createEntryConfirmationPdf } from './documents.js';
+export type { EntryConfirmationData } from './documents.js';

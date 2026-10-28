@@ -120,3 +120,20 @@ describe('pricing and transfer core', () => {
     expect(deriveInvoiceStatus(1000, 0, true)).toBe('cancelled');
   });
 });
+
+describe('entry CSV export', () => {
+  it('escapes formula and control-character prefixes and quotes cells', async () => {
+    const { csvSafeCell, renderEntryCsv } = await import('./index.js');
+    expect(
+      ['=1', '+1', '-1', '@SUM(A1)', '\t=1', '\r=1'].map(csvSafeCell),
+    ).toEqual([
+      '"\'=1"',
+      '"\'+1"',
+      '"\'-1"',
+      '"\'@SUM(A1)"',
+      '"\'\t=1"',
+      '"\'\r=1"',
+    ]);
+    expect(renderEntryCsv([['a"b', 'x,y']])).toBe('"a""b","x,y"\r\n');
+  });
+});

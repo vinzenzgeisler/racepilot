@@ -28,6 +28,9 @@ import {
   type InvoicePaymentRepository,
   type EntryRepository,
   type EntryListQuery,
+  type EntryExportRepository,
+  entryExportFields,
+  renderEntryCsv,
   type OrganizationRepository,
   type EventRepository,
   type OrganizationPatch,
@@ -148,6 +151,7 @@ export interface ApiDeps {
   events: EventRepository;
   classes?: EventClassRepository;
   entries?: EntryRepository;
+  entryExports?: EntryExportRepository;
   payments?: InvoicePaymentRepository;
   paymentRecipients?: PaymentRecipientRepository;
   pricing?: EventClassPricingRepository;
@@ -388,6 +392,56 @@ export function createApp(deps: ApiDeps) {
     } catch {
       return c.json({ error: 'Forbidden' }, 403);
     }
+  });
+  app.get('/admin/events/:eventId/entries.csv', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success)
+      return c.json({ error: 'Not found' }, 404);
+    const event = await deps.events.getById(context, eventId);
+    if (!event || !deps.entryExports)
+      return c.json({ error: 'Not found' }, 404);
+    const requested = c.req.query('fields')?.split(',') ?? [
+      ...entryExportFields,
+    ];
+    if (
+      requested.length === 0 ||
+      requested.some(
+        (field) =>
+          !entryExportFields.includes(
+            field as (typeof entryExportFields)[number],
+          ),
+      )
+    )
+      return c.json({ error: 'Invalid export fields' }, 400);
+    const rows = await deps.entryExports.listByEvent(context, eventId);
+    const labels: Record<string, string> = {
+      driver: 'Driver',
+      vehicle: 'Vehicle',
+      class: 'Class',
+      startNumber: 'Start number',
+      status: 'Status',
+      price: 'Price (minor units)',
+    };
+    const values = rows.map((row) =>
+      requested.map((field) =>
+        field === 'price' ? row.priceCents : row[field as keyof typeof row],
+      ),
+    );
+    const csv = renderEntryCsv([
+      [...requested.map((field) => labels[field]!)],
+      ...values,
+    ]);
+    c.header('Content-Type', 'text/csv; charset=utf-8');
+    c.header(
+      'Content-Disposition',
+      'attachment; filename="entries-' + eventId + '.csv"',
+    );
+    c.header('Cache-Control', 'private, no-store');
+    return c.body(csv);
   });
   app.get('/admin/events', async (c) => {
     const context = await resolveContext(c.req.raw);

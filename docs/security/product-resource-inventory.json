@@ -516,6 +516,42 @@
           "name": "uses generic public verification responses and rate-limits by IP and event"
         }
       ]
+    },
+    {
+      "id": "entry-export-route",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId",
+      "isolation": "Requires entry:read; event is resolved in tenant context and the export query filters organizationId and eventId; selected columns are allow-listed and cells are formula-safe.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "requires entry:read for CSV export"
+        }
+      ]
+    },
+    {
+      "id": "entry-confirmation-pdf",
+      "kind": "route",
+      "tenantKey": "organization/{organizationId}/{server-issued-objectId}",
+      "isolation": "Storage adapter generates UUID keys under organization namespace; download APIs must authorize document ownership before storage get.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-local-storage/src/contract.test.ts",
+          "name": "round-trips an object and enforces organization-scoped access"
+        }
+      ]
+    },
+    {
+      "id": "s3-object-storage",
+      "kind": "config",
+      "tenantKey": "organization/{organizationId}/",
+      "isolation": "Adapter constructs keys exclusively from trusted organization context and UUID identifiers; callers cannot provide keys; checks metadata organization/id and SHA-256.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-s3/src/contract.test.ts",
+          "name": "round-trips and scopes objects to organization namespaces"
+        }
+      ]
     }
   ]
 }
