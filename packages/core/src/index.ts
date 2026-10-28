@@ -620,7 +620,8 @@ const acceptanceTransitions: Record<
   pending: ['accepted', 'rejected', 'waitlisted', 'withdrawn'],
   accepted: ['withdrawn'],
   rejected: ['withdrawn'],
-  waitlisted: ['withdrawn'],
+  // Manual promotion from the waitlist; automatic waitlist handling is #29.
+  waitlisted: ['accepted', 'rejected', 'withdrawn'],
   withdrawn: [],
 };
 export function assertEntryTransition(

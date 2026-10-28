@@ -4,9 +4,10 @@ CREATE TABLE person (
   created_at timestamptz NOT NULL DEFAULT now(), deleted_at timestamptz, deletion_reason text,
   CONSTRAINT person_org_fk FOREIGN KEY (organization_id) REFERENCES organization(id) ON DELETE CASCADE,
   CONSTRAINT person_org_id_unique UNIQUE (organization_id,id),
-  CONSTRAINT person_org_email_unique UNIQUE (organization_id,email_normalized),
   CONSTRAINT person_deleted_reason_check CHECK (deleted_at IS NULL OR deletion_reason IS NOT NULL)
 );
+-- Soft-deleted people release their email for a new person record.
+CREATE UNIQUE INDEX person_org_email_unique ON person(organization_id,email_normalized) WHERE deleted_at IS NULL;
 CREATE TABLE vehicle (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(), organization_id uuid NOT NULL,
   make text NOT NULL, model text NOT NULL, year integer, registration text,

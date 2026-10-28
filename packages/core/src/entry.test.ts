@@ -58,10 +58,15 @@ describe('entry domain rules', () => {
         assertEntryTransition('acceptance', from, 'withdrawn'),
       ).not.toThrow(),
   );
+  it.each(['accepted', 'rejected'])('allows waitlisted to %s', (to) =>
+    expect(() =>
+      assertEntryTransition('acceptance', 'waitlisted', to),
+    ).not.toThrow(),
+  );
   it.each([
     ['accepted', 'pending'],
     ['rejected', 'accepted'],
-    ['waitlisted', 'rejected'],
+    ['waitlisted', 'pending'],
     ['withdrawn', 'accepted'],
     ['pending', 'verified'],
   ])('rejects %s to %s', (from, to) =>

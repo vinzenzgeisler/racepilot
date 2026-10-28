@@ -221,7 +221,10 @@ export const people = pgTable(
   },
   (t) => [
     unique('person_org_id_unique').on(t.organizationId, t.id),
-    unique('person_org_email_unique').on(t.organizationId, t.emailNormalized),
+    // Soft-deleted people release their email for a new person record.
+    uniqueIndex('person_org_email_unique')
+      .on(t.organizationId, t.emailNormalized)
+      .where(sql`${t.deletedAt} is null`),
     foreignKey({
       columns: [t.organizationId],
       foreignColumns: [organizations.id],
