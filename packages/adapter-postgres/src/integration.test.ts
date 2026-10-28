@@ -1,6 +1,15 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { runMigrations } from 'graphile-worker';
-import { organizationId, createPaymentReference } from '@racepilot/core';
+import {
+  organizationId,
+  createPaymentReference,
+  createModuleRegistry,
+  createRequestContext,
+  listEventModules,
+  resolveEventModuleAccess,
+  setEventModule,
+  setOrganizationModule,
+} from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
   createDatabase,
@@ -40,6 +49,9 @@ import {
   createEntryConfirmationRepository,
   createArtifactJobRepository,
   artifactJobs as artifactJobTable,
+  createModuleActivationRepository,
+  moduleActivationAudit,
+  eventModules,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
@@ -1768,6 +1780,216 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       await db.delete(emailOutbox).where(eq(emailOutbox.organizationId, orgId));
       await db.delete(events).where(eq(events.organizationId, orgId));
       await db.delete(organizations).where(eq(organizations.id, orgId));
+      await pool.end();
+    }
+  });
+  it('persists tenant-bound, versioned module activation with audit and no data loss', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    try {
+      const [orgA, orgB] = await db
+        .insert(organizations)
+        .values(
+          ['a', 'b'].map((n) => ({
+            slug: `modules-${n}-${suffix}`,
+            name: n,
+            timezone: 'UTC',
+            locale: 'en',
+          })),
+        )
+        .returning();
+      const ctxOf = (id: string) =>
+        createRequestContext({
+          deploymentMode: 'cloud',
+          organizationId: organizationId(id),
+          permissions: new Set([
+            'organization:read',
+            'organization:update',
+            'event:read',
+            'event:write',
+          ]),
+          capabilities: new Set(),
+          correlationId: 'modules',
+        });
+      const [eventA] = await db
+        .insert(events)
+        .values({
+          organizationId: orgA!.id,
+          slug: 'ev',
+          name: 'A',
+          startsOn: '2027-01-01',
+          endsOn: '2027-01-02',
+        })
+        .returning();
+      const [eventB] = await db
+        .insert(events)
+        .values({
+          organizationId: orgB!.id,
+          slug: 'ev',
+          name: 'B',
+          startsOn: '2027-01-01',
+          endsOn: '2027-01-02',
+        })
+        .returning();
+      const registry = createModuleRegistry([
+        {
+          manifest: {
+            id: 'example.noop',
+            version: '1.0.0',
+            displayName: 'No-op',
+            dependencies: [],
+            permissions: [],
+            capabilities: [],
+            tables: [],
+            migrations: [],
+            routes: [],
+            ui: [],
+            jobs: [],
+          },
+          configSchema: {
+            safeParse: (input) =>
+              typeof input === 'object' && input !== null
+                ? { success: true, data: input }
+                : {
+                    success: false,
+                    error: { issues: [{ path: [], message: 'object' }] },
+                  },
+          },
+          defaultConfig: { label: 'default' },
+        },
+      ]);
+      const deps = {
+        registry,
+        activations: createModuleActivationRepository(db),
+      };
+      const a = ctxOf(orgA!.id);
+      const b = ctxOf(orgB!.id);
+      await expect(
+        setEventModule(
+          a,
+          deps,
+          eventA!.id,
+          'example.noop',
+          { enabled: true },
+          'u',
+        ),
+      ).rejects.toMatchObject({ code: 'conflict' });
+      await setOrganizationModule(
+        a,
+        deps,
+        'example.noop',
+        { enabled: true, config: { label: 'tpl' } },
+        'u',
+      );
+      const enabled = await setEventModule(
+        a,
+        deps,
+        eventA!.id,
+        'example.noop',
+        { enabled: true },
+        'actor-1',
+      );
+      expect(enabled).toMatchObject({
+        enabled: true,
+        available: true,
+        stateVersion: 1,
+        config: { label: 'tpl' },
+      });
+      expect(
+        (await resolveEventModuleAccess(a, deps, eventA!.id, 'example.noop'))
+          ?.access,
+      ).toBe('active');
+      // idempotent repeat writes neither a version nor an audit row
+      await setEventModule(
+        a,
+        deps,
+        eventA!.id,
+        'example.noop',
+        { enabled: true },
+        'actor-1',
+      );
+      await expect(
+        setEventModule(
+          a,
+          deps,
+          eventA!.id,
+          'example.noop',
+          { config: { label: 'x' }, expectedVersion: 9 },
+          'u',
+        ),
+      ).rejects.toMatchObject({ code: 'conflict' });
+      const off = await setEventModule(
+        a,
+        deps,
+        eventA!.id,
+        'example.noop',
+        { enabled: false, reason: 'cancelled' },
+        'actor-2',
+      );
+      expect(off).toMatchObject({
+        enabled: false,
+        stateVersion: 2,
+        config: { label: 'tpl' },
+      });
+      expect(
+        (await resolveEventModuleAccess(a, deps, eventA!.id, 'example.noop'))
+          ?.access,
+      ).toBe('archived');
+      const audit = await db
+        .select()
+        .from(moduleActivationAudit)
+        .where(
+          and(
+            eq(moduleActivationAudit.organizationId, orgA!.id),
+            eq(moduleActivationAudit.eventId, eventA!.id),
+          ),
+        );
+      expect(audit.map((r) => [r.action, r.version, r.actor]).sort()).toEqual([
+        ['disable', 2, 'actor-2'],
+        ['enable', 1, 'actor-1'],
+      ]);
+      // tenant isolation: org B sees none of it, foreign event ids are not found
+      expect(await listEventModules(b, deps, eventA!.id)).toBeNull();
+      expect(
+        await setEventModule(
+          b,
+          deps,
+          eventA!.id,
+          'example.noop',
+          { enabled: true },
+          'u',
+        ),
+      ).toBeNull();
+      expect(
+        await resolveEventModuleAccess(b, deps, eventA!.id, 'example.noop'),
+      ).toBeNull();
+      expect(await listEventModules(b, deps, 'not-a-uuid')).toBeNull();
+      expect((await listEventModules(b, deps, eventB!.id))?.[0]).toMatchObject({
+        enabled: false,
+        stateVersion: null,
+      });
+      expect(await deps.activations.listOrganization(b)).toEqual([]);
+      // a row cannot point at another organization's event
+      await expect(
+        db.insert(eventModules).values({
+          organizationId: orgB!.id,
+          eventId: eventA!.id,
+          moduleId: 'example.noop',
+          enabled: true,
+          config: {},
+          version: 1,
+          moduleVersion: '1.0.0',
+          updatedBy: 'x',
+        }),
+      ).rejects.toThrow();
+      // module state is removed only with its event, never by deactivation
+      expect(
+        await db
+          .select()
+          .from(eventModules)
+          .where(eq(eventModules.eventId, eventA!.id)),
+      ).toHaveLength(1);
+    } finally {
       await pool.end();
     }
   });
