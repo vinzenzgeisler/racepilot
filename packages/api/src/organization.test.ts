@@ -298,6 +298,68 @@ describe('registration administration and public endpoints', () => {
     ).toBe(400);
   });
 
+  it('does not trust spoofed client forwarding headers for registration rate limits', async () => {
+    const api = deps();
+    api.publicRegistration = {
+      getForm: async () => ({ event: { name: 'Demo' } }),
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    const observed: string[] = [];
+    api.registrationRateLimiter = {
+      consume: async (ip) => {
+        observed.push(ip);
+        return true;
+      },
+    };
+    const app = createApp(api);
+    const path = `/public/organizations/${config.organizationId}/events/event/registration/submissions`;
+    for (const value of ['192.0.2.1', '198.51.100.2', '203.0.113.3']) {
+      const response = await app.request(path, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-connecting-ip': value,
+          'x-real-ip': value,
+          'x-forwarded-for': value,
+        },
+        body: JSON.stringify({
+          submissionId: '10000000-0000-4000-8000-000000000099',
+          formVersion: '1.0',
+          language: 'en',
+          eventSlug: 'event',
+          person: {
+            firstName: 'Test',
+            lastName: 'Driver',
+            email: 'test@example.test',
+            dateOfBirth: '2000-01-01',
+          },
+          entries: [
+            {
+              classId: '20000000-0000-4000-8000-000000000099',
+              vehicle: {
+                make: 'Maker',
+                model: 'Model',
+                year: 2020,
+                registration: null,
+              },
+            },
+          ],
+          consents: [
+            {
+              key: 'terms',
+              version: 'v1',
+              hash: 'a'.repeat(64),
+              accepted: true,
+            },
+          ],
+        }),
+      });
+      expect(response.status).toBe(202);
+    }
+    expect(observed).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
   it('uses generic public verification responses and rate-limits by IP and event', async () => {
     const api = deps();
     api.publicRegistration = {

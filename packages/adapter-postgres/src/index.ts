@@ -2268,8 +2268,8 @@ export function createPublicRegistrationService(
           .for('share')
           .limit(1);
         const unavailable = () => new Error('Registration unavailable');
+        if (!event) throw unavailable();
         if (
-          !event ||
           event.status !== 'open' ||
           (event.registrationOpensAt &&
             event.registrationOpensAt > receivedAt) ||

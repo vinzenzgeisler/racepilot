@@ -491,9 +491,7 @@ export function createApp(deps: ApiDeps) {
         parsed.data.reason,
         { entries: deps.entries },
       );
-      return result
-        ? c.json({ form: standardRegistrationForm, ...(result as object) })
-        : c.json({ error: 'Not found' }, 404);
+      return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
     } catch {
       return c.json({ error: 'Forbidden or invalid transition' }, 403);
     }
@@ -752,11 +750,9 @@ export function createApp(deps: ApiDeps) {
       )
         return c.json({ error: 'Registration unavailable' }, 404);
       const eventSlug = c.req.param('slug');
-      const ip =
-        c.req.header('cf-connecting-ip') ??
-        c.req.header('x-real-ip') ??
-        c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
-        'unknown';
+      // Forwarding headers are attacker-controlled unless a trusted proxy has
+      // been explicitly configured. Use a shared bucket by default.
+      const ip = 'unknown';
       if (
         deps.registrationRateLimiter &&
         !(await deps.registrationRateLimiter.consume(

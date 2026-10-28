@@ -1267,7 +1267,6 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         accepted: true,
         entryCount: 2,
       });
-
       // A different person may use the same contact address with the default organization policy.
       await service.submit(
         ctx,
@@ -1437,6 +1436,25 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         .update(eventClasses)
         .set({ closed: false })
         .where(eq(eventClasses.id, classes[0]!.id));
+      await db
+        .update(events)
+        .set({ registrationClosesAt: new Date(Date.now() - 1000) })
+        .where(eq(events.id, event!.id));
+      expect(await service.submit(ctx, event!.slug, body)).toEqual({
+        accepted: true,
+        entryCount: 2,
+      });
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Late',
+            lastName: 'Driver',
+            dateOfBirth: '1990-01-01',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
       await db
         .update(events)
         .set({ status: 'closed' })
