@@ -51,6 +51,7 @@ import {
   normalizeRequestedStartNumber,
   deriveInvoiceStatus,
   createPaymentReference,
+  ProviderError,
 } from '@racepilot/core';
 import type { Pool } from 'pg';
 export const organizations = pgTable(
@@ -632,6 +633,7 @@ export const publicEntrySubmissions = pgTable(
     organizationId: uuid('organization_id').notNull(),
     eventId: uuid('event_id').notNull(),
     submissionId: uuid('submission_id').notNull(),
+    requestFingerprint: text('request_fingerprint'),
     registrationGroupId: uuid('registration_group_id'),
     response: jsonb('response').$type<{
       accepted: true;
@@ -2254,6 +2256,21 @@ export function createPublicRegistrationService(
     ) => {
       const token = randomBytes(32).toString('base64url');
       const tokenHash = hashToken(token);
+      const canonicalize = (value: unknown): string => {
+        if (Array.isArray(value))
+          return `[${value.map(canonicalize).join(',')}]`;
+        if (value && typeof value === 'object') {
+          const record = value as Record<string, unknown>;
+          return `{${Object.keys(record)
+            .sort()
+            .map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`)
+            .join(',')}}`;
+        }
+        return JSON.stringify(value) ?? 'null';
+      };
+      const requestFingerprint = createHash('sha256')
+        .update(canonicalize(payload))
+        .digest('hex');
       const receivedAt = new Date();
       return db.transaction(async (tx) => {
         const [event] = await tx
@@ -2268,6 +2285,8 @@ export function createPublicRegistrationService(
           .for('share')
           .limit(1);
         const unavailable = () => new Error('Registration unavailable');
+        const submissionConflict = () =>
+          new ProviderError('conflict', 'Submission ID conflict');
         if (!event) throw unavailable();
         const [existingSubmission] = await tx
           .select()
@@ -2280,7 +2299,11 @@ export function createPublicRegistrationService(
             ),
           )
           .limit(1);
-        if (existingSubmission?.response) return existingSubmission.response;
+        if (existingSubmission) {
+          if (existingSubmission.requestFingerprint !== requestFingerprint)
+            throw submissionConflict();
+          if (existingSubmission.response) return existingSubmission.response;
+        }
         if (
           event.status !== 'open' ||
           (event.registrationOpensAt &&
@@ -2296,22 +2319,28 @@ export function createPublicRegistrationService(
               organizationId: ctx.organizationId,
               eventId: event.id,
               submissionId: payload.submissionId,
+              requestFingerprint,
             })
-            .onConflictDoNothing()
-            .returning({ submissionId: publicEntrySubmissions.submissionId });
-          if (!reservation) {
-            const [completed] = await tx
-              .select({ response: publicEntrySubmissions.response })
-              .from(publicEntrySubmissions)
-              .where(
-                and(
-                  eq(publicEntrySubmissions.organizationId, ctx.organizationId),
-                  eq(publicEntrySubmissions.eventId, event.id),
-                  eq(publicEntrySubmissions.submissionId, payload.submissionId),
-                ),
-              )
-              .limit(1);
-            if (completed?.response) return completed.response;
+            .onConflictDoUpdate({
+              target: [
+                publicEntrySubmissions.organizationId,
+                publicEntrySubmissions.eventId,
+                publicEntrySubmissions.submissionId,
+              ],
+              set: {
+                requestFingerprint: sql`${publicEntrySubmissions.requestFingerprint}`,
+              },
+            })
+            .returning({
+              requestFingerprint: publicEntrySubmissions.requestFingerprint,
+              response: publicEntrySubmissions.response,
+              inserted: sql<boolean>`xmax = 0`,
+            });
+          if (!reservation) throw unavailable();
+          if (!reservation.inserted) {
+            if (reservation.requestFingerprint !== requestFingerprint)
+              throw submissionConflict();
+            if (reservation.response) return reservation.response;
             throw unavailable();
           }
         }

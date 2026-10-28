@@ -1167,6 +1167,12 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         { accepted: true, entryCount: 2 },
       ]);
       await expect(
+        service.submit(ctx, event!.slug, {
+          ...body,
+          person: { ...body.person, firstName: 'Different' },
+        }),
+      ).rejects.toThrow('Submission ID conflict');
+      await expect(
         service.submit(
           ctx,
           event!.slug,
@@ -1436,6 +1442,31 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         .update(eventClasses)
         .set({ closed: false })
         .where(eq(eventClasses.id, classes[0]!.id));
+      const concurrentId = crypto.randomUUID();
+      const concurrentPayloadA = input(concurrentId, {
+        firstName: 'Concurrent A',
+        lastName: 'Driver',
+        dateOfBirth: '1990-01-01',
+      });
+      const concurrentPayloadB = {
+        ...concurrentPayloadA,
+        consents: [],
+      };
+      const concurrentResults = await Promise.allSettled([
+        service.submit(ctx, event!.slug, concurrentPayloadA),
+        service.submit(ctx, event!.slug, concurrentPayloadB),
+      ]);
+      expect(
+        concurrentResults.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1);
+      expect(
+        concurrentResults.filter((result) => result.status === 'rejected'),
+      ).toHaveLength(1);
+      expect(
+        concurrentResults.find((result) => result.status === 'rejected'),
+      ).toMatchObject({
+        reason: expect.objectContaining({ message: 'Submission ID conflict' }),
+      });
       await db
         .update(events)
         .set({ registrationClosesAt: new Date(Date.now() - 1000) })
@@ -1444,6 +1475,15 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         accepted: true,
         entryCount: 2,
       });
+      await expect(
+        service.submit(ctx, event!.slug, {
+          ...body,
+          entries: body.entries.map((entry) => ({
+            ...entry,
+            vehicle: { ...entry.vehicle, model: 'Changed after close' },
+          })),
+        }),
+      ).rejects.toThrow('Submission ID conflict');
       await expect(
         service.submit(
           ctx,

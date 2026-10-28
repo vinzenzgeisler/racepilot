@@ -57,6 +57,13 @@
       "when": 1793232001000,
       "tag": "0007_public_registration",
       "breakpoints": false
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793232002000,
+      "tag": "0008_submission_request_fingerprint",
+      "breakpoints": false
     }
   ]
 }

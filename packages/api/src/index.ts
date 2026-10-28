@@ -33,6 +33,7 @@ import {
   type MembershipRepository,
   type MembershipBootstrap,
   type ExternalIdentity,
+  ProviderError,
 } from '@racepilot/core';
 import {
   healthResponseSchema,
@@ -784,7 +785,9 @@ export function createApp(deps: ApiDeps) {
           ),
           202,
         );
-      } catch {
+      } catch (error) {
+        if (error instanceof ProviderError && error.code === 'conflict')
+          return c.json({ error: 'Submission ID conflict' }, 409);
         return c.json({ error: 'Registration unavailable' }, 400);
       }
     },
