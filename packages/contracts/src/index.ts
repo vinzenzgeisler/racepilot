@@ -1,4 +1,6 @@
 import { z } from 'zod';
+export { ExtensionManifest } from './extensions.js';
+export type { ExtensionManifestData } from './extensions.js';
 export const healthResponseSchema = z.object({
   status: z.literal('ok'),
   version: z.string().min(1),

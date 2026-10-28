@@ -17,7 +17,8 @@
     "build": "tsc -b && npm run build --workspace @racepilot/app",
     "check:boundaries": "depcruise --config .dependency-cruiser.cjs packages && node scripts/check-boundaries.mjs",
     "db:migrate": "tsx scripts/db-migrate.ts",
-    "db:seed": "tsx scripts/db-seed.ts"
+    "db:seed": "tsx scripts/db-seed.ts",
+    "release:pack": "npm run build && node scripts/pack-product.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",

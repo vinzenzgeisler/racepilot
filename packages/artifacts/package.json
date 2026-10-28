@@ -1,7 +1,6 @@
 {
   "name": "@racepilot/artifacts",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "exports": {
     "./pdf": "./dist/pdf.js"
@@ -19,5 +18,10 @@
   },
   "devDependencies": {
     "@types/qrcode": "^1.5.6"
-  }
+  },
+  "files": [
+    "dist",
+    "fonts"
+  ],
+  "private": true
 }

@@ -71,7 +71,7 @@ must reconstruct and enforce the same request context as synchronous API operati
 | Community infrastructure examples | Public | Reverse-proxy and local deployment examples without operator secrets |
 | Cloud control plane | Private | Organization lifecycle, subscriptions, billing integration, domain automation, support and platform administration |
 | Cloud production infrastructure and operations | Private | Managed tenant routing, production IaC, observability, backups, incident and support automation |
-| Marketing site | Public by default, operationally separate | Product information; never a runtime dependency of the product |
+| Product website | Private `racepilot-cloud/apps/website`, operationally separate | **Current fact (2026-10-28):** separately built/deployed from the private Cloud repository. Product information; never a runtime dependency of the product. Any later public promotion is an owner decision. |
 
 The concrete current and target repository assignments are in the
 [repository and module map](../architecture/repository-module-map.md). Public does not
@@ -130,17 +130,30 @@ button is not enforcement.
 ### Extension policy
 
 **Target decision:** Customer-specific forks, permanent customer branches, customer
-builds, and copied editions are explicitly rejected as extension mechanisms. Changes
-must use one of these paths:
+builds, and copied editions are explicitly rejected as extension mechanisms. Cloud may
+also assemble small, operator-owned private incubation modules from immutable,
+versioned artifacts. These modules are a managed-Cloud service detail, not a supported
+Community/self-host extension path; they do not imply individual development or
+self-host support. A later public promotion is an explicit owner decision and starts
+from a reviewed, clean module release, never by publishing private repository history.
+Changes must use one of these paths:
 
 1. configuration or validated branding;
 2. a versioned public port/adapter or event contract;
 3. a reusable, reviewed domain capability available from the shared core; or
-4. a Cloud-only control-plane feature that does not duplicate domain logic.
+4. a Cloud-only control-plane feature that does not duplicate domain logic; or
+5. a private Cloud incubation module with an explicit module identity, compatibility
+   range, and declared capabilities, described by the provider-neutral
+   `@racepilot/contracts` extension manifest and composed through server-owned
+   API/UI/worker boundaries. Private code must not be imported by public packages.
+   Tenant availability is determined and enforced server-side for every API request
+   and job.
 
-Consulting may fund an extension, but the resulting domain behavior follows the same
-shared path. Unsupported requests are declined or productized; they do not create a
-fork.
+Private modules are available only to Cloud subscribers under the service agreement;
+there is no self-host deployment, support, or extra-development offer for them.
+Consulting may fund a reusable extension, but shared domain behavior follows the same
+public path. Unsupported requests are declined or productized; they do not create a
+fork. No license choice or public publication is implied by this policy.
 
 ### CI is a release boundary
 

@@ -1,7 +1,6 @@
 {
   "name": "@racepilot/api",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "exports": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -21,5 +20,9 @@
     "hono": "4.13.14",
     "@racepilot/artifacts": "*",
     "pdf-lib": "^1.17.1"
-  }
+  },
+  "files": [
+    "dist"
+  ],
+  "private": true
 }

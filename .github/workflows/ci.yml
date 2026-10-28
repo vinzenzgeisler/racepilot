@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Check repository identity
         run: bash scripts/validate-repo-identity.sh
 
@@ -64,6 +66,24 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+
+  pack-artifacts:
+    needs: repo-identity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run release:pack
+        env:
+          RACEPILOT_PACK_DIR: /tmp/racepilot-product-artifacts
 
   boundaries:
     needs: repo-identity

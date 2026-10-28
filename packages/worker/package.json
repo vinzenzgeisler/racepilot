@@ -1,7 +1,6 @@
 {
   "name": "@racepilot/worker",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
   "exports": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -19,5 +18,9 @@
     "@racepilot/artifacts": "*",
     "@racepilot/adapter-local-storage": "*",
     "@racepilot/adapter-s3": "*"
-  }
+  },
+  "files": [
+    "dist"
+  ],
+  "private": true
 }

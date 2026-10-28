@@ -51,12 +51,14 @@ allocation label `vinzenzgeisler/racepilot-cloud`:
 - the control plane (organizations, domains, memberships, subscriptions, billing,
   platform operations).
 
-The private repository consumes released artifacts and public package versions of
-this repository (container images, built packages, contract versions). It does not
-copy or fork domain behavior. Reusable, secret-free AWS adapters, such as Cognito, SES,
-and S3 implementations of core ports, may stay public in this repository as
-`packages/adapter-*`. The private repository is created only once Cloud deployment
-work starts.
+The private repository consumes immutable, exactly versioned npm-pack artifacts and
+their public source commit identities from this repository; no public registry is
+required for this initial integration. It does not copy or fork domain behavior.
+Reusable, secret-free AWS adapters, such as Cognito, SES, and S3 implementations of
+core ports, may stay public in this repository as `packages/adapter-*`. The private
+repository exists and currently contains the independently deployed product website
+only. Cloud runtime assembly and control-plane implementation remain future work;
+repository existence is not evidence of a running Cloud platform.
 
 ### Packages
 
