@@ -546,7 +546,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       await artifactJobs.release(
         loserContext,
         firstArtifact.id,
-        'not-the-current-claim-token',
+        crypto.randomUUID(),
       );
       expect((await artifactJobs.getById(ctxA, firstArtifact.id))?.status).toBe(
         'processing',
