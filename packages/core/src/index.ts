@@ -587,7 +587,11 @@ export interface RegistrationGroupRepository {
   ): Promise<RegistrationGroup>;
 }
 export interface EntryRepository {
-  create?(ctx: RequestContext, input: EntryInput): Promise<Entry>;
+  create?(
+    ctx: RequestContext,
+    input: EntryInput,
+    executor?: unknown,
+  ): Promise<Entry>;
   getById(ctx: RequestContext, id: string): Promise<Entry | null>;
   transition(
     ctx: RequestContext,
@@ -902,6 +906,7 @@ export interface InvoiceRepository {
     eventId: string,
     registrationGroupId: string,
     snapshot: PriceSnapshot,
+    executor?: unknown,
   ): Promise<InvoiceRecord>;
 }
 export async function issueInvoice(
@@ -910,6 +915,7 @@ export async function issueInvoice(
   registrationGroupId: string,
   snapshot: PriceSnapshot,
   deps: { invoices: InvoiceRepository },
+  executor?: unknown,
 ): Promise<InvoiceRecord> {
   if (
     snapshot.version !== '1' ||
@@ -917,7 +923,13 @@ export async function issueInvoice(
     snapshot.totalCents < 0
   )
     throw new Error('Invalid price snapshot');
-  return deps.invoices.issue(ctx, eventId, registrationGroupId, snapshot);
+  return deps.invoices.issue(
+    ctx,
+    eventId,
+    registrationGroupId,
+    snapshot,
+    executor,
+  );
 }
 export interface PaymentRecipientRepository {
   get(ctx: RequestContext): Promise<PaymentRecipient | null>;

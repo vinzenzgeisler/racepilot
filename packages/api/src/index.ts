@@ -20,6 +20,7 @@ import {
   correctInvoicePayment,
   updatePaymentRecipient,
   setClassPriceRule,
+  validatePaymentRecipient,
   type EventClassPricingRepository,
   type PaymentRecipientRepository,
   type InvoicePaymentRepository,
@@ -187,6 +188,20 @@ export function createApp(deps: ApiDeps) {
       const organization = await deps.organizations.getById(context);
       if (!organization || organization.status !== 'active')
         return c.json({ error: 'Runtime unavailable' }, 404);
+      const bankTransferAvailable = await (async () => {
+        if (!deps.paymentRecipients) return false;
+        try {
+          const recipient = await deps.paymentRecipients.get(context);
+          if (!recipient) return false;
+          validatePaymentRecipient(recipient);
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      const capabilities = new Set(deps.runtimeBootstrap?.capabilities ?? []);
+      if (bankTransferAvailable) capabilities.add('payment.bank_transfer');
+      else capabilities.delete('payment.bank_transfer');
       const result = RuntimeBootstrapResponse.parse({
         schemaVersion: 1,
         configurationVersion:
@@ -209,7 +224,7 @@ export function createApp(deps: ApiDeps) {
         locale: organization.locale,
         // The current event lifecycle contract has no authoritative "active" event selection.
         activeEvent: null,
-        capabilities: deps.runtimeBootstrap?.capabilities ?? [],
+        capabilities: [...capabilities],
         legalLinks: deps.runtimeBootstrap?.legalLinks ?? [],
       });
       c.header('Cache-Control', 'private, max-age=0, must-revalidate');

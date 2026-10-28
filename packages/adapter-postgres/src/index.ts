@@ -484,6 +484,12 @@ export const organizationPaymentRecipients = pgTable(
       .defaultNow(),
   },
 );
+export const invoiceReferenceCounters = pgTable('invoice_reference_counter', {
+  organizationId: uuid('organization_id')
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  nextValue: integer('next_value').notNull(),
+});
 export const invoices = pgTable(
   'invoice',
   {
@@ -1092,8 +1098,9 @@ export function createEntryRepository(
   db: Database,
 ): import('@racepilot/core').EntryRepository {
   return {
-    create: async (ctx, input) => {
-      const [row] = await db
+    create: async (ctx, input, executor) => {
+      const executorDb = (executor as Database | undefined) ?? db;
+      const [row] = await executorDb
         .insert(entries)
         .values({
           organizationId: ctx.organizationId,
@@ -1430,9 +1437,20 @@ export function createEventClassPricingRepository(
 }
 export function createInvoiceRepository(db: Database): InvoiceRepository {
   return {
-    issue: async (ctx, eventId, registrationGroupId, snapshot) => {
-      const paymentReference = createPaymentReference(registrationGroupId);
-      const [row] = await db
+    issue: async (ctx, eventId, registrationGroupId, snapshot, executor) => {
+      const executorDb = (executor as Database | undefined) ?? db;
+      const [counter] = await executorDb
+        .insert(invoiceReferenceCounters)
+        .values({ organizationId: ctx.organizationId, nextValue: 1 })
+        .onConflictDoUpdate({
+          target: invoiceReferenceCounters.organizationId,
+          set: { nextValue: sql`${invoiceReferenceCounters.nextValue} + 1` },
+        })
+        .returning({ nextValue: invoiceReferenceCounters.nextValue });
+      const paymentReference = createPaymentReference(
+        String(counter!.nextValue).padStart(8, '0'),
+      );
+      const [row] = await executorDb
         .insert(invoices)
         .values({
           organizationId: ctx.organizationId,
@@ -1449,7 +1467,7 @@ export function createInvoiceRepository(db: Database): InvoiceRepository {
       const invoice =
         row ??
         (
-          await db
+          await executorDb
             .select()
             .from(invoices)
             .where(
@@ -1460,6 +1478,11 @@ export function createInvoiceRepository(db: Database): InvoiceRepository {
             )
         )[0];
       if (!invoice) throw new Error('Invoice creation failed');
+      if (
+        invoice.totalCents !== snapshot.totalCents ||
+        invoice.currency !== snapshot.currency
+      )
+        throw new Error('Existing invoice does not match price snapshot');
       return {
         ...invoice,
         organizationId: organizationId(invoice.organizationId),

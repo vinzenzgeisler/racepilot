@@ -25,6 +25,7 @@ import {
   createPersonRepository,
   createVehicleRepository,
   createEntryRepository,
+  createInvoiceRepository,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
@@ -612,6 +613,102 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
 });
 
 describe.skipIf(!url)('pricing and invoice isolation', () => {
+  it('issues invoices transactionally, rejects changed snapshots, and allocates short concurrent references', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          slug: `invoice-sequence-${suffix}`,
+          name: 'A',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [event] = await db
+        .insert(events)
+        .values({
+          organizationId: org!.id,
+          slug: 'event',
+          name: 'A',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-01',
+        })
+        .returning();
+      const [person] = await db
+        .insert(people)
+        .values({ organizationId: org!.id, firstName: 'A', lastName: 'A' })
+        .returning();
+      const groups = await Promise.all(
+        Array.from({ length: 9 }, async () => {
+          const [group] = await db
+            .insert(registrationGroups)
+            .values({
+              organizationId: org!.id,
+              eventId: event!.id,
+              personId: person!.id,
+            })
+            .returning();
+          return group!;
+        }),
+      );
+      const ctx = {
+        deploymentMode: 'community' as const,
+        organizationId: organizationId(org!.id),
+        permissions: new Set<string>(),
+        capabilities: new Set<string>(),
+        correlationId: suffix,
+      };
+      const repo = createInvoiceRepository(db);
+      const snapshot = {
+        version: '1' as const,
+        currency: 'EUR',
+        calculatedAt: new Date().toISOString(),
+        totalCents: 1200,
+        lines: [],
+      };
+      await expect(
+        db.transaction(async (tx) => {
+          await repo.issue(ctx, event!.id, groups[0]!.id, snapshot, tx);
+          throw new Error('rollback');
+        }),
+      ).rejects.toThrow('rollback');
+      expect(
+        await db
+          .select()
+          .from(invoices)
+          .where(eq(invoices.registrationGroupId, groups[0]!.id)),
+      ).toHaveLength(0);
+      await repo.issue(ctx, event!.id, groups[0]!.id, snapshot);
+      await expect(
+        repo.issue(ctx, event!.id, groups[0]!.id, {
+          ...snapshot,
+          totalCents: 1300,
+        }),
+      ).rejects.toThrow(/does not match/);
+      const issued = await Promise.all(
+        groups
+          .slice(1)
+          .map((group) => repo.issue(ctx, event!.id, group.id, snapshot)),
+      );
+      const refs = issued.map((invoice) => invoice.paymentReference);
+      expect(new Set(refs).size).toBe(refs.length);
+      expect(refs.every((ref) => /^RF\d{2}\d{8}$/.test(ref))).toBe(true);
+    } finally {
+      const [cleanupOrg] = await db
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(eq(organizations.slug, `invoice-sequence-${suffix}`));
+      if (cleanupOrg) {
+        await db.delete(events).where(eq(events.organizationId, cleanupOrg.id));
+        await db
+          .delete(organizations)
+          .where(eq(organizations.id, cleanupOrg.id));
+      }
+      await pool.end();
+    }
+  });
   it('isolates identical payment references by organization and preserves payment corrections as audited reversals', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();
