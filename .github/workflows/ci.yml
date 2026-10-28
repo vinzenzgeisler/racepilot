@@ -116,7 +116,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run db:migrate
-      - run: npm test -- --run packages/adapter-postgres/src/integration.test.ts
+      - run: npm test -- --run $(find packages -type f \( -name '*.integration.test.ts' -o -name 'integration.test.ts' \) -print)
 
   core-community:
     name: core (community)
