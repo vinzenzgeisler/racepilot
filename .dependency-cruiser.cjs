@@ -19,10 +19,10 @@ module.exports = {
       to: { path: '^packages/adapter-' },
     },
     {
-      name: 'app-contracts-only',
+      name: 'frontend-no-server-imports',
       severity: 'error',
-      from: { path: '^packages/app/' },
-      to: { path: '^packages/(core|api|worker)/' },
+      from: { path: '^packages/(app|site)/' },
+      to: { path: '^packages/(core|api|worker|adapter-[^/]+)/' },
     },
     {
       name: 'api-worker-no-app-imports',
