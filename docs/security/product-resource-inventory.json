@@ -332,8 +332,8 @@
       "isolation": "Tenant-bound event and template composite FKs; all repository accesses filter JobContext.organizationId; insert accepts the caller's transaction.",
       "negativeTests": [
         {
-          "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "keeps mail outbox and template references tenant-bound"
+          "file": "packages/worker/src/mail.integration.test.ts",
+          "name": "schedules a future retry job, then records terminal delivery failure"
         }
       ]
     },
@@ -344,8 +344,8 @@
       "isolation": "Composite FK binds delivery attempts to the same-tenant outbox; attempt uniqueness makes delivery audit idempotent.",
       "negativeTests": [
         {
-          "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "keeps mail outbox and template references tenant-bound"
+          "file": "packages/worker/src/mail.integration.test.ts",
+          "name": "schedules a future retry job, then records terminal delivery failure"
         }
       ]
     },
@@ -357,7 +357,7 @@
       "negativeTests": [
         {
           "file": "packages/worker/src/mail.test.ts",
-          "name": "rejects absent and foreign organization jobs"
+          "name": "ends missing and foreign tenant jobs without sending or mutating state"
         }
       ]
     },
