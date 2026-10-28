@@ -26,6 +26,7 @@ import {
   healthResponseSchema,
   OrganizationResponse,
   UpdateOrganizationRequest,
+  RuntimeBootstrapResponse,
   CreateEventRequest,
   EventResponse,
   CreateEventClassRequest,
@@ -145,10 +146,67 @@ export interface ApiDeps {
   memberships?: MembershipRepository;
   bootstrap?: MembershipBootstrap;
   oidcClient?: { issuerUrl: string; clientId: string; redirectUri: string };
+  runtimeBootstrap?: {
+    configurationVersion: string;
+    branding?: {
+      logoUrl?: string | null;
+      primaryColor?: string;
+      accentColor?: string;
+      eventImageUrl?: string | null;
+    };
+    legalLinks?: { label: string; href: string }[];
+    capabilities?: string[];
+  };
 }
 export function createApp(deps: ApiDeps) {
   const app = new Hono();
   app.get('/health', (c) => c.json({ status: 'ok' }));
+  app.get('/runtime/bootstrap', async (c) => {
+    // Community is a singleton installation; request host/org selectors are not authority.
+    try {
+      const context = createRequestContext({
+        deploymentMode: 'community',
+        organizationId: organizationId(deps.config.organizationId),
+        permissions: new Set(),
+        capabilities: new Set(),
+        correlationId: crypto.randomUUID(),
+      });
+      const organization = await deps.organizations.getById(context);
+      if (!organization || organization.status !== 'active')
+        return c.json({ error: 'Runtime unavailable' }, 404);
+      const result = RuntimeBootstrapResponse.parse({
+        schemaVersion: 1,
+        configurationVersion:
+          deps.runtimeBootstrap?.configurationVersion ?? '1',
+        deploymentMode: 'community',
+        organization: {
+          id: organization.id,
+          slug: organization.slug,
+          name: organization.name,
+        },
+        branding: {
+          logoUrl: deps.runtimeBootstrap?.branding?.logoUrl ?? null,
+          primaryColor:
+            deps.runtimeBootstrap?.branding?.primaryColor ?? '#174ea6',
+          accentColor:
+            deps.runtimeBootstrap?.branding?.accentColor ?? '#8a5a00',
+          contactEmail: organization.contactEmail,
+          eventImageUrl: deps.runtimeBootstrap?.branding?.eventImageUrl ?? null,
+        },
+        locale: organization.locale,
+        // The current event lifecycle contract has no authoritative "active" event selection.
+        activeEvent: null,
+        capabilities: deps.runtimeBootstrap?.capabilities ?? [],
+        legalLinks: deps.runtimeBootstrap?.legalLinks ?? [],
+      });
+      c.header('Cache-Control', 'private, max-age=0, must-revalidate');
+      c.header('Vary', 'Host');
+      c.header('ETag', `W/"${result.configurationVersion}"`);
+      return c.json(result);
+    } catch {
+      return c.json({ error: 'Runtime unavailable' }, 404);
+    }
+  });
   app.get('/auth/config', (c) => c.json({ oidc: deps.oidcClient ?? null }));
   const resolveContext = async (request: Request) => {
     const identity =

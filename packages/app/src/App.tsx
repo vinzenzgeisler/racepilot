@@ -1,13 +1,103 @@
-import { healthResponseSchema } from '@racepilot/contracts';
+import { useEffect, useState } from 'react';
+import {
+  RuntimeBootstrapResponse,
+  type RuntimeBootstrapResponse as RuntimeConfig,
+} from '@racepilot/contracts';
+import './styles.css';
 
-const status = healthResponseSchema.parse({ status: 'ok', version: '0.0.0' });
+type State =
+  | { kind: 'loading' }
+  | { kind: 'unavailable' }
+  | { kind: 'ready'; config: RuntimeConfig };
 
 export function App() {
+  const [state, setState] = useState<State>({ kind: 'loading' });
+  useEffect(() => {
+    let current = true;
+    fetch('/runtime/bootstrap', {
+      credentials: 'same-origin',
+      cache: 'no-cache',
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error('Runtime unavailable');
+        return response.json();
+      })
+      .then((payload: unknown) => RuntimeBootstrapResponse.parse(payload))
+      .then((config) => {
+        if (current) setState({ kind: 'ready', config });
+      })
+      .catch(() => {
+        if (current) setState({ kind: 'unavailable' });
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  if (state.kind === 'loading')
+    return (
+      <main className="shell" aria-busy="true">
+        <p role="status">Loading RacePilot…</p>
+      </main>
+    );
+  if (state.kind === 'unavailable')
+    return (
+      <main className="shell">
+        <h1>RacePilot</h1>
+        <p role="alert">This service is currently unavailable.</p>
+      </main>
+    );
+
+  const { config } = state;
   return (
-    <main>
-      <h1>RacePilot</h1>
-      <p>Product workspace is ready.</p>
-      <small>Service status: {status.status}</small>
+    <main
+      className="shell"
+      style={
+        {
+          '--brand-primary': config.branding.primaryColor,
+          '--brand-accent': config.branding.accentColor,
+        } as React.CSSProperties
+      }
+    >
+      <header className="masthead">
+        {config.branding.logoUrl ? (
+          <img className="logo" src={config.branding.logoUrl} alt="" />
+        ) : null}
+        <div>
+          <p className="eyebrow">RacePilot · {config.deploymentMode}</p>
+          <h1>{config.organization.name}</h1>
+        </div>
+      </header>
+      {config.activeEvent ? (
+        <section aria-labelledby="event-title">
+          <h2 id="event-title">{config.activeEvent.name}</h2>
+          {config.branding.eventImageUrl ? (
+            <img
+              className="event-image"
+              src={config.branding.eventImageUrl}
+              alt=""
+            />
+          ) : null}
+        </section>
+      ) : (
+        <p>No active event.</p>
+      )}
+      {config.branding.contactEmail ? (
+        <p>
+          <a href={`mailto:${config.branding.contactEmail}`}>Contact</a>
+        </p>
+      ) : null}
+      {config.legalLinks.length ? (
+        <nav aria-label="Legal information">
+          <ul>
+            {config.legalLinks.map((link) => (
+              <li key={link.href}>
+                <a href={link.href}>{link.label}</a>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      ) : null}
     </main>
   );
 }
