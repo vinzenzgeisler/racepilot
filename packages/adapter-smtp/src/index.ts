@@ -31,6 +31,9 @@ export function createSmtpMailProvider(config: SmtpConfig): MailProvider {
     host: config.host,
     port: config.port,
     secure: config.secure,
+    connectionTimeout: 30_000,
+    greetingTimeout: 30_000,
+    socketTimeout: 30_000,
     ...(auth ? { auth } : {}),
   });
   return {
@@ -44,7 +47,8 @@ async function send(
 ): Promise<void> {
   try {
     await transport.sendMail({
-      from,
+      from: message.from ?? from,
+      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
       to: message.to,
       subject: message.subject,
       text: message.text,

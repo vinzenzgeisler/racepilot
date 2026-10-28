@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { mailConfigSchema, validateMailConfig } from '@racepilot/contracts';
 import {
   parseDeploymentMode,
   createRequestContext,
@@ -69,13 +70,7 @@ const configSchema = z.object({
     }
   }),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  MAIL_PROVIDER: z.enum(['disabled', 'smtp']).default('disabled'),
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
-  SMTP_SECURE: z.enum(['true', 'false']).default('false'),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),
-  SMTP_FROM: z.string().optional(),
+  ...mailConfigSchema.shape,
   STORAGE_PROVIDER: z.enum(['disabled', 'local']).default('disabled'),
   STORAGE_LOCAL_ROOT: z.string().optional(),
   OIDC_PROVIDER: z.enum(['disabled', 'oidc']).default('disabled'),
@@ -96,17 +91,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     ];
     throw new Error(`Invalid configuration variables: ${names.join(', ')}`);
   }
-  if (
-    parsed.data.MAIL_PROVIDER === 'smtp' &&
-    (!parsed.data.SMTP_HOST ||
-      !parsed.data.SMTP_PORT ||
-      !parsed.data.SMTP_FROM ||
-      Boolean(parsed.data.SMTP_USER) !== Boolean(parsed.data.SMTP_PASSWORD))
-  ) {
-    throw new Error(
-      'Invalid configuration variables: SMTP_HOST, SMTP_PORT, SMTP_FROM, SMTP_USER, SMTP_PASSWORD',
-    );
-  }
+  const mailConfig = validateMailConfig(env);
   if (parsed.data.OIDC_PROVIDER === 'oidc') {
     const d = parsed.data;
     if (
@@ -139,7 +124,10 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
   }
   return {
     ...parsed.data,
-    mailEnabled: parsed.data.MAIL_PROVIDER === 'smtp',
+    ...mailConfig,
+    mailEnabled:
+      parsed.data.MAIL_PROVIDER === 'smtp' &&
+      Boolean(parsed.data.CANONICAL_BASE_URL),
     storageEnabled: parsed.data.STORAGE_PROVIDER === 'local',
     deploymentMode: parseDeploymentMode(parsed.data.DEPLOYMENT_MODE),
   };

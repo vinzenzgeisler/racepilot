@@ -11,6 +11,7 @@ import {
   createInvoicePaymentRepository,
   createPaymentRecipientRepository,
   createEventClassPricingRepository,
+  getOrganizationMailConfiguration,
 } from '@racepilot/adapter-postgres';
 import { createApp } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
@@ -23,6 +24,9 @@ const org = await ensureCommunityOrganization(db, {
   timezone: config.COMMUNITY_ORGANIZATION_TIMEZONE,
   locale: config.COMMUNITY_ORGANIZATION_LOCALE,
 });
+const organizationMail = config.mailEnabled
+  ? await getOrganizationMailConfiguration(db, org.id)
+  : null;
 const identityProvider =
   config.OIDC_PROVIDER === 'oidc'
     ? await createOIDCIdentityProvider({
@@ -40,6 +44,10 @@ serve({
     payments: createInvoicePaymentRepository(db),
     paymentRecipients: createPaymentRecipientRepository(db),
     pricing: createEventClassPricingRepository(db),
+    runtimeBootstrap: {
+      configurationVersion: '1',
+      capabilities: organizationMail ? ['mail.delivery'] : [],
+    },
     ...(identityProvider
       ? {
           oidcClient: {

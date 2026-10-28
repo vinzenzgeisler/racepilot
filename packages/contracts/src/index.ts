@@ -170,3 +170,5 @@ export const JobEnvelope = z
   })
   .strict();
 export type JobEnvelope = z.infer<typeof JobEnvelope>;
+
+export { mailConfigSchema, validateMailConfig } from './config.js';

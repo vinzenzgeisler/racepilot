@@ -25,6 +25,36 @@ describe('api entry', () => {
     expect(config.mailEnabled).toBe(false);
     expect(config.storageEnabled).toBe(false);
   });
+  it('fails closed when mail lacks a canonical base URL', () => {
+    const config = loadConfig({
+      DEPLOYMENT_MODE: 'community',
+      DATABASE_URL: 'postgres://localhost/racepilot',
+      COMMUNITY_ORGANIZATION_SLUG: 'club',
+      COMMUNITY_ORGANIZATION_NAME: 'Club',
+      COMMUNITY_ORGANIZATION_TIMEZONE: 'UTC',
+      COMMUNITY_ORGANIZATION_LOCALE: 'en',
+      MAIL_PROVIDER: 'smtp',
+      SMTP_HOST: 'localhost',
+      SMTP_PORT: '1025',
+      SMTP_FROM: 'noreply@example.test',
+    });
+    expect(config.mailEnabled).toBe(false);
+    expect(
+      loadConfig({
+        DEPLOYMENT_MODE: 'community',
+        DATABASE_URL: 'postgres://localhost/racepilot',
+        COMMUNITY_ORGANIZATION_SLUG: 'club',
+        COMMUNITY_ORGANIZATION_NAME: 'Club',
+        COMMUNITY_ORGANIZATION_TIMEZONE: 'UTC',
+        COMMUNITY_ORGANIZATION_LOCALE: 'en',
+        MAIL_PROVIDER: 'smtp',
+        SMTP_HOST: 'localhost',
+        SMTP_PORT: '1025',
+        SMTP_FROM: 'noreply@example.test',
+        CANONICAL_BASE_URL: 'https://race.example.test',
+      }).mailEnabled,
+    ).toBe(true);
+  });
   it('fails closed on incomplete enabled providers without echoing secrets', () => {
     expect(() =>
       loadConfig({

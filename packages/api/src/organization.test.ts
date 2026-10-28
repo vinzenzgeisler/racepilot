@@ -64,6 +64,10 @@ describe('admin organization routes', () => {
   });
   it('derives bank transfer capability only from a valid configured recipient', async () => {
     const api = deps();
+    api.runtimeBootstrap = {
+      configurationVersion: '1',
+      capabilities: ['mail.delivery'],
+    };
     api.paymentRecipients = {
       get: async () => null,
       set: async (_ctx, value) => value,
@@ -81,8 +85,8 @@ describe('admin organization routes', () => {
       set: async (_ctx, value) => value,
     };
     response = await createApp(api).request('/runtime/bootstrap');
-    expect((await response.json()).capabilities).toContain(
-      'payment.bank_transfer',
+    expect((await response.json()).capabilities).toEqual(
+      expect.arrayContaining(['payment.bank_transfer', 'mail.delivery']),
     );
   });
   it('returns the neutral unavailable response for unknown or disabled installations', async () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createSmtpMailProvider } from './index.js';
+import { createRecordingMailProvider } from './test.js';
 import { organizationId, ProviderError } from '@racepilot/core';
 
 describe('SMTP mail port contract', () => {
@@ -7,6 +8,18 @@ describe('SMTP mail port contract', () => {
     expect(() =>
       createSmtpMailProvider({ host: '', port: 25, secure: false, from: '' }),
     ).toThrowError(ProviderError);
+  });
+  it('provides a deterministic recording adapter for CI', async () => {
+    const recording = createRecordingMailProvider();
+    await recording.provider.send({
+      organizationId: organizationId('org_1'),
+      to: 'a@example.test',
+      subject: 'test',
+      text: 'body',
+      idempotencyKey: 'key',
+    });
+    expect(recording.messages).toHaveLength(1);
+    expect(recording.attempts).toBe(1);
   });
   it('exports an adapter accepting only tenant-bound messages', async () => {
     const provider = createSmtpMailProvider({
