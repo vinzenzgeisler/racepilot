@@ -81,6 +81,13 @@
       "when": 1793239200000,
       "tag": "0010_artifact_jobs",
       "breakpoints": false
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1793239201000,
+      "tag": "0010_artifact_claim_fencing",
+      "breakpoints": false
     }
   ]
 }

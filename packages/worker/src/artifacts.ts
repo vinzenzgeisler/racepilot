@@ -48,7 +48,13 @@ export function createArtifactTask(deps: {
       capabilities: new Set<string>(),
     };
     const job = await deps.jobs.claim(ctx, jobId);
-    if (!job || job.organizationId !== ctx.organizationId) return;
+    if (!job) {
+      const current = await deps.jobs.getById(requestCtx, jobId);
+      if (!current || current.status === 'ready' || current.status === 'failed')
+        return;
+      throw new Error(`Artifact job is already ${current.status}; retry later`);
+    }
+    if (job.organizationId !== ctx.organizationId) return;
     try {
       let bytes: Uint8Array;
       let contentType: string;
@@ -124,7 +130,7 @@ export function createArtifactTask(deps: {
         body: bytes,
         contentType,
       });
-      await deps.jobs.complete(ctx, job.id, ref);
+      await deps.jobs.complete(ctx, job.id, job.claimToken, ref);
     } catch (error) {
       const attempts = helpers.job.attempts ?? job.attempts;
       const maxAttempts = helpers.job.max_attempts ?? 25;
@@ -132,11 +138,12 @@ export function createArtifactTask(deps: {
         await deps.jobs.fail(
           ctx,
           job.id,
+          job.claimToken,
           error instanceof Error ? error.message : 'Artifact generation failed',
         );
         return;
       }
-      await deps.jobs.release(ctx, job.id);
+      await deps.jobs.release(ctx, job.id, job.claimToken);
       throw error;
     }
   };

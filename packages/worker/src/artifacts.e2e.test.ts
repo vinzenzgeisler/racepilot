@@ -69,7 +69,7 @@ describe('artifact PDF end-to-end', () => {
       claim: async () => {
         if (job.status !== 'queued') return null;
         job = { ...job, status: 'processing', attempts: job.attempts + 1 };
-        return job;
+        return { ...job, claimToken: 'claim-token' };
       },
       release: async () => {
         job = { ...job, status: 'queued' };
@@ -77,6 +77,7 @@ describe('artifact PDF end-to-end', () => {
       complete: async (
         _ctx: unknown,
         _id: string,
+        _claimToken: string,
         ref: { objectId: string; sha256: string; contentType: string },
       ) => {
         job = {

@@ -525,27 +525,74 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(duplicateArtifact.id).toBe(firstArtifact.id);
       expect(firstArtifact.status).toBe('queued');
-      const claims = await Promise.all([
-        artifactJobs.claim(
-          { ...ctxA, jobId: `worker-a-${suffix}` },
-          firstArtifact.id,
-        ),
-        artifactJobs.claim(
-          { ...ctxA, jobId: `worker-b-${suffix}` },
-          firstArtifact.id,
-        ),
-      ]);
-      expect(claims.filter(Boolean)).toHaveLength(1);
-      await artifactJobs.release(
+      const claimContexts = [
         { ...ctxA, jobId: `worker-a-${suffix}` },
+        { ...ctxA, jobId: `worker-b-${suffix}` },
+      ];
+      const claims = await Promise.all(
+        claimContexts.map((claimCtx) =>
+          artifactJobs.claim(claimCtx, firstArtifact.id),
+        ),
+      );
+      expect(claims.filter(Boolean)).toHaveLength(1);
+      const winnerIndex = claims.findIndex(Boolean);
+      const firstClaim = claims[winnerIndex]!;
+      const winnerContext = claimContexts[winnerIndex]!;
+      const loserContext = claimContexts[1 - winnerIndex]!;
+      expect(firstClaim.status).toBe('processing');
+      expect(
+        await artifactJobs.claim(loserContext, firstArtifact.id),
+      ).toBeNull();
+      await artifactJobs.release(
+        loserContext,
+        firstArtifact.id,
+        'not-the-current-claim-token',
+      );
+      expect((await artifactJobs.getById(ctxA, firstArtifact.id))?.status).toBe(
+        'processing',
+      );
+      await artifactJobs.release(
+        winnerContext,
+        firstArtifact.id,
+        firstClaim.claimToken,
+      );
+      const retryContext = { ...ctxA, jobId: `worker-retry-${suffix}` };
+      const retryClaim = await artifactJobs.claim(
+        retryContext,
         firstArtifact.id,
       );
-      expect(
-        await artifactJobs.claim(
-          { ...ctxA, jobId: `worker-retry-${suffix}` },
-          firstArtifact.id,
-        ),
-      ).not.toBeNull();
+      expect(retryClaim).not.toBeNull();
+      expect(retryClaim?.claimToken).not.toBe(firstClaim.claimToken);
+      await artifactJobs.complete(
+        winnerContext,
+        firstArtifact.id,
+        firstClaim.claimToken,
+        {
+          organizationId: organizationId(orgA),
+          objectId: crypto.randomUUID(),
+          contentType: 'application/pdf',
+          size: 1,
+          sha256: 'a'.repeat(64),
+        },
+      );
+      expect((await artifactJobs.getById(ctxA, firstArtifact.id))?.status).toBe(
+        'processing',
+      );
+      await artifactJobs.complete(
+        retryContext,
+        firstArtifact.id,
+        retryClaim!.claimToken,
+        {
+          organizationId: organizationId(orgA),
+          objectId: crypto.randomUUID(),
+          contentType: 'application/pdf',
+          size: 1,
+          sha256: 'b'.repeat(64),
+        },
+      );
+      expect((await artifactJobs.getById(ctxA, firstArtifact.id))?.status).toBe(
+        'ready',
+      );
       expect(
         await artifactJobs.getById(
           { ...ctxA, organizationId: organizationId(orgB!) },

@@ -30,6 +30,41 @@ const envelope = {
 };
 
 describe('artifact worker', () => {
+  it('throws for a retry that finds an active claim instead of acknowledging it as complete', async () => {
+    const activeJob = { ...job, status: 'processing' as const, attempts: 1 };
+    let storageCalls = 0;
+    const task = createArtifactTask({
+      deploymentMode: 'cloud',
+      getOrganization: async () => ({ status: 'active' }),
+      jobs: {
+        enqueue: async () => activeJob,
+        getById: async () => activeJob,
+        claim: async () => null,
+        release: async () => {},
+        complete: async () => {},
+        fail: async () => {},
+      },
+      organizations: { getById: async () => null, update: async () => null },
+      confirmations: { getByGroup: async () => null },
+      exports: { listByEvent: async () => [] },
+      storage: {
+        put: async () => {
+          storageCalls++;
+          throw new Error('must not generate while another lease is active');
+        },
+        get: async () => null,
+        delete: async () => {},
+      },
+    });
+
+    await expect(
+      task(envelope, {
+        job: { id: 'graphile-retry', attempts: 2, max_attempts: 25 },
+      }),
+    ).rejects.toThrow('already processing; retry later');
+    expect(storageCalls).toBe(0);
+  });
+
   it('stores an organization-bound CSV and remains retryable after storage failures', async () => {
     let attempts = 0;
     let stored: Uint8Array | undefined;
@@ -43,12 +78,13 @@ describe('artifact worker', () => {
         claim: async (ctx, jobId) => {
           expect(ctx.organizationId).toBe(org);
           expect(jobId).toBe(id);
-          return job;
+          return { ...job, claimToken: 'claim-token' };
         },
         release: async () => {},
-        complete: async (ctx, jobId, ref) => {
+        complete: async (ctx, jobId, claimToken, ref) => {
           expect(ctx.organizationId).toBe(org);
           expect(jobId).toBe(id);
+          expect(claimToken).toBe('claim-token');
           expect(ref.organizationId).toBe(org);
           finished = true;
         },

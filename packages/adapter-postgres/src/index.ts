@@ -19,6 +19,7 @@ import {
   jsonb,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import type {
   RequestContext,
   OrganizationRepository,
@@ -885,6 +886,7 @@ export const artifactJobs = pgTable(
     attempts: integer('attempts').notNull().default(0),
     error: text('error'),
     claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    claimToken: uuid('claim_token'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1000,6 +1002,7 @@ export function createArtifactJobRepository(
       return row ? toArtifactJob(row) : null;
     },
     claim: async (ctx, id) => {
+      const claimToken = randomUUID();
       const [row] = await db
         .update(artifactJobs)
         .set({
@@ -1007,6 +1010,7 @@ export function createArtifactJobRepository(
           attempts: sql`${artifactJobs.attempts} + 1`,
           error: null,
           claimedAt: new Date(),
+          claimToken,
           updatedAt: new Date(),
         })
         .where(
@@ -1017,21 +1021,27 @@ export function createArtifactJobRepository(
           ),
         )
         .returning();
-      return row ? toArtifactJob(row) : null;
+      return row ? { ...toArtifactJob(row), claimToken } : null;
     },
-    release: async (ctx, id) => {
+    release: async (ctx, id, claimToken) => {
       await db
         .update(artifactJobs)
-        .set({ status: 'queued', claimedAt: null, updatedAt: new Date() })
+        .set({
+          status: 'queued',
+          claimedAt: null,
+          claimToken: null,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(artifactJobs.organizationId, ctx.organizationId),
             eq(artifactJobs.id, id),
             eq(artifactJobs.status, 'processing'),
+            eq(artifactJobs.claimToken, claimToken),
           ),
         );
     },
-    complete: async (ctx, id, ref) => {
+    complete: async (ctx, id, claimToken, ref) => {
       if (ref.organizationId !== ctx.organizationId)
         throw new Error('Artifact owner mismatch');
       await db
@@ -1039,6 +1049,7 @@ export function createArtifactJobRepository(
         .set({
           status: 'ready',
           claimedAt: null,
+          claimToken: null,
           objectId: ref.objectId,
           sha256: ref.sha256,
           contentType: ref.contentType,
@@ -1049,15 +1060,18 @@ export function createArtifactJobRepository(
           and(
             eq(artifactJobs.organizationId, ctx.organizationId),
             eq(artifactJobs.id, id),
+            eq(artifactJobs.status, 'processing'),
+            eq(artifactJobs.claimToken, claimToken),
           ),
         );
     },
-    fail: async (ctx, id, error) => {
+    fail: async (ctx, id, claimToken, error) => {
       await db
         .update(artifactJobs)
         .set({
           status: 'failed',
           claimedAt: null,
+          claimToken: null,
           error: error.slice(0, 500),
           updatedAt: new Date(),
         })
@@ -1065,6 +1079,8 @@ export function createArtifactJobRepository(
           and(
             eq(artifactJobs.organizationId, ctx.organizationId),
             eq(artifactJobs.id, id),
+            eq(artifactJobs.status, 'processing'),
+            eq(artifactJobs.claimToken, claimToken),
           ),
         );
     },

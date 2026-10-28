@@ -695,10 +695,23 @@ export interface ArtifactJobRepository {
     },
   ): Promise<ArtifactJob>;
   getById(ctx: RequestContext, id: string): Promise<ArtifactJob | null>;
-  claim(ctx: JobContext, id: string): Promise<ArtifactJob | null>;
-  release(ctx: JobContext, id: string): Promise<void>;
-  complete(ctx: JobContext, id: string, ref: StoredObjectRef): Promise<void>;
-  fail(ctx: JobContext, id: string, error: string): Promise<void>;
+  claim(
+    ctx: JobContext,
+    id: string,
+  ): Promise<(ArtifactJob & { claimToken: string }) | null>;
+  release(ctx: JobContext, id: string, claimToken: string): Promise<void>;
+  complete(
+    ctx: JobContext,
+    id: string,
+    claimToken: string,
+    ref: StoredObjectRef,
+  ): Promise<void>;
+  fail(
+    ctx: JobContext,
+    id: string,
+    claimToken: string,
+    error: string,
+  ): Promise<void>;
 }
 export interface EntryRepository {
   create?(
