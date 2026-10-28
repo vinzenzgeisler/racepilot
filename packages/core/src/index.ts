@@ -850,14 +850,9 @@ export function createTransferInstruction(input: {
     recipient.bic ?? '',
     recipient.accountName,
     recipient.iban,
-    ` სახ${input.currency}${(input.amountCents / 100).toFixed(2)}`.replace(
-      ' სახ',
-      'EUR',
-    ),
-    '',
     `${input.currency}${(input.amountCents / 100).toFixed(2)}`,
     '',
-    `RF${input.reference.slice(2)}`,
+    input.reference,
     (input.remittanceText ?? '').slice(0, 140),
   ];
   // EPC069-12 payload fields are newline separated. Keep amount currency independent of locale.

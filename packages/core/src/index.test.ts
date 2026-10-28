@@ -92,14 +92,25 @@ describe('pricing and transfer core', () => {
         reference: ref,
       }),
     ).toBeNull();
-    expect(
-      createTransferInstruction({
-        recipient: { accountName: 'Club', iban: 'DE89370400440532013000' },
-        amountCents: 1234,
-        currency: 'EUR',
-        reference: ref,
-      }),
-    ).toContain('EUR12.34');
+    const payload = createTransferInstruction({
+      recipient: { accountName: 'Club', iban: 'DE89370400440532013000' },
+      amountCents: 1234,
+      currency: 'EUR',
+      reference: ref,
+    })!;
+    expect(payload.split('\n')).toEqual([
+      'BCD',
+      '001',
+      '1',
+      'SCT',
+      '',
+      'Club',
+      'DE89370400440532013000',
+      'EUR12.34',
+      '',
+      ref,
+      '',
+    ]);
   });
   it('derives invoice status from ledger totals', async () => {
     const { deriveInvoiceStatus } = await import('./index.js');
