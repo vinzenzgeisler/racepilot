@@ -3,8 +3,7 @@ import { z } from 'zod';
 const extensionId = z.string().regex(/^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$/);
 const compatibilityRange = z
   .string()
-  .min(1)
-  .refine((range) => !['*', 'latest'].includes(range.trim()));
+  .regex(/^(?:\^)?(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)$/);
 const surfaceNames = z.array(z.string().min(1)).max(50).default([]);
 
 /**

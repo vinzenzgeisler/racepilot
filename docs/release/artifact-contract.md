@@ -29,12 +29,18 @@ resource access.
 ## Composition boundaries
 
 The artifact set contains the shared core, contracts, API, product UI, worker, and
-provider adapters. Cloud assembly consumes the public API, worker, and UI as separate
-versioned products and supplies trusted deployment adapters at their existing
-composition boundaries. Private extensions remain in the private Cloud repository;
-no private implementation, asset, credential, or configuration belongs in these
-packages. Tenant enablement and authorization must be evaluated server-side for both
-synchronous API operations and queued work.
+provider adapters. The target Cloud assembly is expected to consume the public API,
+worker, and UI as separate versioned products and supply trusted deployment adapters
+at their existing composition boundaries. The private runtime that will perform that
+assembly does not exist yet. Private extensions remain in the private Cloud
+repository; no private implementation, asset, credential, or configuration belongs
+in these packages. Tenant enablement and authorization must be evaluated server-side
+for both synchronous API operations and queued work.
+
+An extension manifest uses an exact `x.y.z` or caret `^x.y.z` compatibility range for
+both core and contracts. The Cloud consumer must evaluate these ranges against the
+installed package versions and fail its promotion gate on incompatibility. A manifest
+is metadata, not an authorization grant or proof that runtime extension hooks exist.
 
 Private Cloud incubation modules are a managed-service detail for Cloud subscribers
 under the service agreement. There is no self-hosted deployment, support, or

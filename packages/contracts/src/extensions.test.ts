@@ -29,6 +29,14 @@ describe('private extension manifest contract', () => {
     expect(
       ExtensionManifest.safeParse({
         id: 'cloud.example',
+        compatibility: { core: '*', contracts: 'latest' },
+        capabilities: [],
+        provides: { api: [], ui: [], jobs: [], migrations: [] },
+      }).success,
+    ).toBe(false);
+    expect(
+      ExtensionManifest.safeParse({
+        id: 'cloud.example',
         compatibility: { core: '*', contracts: '*' },
         capabilities: [],
         provides: { api: [], ui: [], jobs: [], migrations: [] },
