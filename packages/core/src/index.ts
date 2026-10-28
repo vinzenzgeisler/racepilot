@@ -595,6 +595,10 @@ export interface EntryRepository {
     executor?: unknown,
   ): Promise<Entry>;
   getById(ctx: RequestContext, id: string): Promise<Entry | null>;
+  listAdmin?(
+    ctx: RequestContext,
+    query: EntryListQuery,
+  ): Promise<{ items: Entry[]; total: number }>;
   transition(
     ctx: RequestContext,
     id: string,
@@ -609,6 +613,21 @@ export interface EntryRepository {
     id: string,
     reason: string,
   ): Promise<Entry | null>;
+}
+export interface EntryListQuery {
+  readonly page: number;
+  readonly pageSize: number;
+  readonly eventId?: string;
+  readonly classId?: string;
+  readonly acceptanceStatus?: EntryAcceptanceStatus;
+  readonly verificationStatus?: EntryVerificationStatus;
+  readonly search?: string;
+  readonly sort:
+    | 'createdAt'
+    | 'requestedStartNumber'
+    | 'acceptanceStatus'
+    | 'verificationStatus';
+  readonly direction: 'asc' | 'desc';
 }
 export function normalizeEmail(value: string): string {
   const normalized = value.trim().normalize('NFKC').toLocaleLowerCase('en-US');

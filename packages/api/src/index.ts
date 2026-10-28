@@ -27,6 +27,7 @@ import {
   type PaymentRecipientRepository,
   type InvoicePaymentRepository,
   type EntryRepository,
+  type EntryListQuery,
   type OrganizationRepository,
   type EventRepository,
   type OrganizationPatch,
@@ -456,6 +457,58 @@ export function createApp(deps: ApiDeps) {
     } catch {
       return c.json({ error: 'Forbidden or invalid transition' }, 403);
     }
+  });
+  app.get('/admin/entries', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entries?.listAdmin) return c.json({ error: 'Not found' }, 404);
+    const parsed = z
+      .object({
+        page: z.coerce.number().int().min(1).default(1),
+        pageSize: z.coerce.number().int().min(1).max(100).default(25),
+        eventId: z.string().uuid().optional(),
+        classId: z.string().uuid().optional(),
+        acceptanceStatus: z
+          .enum(['pending', 'accepted', 'rejected', 'waitlisted', 'withdrawn'])
+          .optional(),
+        verificationStatus: z.enum(['unverified', 'verified']).optional(),
+        search: z.string().trim().max(120).optional(),
+        sort: z
+          .enum([
+            'createdAt',
+            'requestedStartNumber',
+            'acceptanceStatus',
+            'verificationStatus',
+          ])
+          .default('createdAt'),
+        direction: z.enum(['asc', 'desc']).default('desc'),
+      })
+      .strict()
+      .safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
+    if (!parsed.success) return c.json({ error: 'Invalid query' }, 400);
+    const { eventId, classId, acceptanceStatus, verificationStatus, search } =
+      parsed.data;
+    const query: EntryListQuery = {
+      page: parsed.data.page,
+      pageSize: parsed.data.pageSize,
+      sort: parsed.data.sort,
+      direction: parsed.data.direction,
+      ...(eventId ? { eventId } : {}),
+      ...(classId ? { classId } : {}),
+      ...(acceptanceStatus ? { acceptanceStatus } : {}),
+      ...(verificationStatus ? { verificationStatus } : {}),
+      ...(search ? { search } : {}),
+    };
+    const result = await deps.entries.listAdmin(context, query);
+    return c.json({
+      items: result.items,
+      page: parsed.data.page,
+      pageSize: parsed.data.pageSize,
+      total: result.total,
+      totalPages: Math.ceil(result.total / parsed.data.pageSize),
+    });
   });
   app.get('/admin/entries/:entryId', async (c) => {
     const context = await resolveContext(c.req.raw);

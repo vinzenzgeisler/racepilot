@@ -580,6 +580,25 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       expect(
         await createEntryRepository(db).getById(ctxA, foreignEntryId!),
       ).toBeNull();
+      const adminEntries = createEntryRepository(db);
+      const pageA = await adminEntries.listAdmin!(ctxA, {
+        page: 1,
+        pageSize: 100,
+        eventId: eventA!.id,
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      expect(pageA.items.map((entry) => entry.id)).toEqual([entryA!.id]);
+      expect(pageA.total).toBe(1);
+      expect(
+        await adminEntries.listAdmin!(ctxA, {
+          page: 1,
+          pageSize: 100,
+          eventId: eventB!.id,
+          sort: 'createdAt',
+          direction: 'desc',
+        }),
+      ).toMatchObject({ items: [], total: 0 });
       expect(
         await db
           .select()

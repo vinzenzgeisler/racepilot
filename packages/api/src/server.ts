@@ -14,6 +14,7 @@ import {
   createInvoicePaymentRepository,
   createPaymentRecipientRepository,
   createEventClassPricingRepository,
+  createEntryRepository,
   getOrganizationMailConfiguration,
 } from '@racepilot/adapter-postgres';
 import { createApp, createInMemoryRegistrationRateLimiter } from './index.js';
@@ -63,6 +64,7 @@ serve({
     payments: createInvoicePaymentRepository(db),
     paymentRecipients: createPaymentRecipientRepository(db),
     pricing: createEventClassPricingRepository(db),
+    entries: createEntryRepository(db),
     runtimeBootstrap: {
       configurationVersion: '1',
       capabilities: organizationMail ? ['mail.delivery'] : [],
