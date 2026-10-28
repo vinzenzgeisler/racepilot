@@ -1,6 +1,6 @@
 {
   "name": "@racepilot/worker",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "type": "module",
   "exports": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,16 +10,17 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "@racepilot/adapter-postgres": "0.1.0",
-    "@racepilot/adapter-smtp": "0.1.0",
-    "@racepilot/contracts": "0.1.0",
-    "@racepilot/core": "0.1.0",
+    "@racepilot/adapter-postgres": "*",
+    "@racepilot/adapter-smtp": "*",
+    "@racepilot/contracts": "*",
+    "@racepilot/core": "*",
     "graphile-worker": "^0.16.6",
-    "@racepilot/artifacts": "0.1.0",
-    "@racepilot/adapter-local-storage": "0.1.0",
-    "@racepilot/adapter-s3": "0.1.0"
+    "@racepilot/artifacts": "*",
+    "@racepilot/adapter-local-storage": "*",
+    "@racepilot/adapter-s3": "*"
   },
   "files": [
     "dist"
-  ]
+  ],
+  "private": true
 }

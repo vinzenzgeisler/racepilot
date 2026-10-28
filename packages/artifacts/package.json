@@ -1,6 +1,6 @@
 {
   "name": "@racepilot/artifacts",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "type": "module",
   "exports": {
     "./pdf": "./dist/pdf.js"
@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@pdf-lib/fontkit": "^1.1.1",
-    "@racepilot/core": "0.1.0",
+    "@racepilot/core": "*",
     "pdf-lib": "^1.17.1",
     "qrcode": "^1.5.4"
   },
@@ -22,5 +22,6 @@
   "files": [
     "dist",
     "fonts"
-  ]
+  ],
+  "private": true
 }

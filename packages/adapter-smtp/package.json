@@ -1,6 +1,6 @@
 {
   "name": "@racepilot/adapter-smtp",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "type": "module",
   "exports": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@racepilot/core": "0.1.0",
+    "@racepilot/core": "*",
     "nodemailer": "7.0.10"
   },
   "devDependencies": {
@@ -17,5 +17,6 @@
   },
   "files": [
     "dist"
-  ]
+  ],
+  "private": true
 }

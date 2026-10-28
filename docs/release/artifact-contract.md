@@ -5,10 +5,16 @@ or production deployment.
 
 ## Version set
 
-All public product workspaces use the same exact package version (`0.1.0`) and every
-internal `@racepilot/*` dependency is pinned to that version. A release candidate is a
-single source commit plus the complete workspace tarball set; consumers must not mix
-individual packages from different commits or use a moving branch name.
+`product-release.json` is the canonical exact product version. The packer stages each
+workspace manifest with that version and pins every internal `@racepilot/*` dependency
+to it, so version changes do not require source edits across package manifests. Source
+workspaces remain `private: true` (and use workspace development versions); the staged
+tarballs also retain `private: true`. `npm pack` and local tarball installation work,
+while npm registry publication remains blocked pending an explicit owner decision. A
+release candidate is a single clean source commit plus the complete workspace tarball
+set; consumers must not mix individual packages from different commits or use a moving
+branch name. Packing fails if tracked source changes are present, so the recorded commit
+cannot misidentify modified source bytes.
 
 Run `npm ci` followed by `npm run release:pack`. Set `RACEPILOT_PACK_DIR` to choose the
 output directory. The command builds all workspaces, packs each product package, checks
