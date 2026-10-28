@@ -5,6 +5,7 @@ import {
   health,
   loadConfig,
 } from './index.js';
+import { createRequestContext, organizationId } from '@racepilot/core';
 
 describe('api entry', () => {
   it('returns a contract-validated health response', () =>
@@ -105,6 +106,61 @@ describe('api entry', () => {
         redirectUri: 'https://app.example/callback',
       },
     });
+  });
+  it('composes trusted routes with a server-resolved cloud request context', async () => {
+    const organization = organizationId('10000000-0000-4000-8000-000000000001');
+    let sideEffects = 0;
+    const memberContext = createRequestContext({
+      deploymentMode: 'cloud',
+      organizationId: organization,
+      subject: { issuer: 'https://id.example', subject: 'operator-a' },
+      permissions: new Set(['private-example:run']),
+      capabilities: new Set(['private-example']),
+      correlationId: 'cloud-test',
+    });
+    const app = createApp({
+      config: { deploymentMode: 'cloud' },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      contextResolvers: {
+        public: async () =>
+          createRequestContext({
+            deploymentMode: 'cloud',
+            organizationId: organization,
+            permissions: new Set(),
+            capabilities: new Set(['private-example']),
+            correlationId: 'cloud-public-test',
+          }),
+        member: async (request) =>
+          request.headers.get('authorization') === 'Bearer operator-a'
+            ? memberContext
+            : null,
+      },
+      mountAdditionalRoutes: (routes, contexts) => {
+        routes.post('/composition/action', async (context) => {
+          const resolved = await contexts.member(context.req.raw);
+          if (!resolved) return context.json({ error: 'Unauthorized' }, 401);
+          if (
+            !resolved.permissions.has('private-example:run') ||
+            !resolved.capabilities.has('private-example')
+          )
+            return context.json({ error: 'Forbidden' }, 403);
+          sideEffects += 1;
+          return context.json({ organizationId: resolved.organizationId });
+        });
+      },
+    });
+
+    const denied = await app.request('/composition/action', { method: 'POST' });
+    expect(denied.status).toBe(401);
+    expect(sideEffects).toBe(0);
+    const allowed = await app.request('/composition/action', {
+      method: 'POST',
+      headers: { authorization: 'Bearer operator-a' },
+    });
+    expect(allowed.status).toBe(200);
+    expect(await allowed.json()).toEqual({ organizationId: organization });
+    expect(sideEffects).toBe(1);
   });
   it('does not resolve a public event using a caller-supplied foreign organization', async () => {
     const configuredOrg = '11111111-1111-4111-8111-111111111111';

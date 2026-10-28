@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
+import type { RequestContext, DeploymentMode } from '@racepilot/core';
 import { z } from 'zod';
 import { mailConfigSchema, validateMailConfig } from '@racepilot/contracts';
 import {
@@ -161,7 +162,7 @@ export interface Authenticator {
   authenticate(request: Request): Promise<ExternalIdentity | null>;
 }
 export interface ApiDeps {
-  config: { deploymentMode: 'community'; organizationId: string };
+  config: { deploymentMode: DeploymentMode; organizationId?: string };
   organizations: OrganizationRepository;
   events: EventRepository;
   classes?: EventClassRepository;
@@ -247,6 +248,19 @@ export interface ApiDeps {
     legalLinks?: { label: string; href: string }[];
     capabilities?: string[];
   };
+  /** Server-owned context resolvers for multi-tenant assemblies. */
+  contextResolvers?: {
+    public(request: Request): Promise<RequestContext | null>;
+    member(request: Request): Promise<RequestContext | null>;
+  };
+  /** One explicit route mount point for trusted, operator-owned code. */
+  mountAdditionalRoutes?: (
+    app: Hono,
+    contexts: {
+      public(request: Request): Promise<RequestContext | null>;
+      member(request: Request): Promise<RequestContext | null>;
+    },
+  ) => void;
 }
 export function createInMemoryRegistrationRateLimiter(
   options: { limit?: number; windowMs?: number; now?: () => number } = {},
@@ -280,18 +294,98 @@ export function createInMemoryRegistrationRateLimiter(
   };
 }
 export function createApp(deps: ApiDeps) {
+  if (
+    deps.config.deploymentMode === 'community' &&
+    !deps.config.organizationId
+  ) {
+    throw new Error('Community mode requires a configured organization');
+  }
   const app = new Hono();
   app.get('/health', (c) => c.json({ status: 'ok' }));
+  const mode = deps.config.deploymentMode;
+  const communityOrganizationId =
+    mode === 'community' ? deps.config.organizationId : undefined;
+  const acceptContext = (context: RequestContext | null) => {
+    if (!context || context.deploymentMode !== mode) return null;
+    if (
+      communityOrganizationId &&
+      context.organizationId !== communityOrganizationId
+    )
+      return null;
+    return context;
+  };
+  const resolvePublicContext = async (request: Request) => {
+    if (deps.contextResolvers) {
+      try {
+        return acceptContext(await deps.contextResolvers.public(request));
+      } catch {
+        return null;
+      }
+    }
+    if (!communityOrganizationId) return null;
+    return createRequestContext({
+      deploymentMode: mode,
+      organizationId: organizationId(communityOrganizationId),
+      permissions: new Set(),
+      capabilities: new Set(),
+      correlationId: crypto.randomUUID(),
+    });
+  };
+  const resolveMemberContext = async (request: Request) => {
+    if (deps.contextResolvers) {
+      try {
+        return acceptContext(await deps.contextResolvers.member(request));
+      } catch {
+        return null;
+      }
+    }
+    if (!communityOrganizationId) return null;
+    const identity =
+      (await deps.authenticator?.authenticate(request).catch(() => null)) ??
+      null;
+    if (!identity) return null;
+    const permissions =
+      (await deps.memberships
+        ?.resolvePermissions(
+          identity,
+          organizationId(communityOrganizationId),
+          deps.bootstrap,
+        )
+        .catch(() => new Set<string>())) ?? new Set<string>();
+    const capabilities = new Set(deps.runtimeBootstrap?.capabilities ?? []);
+    capabilities.delete('payment.bank_transfer');
+    if (deps.paymentRecipients) {
+      try {
+        const recipient = await deps.paymentRecipients.get(
+          createRequestContext({
+            deploymentMode: mode,
+            organizationId: organizationId(communityOrganizationId),
+            permissions,
+            capabilities: new Set(),
+            correlationId: crypto.randomUUID(),
+          }),
+        );
+        if (recipient) {
+          validatePaymentRecipient(recipient);
+          capabilities.add('payment.bank_transfer');
+        }
+      } catch {
+        /* capability fails closed */
+      }
+    }
+    return createRequestContext({
+      deploymentMode: mode,
+      organizationId: organizationId(communityOrganizationId),
+      subject: { issuer: identity.issuer, subject: identity.subject },
+      permissions,
+      capabilities,
+      correlationId: crypto.randomUUID(),
+    });
+  };
   app.get('/runtime/bootstrap', async (c) => {
-    // Community is a singleton installation; request host/org selectors are not authority.
     try {
-      const context = createRequestContext({
-        deploymentMode: 'community',
-        organizationId: organizationId(deps.config.organizationId),
-        permissions: new Set(),
-        capabilities: new Set(),
-        correlationId: crypto.randomUUID(),
-      });
+      const context = await resolvePublicContext(c.req.raw);
+      if (!context) return c.json({ error: 'Runtime unavailable' }, 404);
       const organization = await deps.organizations.getById(context);
       if (!organization || organization.status !== 'active')
         return c.json({ error: 'Runtime unavailable' }, 404);
@@ -306,14 +400,17 @@ export function createApp(deps: ApiDeps) {
           return false;
         }
       })();
-      const capabilities = new Set(deps.runtimeBootstrap?.capabilities ?? []);
+      const capabilities = new Set([
+        ...(deps.runtimeBootstrap?.capabilities ?? []),
+        ...context.capabilities,
+      ]);
       if (bankTransferAvailable) capabilities.add('payment.bank_transfer');
       else capabilities.delete('payment.bank_transfer');
       const result = RuntimeBootstrapResponse.parse({
         schemaVersion: 1,
         configurationVersion:
           deps.runtimeBootstrap?.configurationVersion ?? '1',
-        deploymentMode: 'community',
+        deploymentMode: context.deploymentMode,
         organization: {
           id: organization.id,
           slug: organization.slug,
@@ -343,51 +440,8 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.get('/auth/config', (c) => c.json({ oidc: deps.oidcClient ?? null }));
-  const resolveContext = async (request: Request) => {
-    const identity =
-      (await deps.authenticator?.authenticate(request).catch(() => null)) ??
-      null;
-    if (!identity) return null;
-    const permissions =
-      (await deps.memberships
-        ?.resolvePermissions(
-          identity,
-          organizationId(deps.config.organizationId),
-          deps.bootstrap,
-        )
-        .catch(() => new Set<string>())) ?? new Set<string>();
-    const capabilities = new Set(deps.runtimeBootstrap?.capabilities ?? []);
-    capabilities.delete('payment.bank_transfer');
-    if (deps.paymentRecipients) {
-      try {
-        const recipient = await deps.paymentRecipients.get(
-          createRequestContext({
-            deploymentMode: 'community',
-            organizationId: organizationId(deps.config.organizationId),
-            permissions,
-            capabilities: new Set(),
-            correlationId: crypto.randomUUID(),
-          }),
-        );
-        if (recipient) {
-          validatePaymentRecipient(recipient);
-          capabilities.add('payment.bank_transfer');
-        }
-      } catch {
-        /* capability fails closed */
-      }
-    }
-    return createRequestContext({
-      deploymentMode: 'community',
-      organizationId: organizationId(deps.config.organizationId),
-      subject: { issuer: identity.issuer, subject: identity.subject },
-      permissions,
-      capabilities,
-      correlationId: crypto.randomUUID(),
-    });
-  };
   app.get('/admin/organization', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     try {
       const org = await getOrganization(context, {
@@ -401,7 +455,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.patch('/admin/organization', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     const body = await c.req.json().catch(() => null);
     const parsed = UpdateOrganizationRequest.safeParse(body);
@@ -420,7 +474,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.get('/admin/events/:eventId', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     const eventId = c.req.param('eventId');
     if (!z.string().uuid().safeParse(eventId).success)
@@ -435,7 +489,7 @@ export function createApp(deps: ApiDeps) {
   app.post(
     '/admin/events/:eventId/registration-groups/:groupId/confirmation',
     async (c) => {
-      const context = await resolveContext(c.req.raw);
+      const context = await resolveMemberContext(c.req.raw);
       if (!context) return c.json({ error: 'Unauthorized' }, 401);
       if (!context.permissions.has('entry:read'))
         return c.json({ error: 'Forbidden' }, 403);
@@ -470,7 +524,7 @@ export function createApp(deps: ApiDeps) {
     },
   );
   app.get('/admin/events/:eventId/entries.csv', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('entry:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -513,7 +567,7 @@ export function createApp(deps: ApiDeps) {
     return c.json({ jobId: job.id, status: job.status }, 202);
   });
   app.get('/admin/artifact-jobs/:jobId', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('entry:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -553,14 +607,14 @@ export function createApp(deps: ApiDeps) {
     return c.body(new Blob([Buffer.from(stored.body)]));
   });
   app.get('/admin/events', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('event:read'))
       return c.json({ error: 'Forbidden' }, 403);
     return c.json(await deps.events.listByOrganization(context));
   });
   app.post('/admin/events', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     const parsed = CreateEventRequest.safeParse(
       await c.req.json().catch(() => null),
@@ -582,7 +636,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.patch('/admin/events/:eventId', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     try {
       const result = await updateEvent(
@@ -599,7 +653,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.post('/admin/events/:eventId/transitions', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     const body = await c.req.json().catch(() => null);
     const status = z
@@ -622,7 +676,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.get('/admin/entries', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('entry:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -674,7 +728,7 @@ export function createApp(deps: ApiDeps) {
     });
   });
   app.get('/admin/entries/:entryId', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('entry:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -683,7 +737,7 @@ export function createApp(deps: ApiDeps) {
     return entry ? c.json(entry) : c.json({ error: 'Not found' }, 404);
   });
   app.post('/admin/entries/:entryId/transitions', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!deps.entries) return c.json({ error: 'Not found' }, 404);
     const body = await c.req.json().catch(() => null);
@@ -714,7 +768,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.get('/admin/events/:eventId/pricing', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('event:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -724,7 +778,7 @@ export function createApp(deps: ApiDeps) {
     );
   });
   app.put('/admin/events/:eventId/pricing/:classId', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('event:write'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -753,7 +807,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.get('/admin/organization/payment-recipient', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('organization:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -762,7 +816,7 @@ export function createApp(deps: ApiDeps) {
     return c.json({ recipient });
   });
   app.put('/admin/organization/payment-recipient', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('organization:update'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -793,7 +847,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.post('/admin/invoices/:invoiceId/payments', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('payment:write'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -823,7 +877,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.post('/admin/payments/:paymentId/corrections', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('payment:write'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -850,18 +904,13 @@ export function createApp(deps: ApiDeps) {
   });
   app.get('/public/events/:organizationId/:slug', async (c) => {
     const orgId = c.req.param('organizationId');
+    const context = await resolvePublicContext(c.req.raw);
     if (
+      !context ||
       !z.string().uuid().safeParse(orgId).success ||
-      orgId !== deps.config.organizationId
+      orgId !== context.organizationId
     )
       return c.json({ error: 'Not found' }, 404);
-    const context = createRequestContext({
-      deploymentMode: 'community',
-      organizationId: organizationId(deps.config.organizationId),
-      permissions: new Set(),
-      capabilities: new Set(),
-      correlationId: crypto.randomUUID(),
-    });
     const event = await getPublicEvent(
       context,
       c.req.param('slug'),
@@ -871,7 +920,7 @@ export function createApp(deps: ApiDeps) {
     return event ? c.json(event) : c.json({ error: 'Not found' }, 404);
   });
   app.post('/admin/events/:eventId/classes', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!deps.classes) return c.json({ error: 'Not found' }, 404);
     const parsed = CreateEventClassRequest.safeParse(
@@ -891,7 +940,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.get('/admin/events/:eventId/classes', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('event:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -901,7 +950,7 @@ export function createApp(deps: ApiDeps) {
     );
   });
   app.patch('/admin/events/:eventId/classes/:classId', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!deps.classes) return c.json({ error: 'Not found' }, 404);
     const parsed = UpdateEventClassRequest.safeParse(
@@ -925,18 +974,13 @@ export function createApp(deps: ApiDeps) {
     '/public/organizations/:organizationId/events/:slug/registration/form',
     async (c) => {
       const orgId = c.req.param('organizationId');
+      const context = await resolvePublicContext(c.req.raw);
       if (
-        orgId !== deps.config.organizationId ||
+        !context ||
+        orgId !== context.organizationId ||
         !z.string().uuid().safeParse(orgId).success
       )
         return c.json({ error: 'Not found' }, 404);
-      const context = createRequestContext({
-        deploymentMode: 'community',
-        organizationId: organizationId(deps.config.organizationId),
-        permissions: new Set(),
-        capabilities: new Set(),
-        correlationId: crypto.randomUUID(),
-      });
       if (deps.publicRegistration) {
         const result = await deps.publicRegistration.getForm(
           context,
@@ -961,8 +1005,10 @@ export function createApp(deps: ApiDeps) {
     '/public/organizations/:organizationId/events/:slug/registration/submissions',
     async (c) => {
       const orgId = c.req.param('organizationId');
+      const context = await resolvePublicContext(c.req.raw);
       if (
-        orgId !== deps.config.organizationId ||
+        !context ||
+        orgId !== context.organizationId ||
         !z.string().uuid().safeParse(orgId).success
       )
         return c.json({ error: 'Registration unavailable' }, 404);
@@ -985,17 +1031,14 @@ export function createApp(deps: ApiDeps) {
         return c.json({ error: 'Invalid registration' }, 400);
       if (!deps.publicRegistration)
         return c.json({ error: 'Registration unavailable' }, 503);
-      const context = createRequestContext({
-        deploymentMode: 'community',
-        organizationId: organizationId(deps.config.organizationId),
-        permissions: new Set(),
-        capabilities: new Set(),
+      const submissionContext = createRequestContext({
+        ...context,
         correlationId: payload.data.submissionId,
       });
       try {
         return c.json(
           await deps.publicRegistration.submit(
-            context,
+            submissionContext,
             c.req.param('slug'),
             payload.data,
           ),
@@ -1013,13 +1056,8 @@ export function createApp(deps: ApiDeps) {
     const token = z.string().min(1).max(512).safeParse(body?.token);
     if (!token.success || !deps.publicRegistration)
       return c.json({ verified: false }, 200);
-    const context = createRequestContext({
-      deploymentMode: 'community',
-      organizationId: organizationId(deps.config.organizationId),
-      permissions: new Set(),
-      capabilities: new Set(),
-      correlationId: crypto.randomUUID(),
-    });
+    const context = await resolvePublicContext(c.req.raw);
+    if (!context) return c.json({ verified: false }, 200);
     const verified = await deps.publicRegistration
       .verify(context, token.data)
       .catch(() => false);
@@ -1035,7 +1073,7 @@ export function createApp(deps: ApiDeps) {
     })
     .strict();
   app.get('/admin/events/:eventId/consents', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('event:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -1047,7 +1085,7 @@ export function createApp(deps: ApiDeps) {
     return terms ? c.json({ terms }) : c.json({ error: 'Not found' }, 404);
   });
   app.put('/admin/events/:eventId/consents', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('event:write'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -1084,7 +1122,7 @@ export function createApp(deps: ApiDeps) {
     return terms ? c.json({ terms }) : c.json({ error: 'Not found' }, 404);
   });
   app.get('/admin/organization/registration-settings', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('organization:read'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -1096,7 +1134,7 @@ export function createApp(deps: ApiDeps) {
     );
   });
   app.patch('/admin/organization/registration-settings', async (c) => {
-    const context = await resolveContext(c.req.raw);
+    const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
     if (!context.permissions.has('organization:update'))
       return c.json({ error: 'Forbidden' }, 403);
@@ -1111,6 +1149,10 @@ export function createApp(deps: ApiDeps) {
     return c.json(
       await deps.registrationSettings.update(context, parsed.data, actor),
     );
+  });
+  deps.mountAdditionalRoutes?.(app, {
+    public: resolvePublicContext,
+    member: resolveMemberContext,
   });
   return app;
 }

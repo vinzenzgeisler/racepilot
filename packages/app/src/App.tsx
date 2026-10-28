@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   RuntimeBootstrapResponse,
   type RuntimeBootstrapResponse as RuntimeConfig,
@@ -12,7 +12,11 @@ type State =
   | { kind: 'unavailable' }
   | { kind: 'ready'; config: RuntimeConfig };
 
-export function App() {
+export interface AppProps {
+  renderContribution?: (config: RuntimeConfig) => ReactNode;
+}
+
+export function App({ renderContribution }: AppProps = {}) {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const isAdmin = window.location.pathname.startsWith('/admin');
   useEffect(() => {
@@ -134,6 +138,7 @@ export function App() {
           </ul>
         </nav>
       ) : null}
+      {renderContribution?.(config) ?? null}
     </main>
   );
 }
