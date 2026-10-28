@@ -44,3 +44,5 @@ export async function createJobContext(
     correlationId: envelope.correlationId,
   });
 }
+export { processMailOutboxJob, renderMailTemplate, defaultMailTemplate } from './mail.js';
+export type { MailOutboxRepository, MailOutboxRecord, MailTemplate, MailTemplateKey, MailLocale } from './mail.js';

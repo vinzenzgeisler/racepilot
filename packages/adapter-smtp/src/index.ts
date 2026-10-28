@@ -44,7 +44,8 @@ async function send(
 ): Promise<void> {
   try {
     await transport.sendMail({
-      from,
+      from: message.from ?? from,
+      ...(message.replyTo ? { replyTo: message.replyTo } : {}),
       to: message.to,
       subject: message.subject,
       text: message.text,

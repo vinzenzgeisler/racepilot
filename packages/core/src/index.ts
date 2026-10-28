@@ -432,6 +432,8 @@ export interface MailMessage {
   readonly text: string;
   readonly html?: string;
   readonly idempotencyKey: string;
+  readonly from?: string;
+  readonly replyTo?: string;
 }
 export interface MailProvider {
   send(message: MailMessage): Promise<void>;
