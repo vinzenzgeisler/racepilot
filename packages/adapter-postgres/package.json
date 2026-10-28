@@ -1,7 +1,6 @@
 {
   "name": "@racepilot/adapter-postgres",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "type": "module",
   "exports": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,12 +9,16 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@racepilot/core": "*",
+    "@racepilot/core": "0.1.0",
     "drizzle-orm": "0.45.4",
     "pg": "8.23.1"
   },
   "devDependencies": {
     "@types/pg": "8.23.1",
     "drizzle-kit": "0.31.11"
-  }
+  },
+  "files": [
+    "dist",
+    "migrations"
+  ]
 }

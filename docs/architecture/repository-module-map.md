@@ -1,8 +1,9 @@
 # Repository and module map
 
-This map separates observed repositories from accepted target ownership. Paths under
-`/home/node/.openclaw/workspace` are read-only evidence paths from the 2026-08-15
-snapshot; they are not links or dependencies of this repository.
+This map separates the verified repository state on 2026-10-28 from accepted target
+ownership. Paths under `/home/node/.openclaw/workspace` and MSC references below are
+read-only evidence paths from the 2026-08-15 snapshot; they are historical evidence,
+not the current product or website layout.
 
 Status terms follow the definitions in the [repository README](../../README.md).
 
@@ -10,17 +11,12 @@ Status terms follow the definitions in the [repository README](../../README.md).
 
 | Concern | Current repository/module | Status and evidence |
 |---|---|---|
-| Backend API and domain behavior | `MSC-Event-Backend/api/src/{domain,routes,docs,mail,http,db}` | **Current fact:** TypeScript API/domain implementation. Evidence: `MSC-Event-Backend/package.json` declares the `api` workspace; `MSC-Event-Backend/api/src/handler.ts` routes HTTP requests; the named source directories contain domain and service logic. |
-| Database schema and migrations | `MSC-Event-Backend/api/src/db`, `MSC-Event-Backend/api/migrations` | **Current fact:** Drizzle/PostgreSQL schema and SQL migrations. The schema begins with `event` and has no organization/tenant table. |
-| Workers | `MSC-Event-Backend/api/src/jobs` | **Current fact:** `emailWorker.ts`, `privacyRetentionWorker.ts`, and `paymentReminderScheduler.ts` exist. `infra/lib/stacks/api-stack.ts` currently deploys the email and retention handlers as scheduled Lambda functions; the payment reminder module exists but is not instantiated as a separate function in that stack. |
-| Product frontend | `MSC-Event-Frontend/src` | **Current fact:** React/Vite public registration, admin, signing, inspection, communication, exports, and marshal UI. Evidence: `MSC-Event-Frontend/package.json`, `src/app/router.tsx`, `src/pages`, and `src/services`. |
-| AWS infrastructure | `MSC-Event-Backend/infra` | **Current fact:** AWS CDK config and Auth, Data, Storage, API, and Migration Runner stacks. Evidence: `infra/bin/app.ts` and `infra/lib/stacks/*.ts`. It currently packages API and worker deployments together. |
-| Frontend deployment automation | `MSC-Event-Frontend/.github/workflows/ci-cd.yml`, `vercel.json`, `scripts/cleanup-vercel-preview-deployments.mjs` | **Current fact:** Vercel-specific build/deploy/promotion and preview cleanup. |
-| Backend deployment automation | `MSC-Event-Backend/.github/workflows/ci-cd.yml`, `scripts` | **Current fact:** AWS credentials, CDK synth/deploy/destroy, RDS lifecycle, migration, and seed automation. |
-| Marketing site | `racepilot/app`, `racepilot/components` (the separate marketing repository at snapshot time; see the [naming note](#repository-naming-note)) | **Current fact:** separate Next.js site containing product, Community, Cloud, pricing, contact, and MSC reference copy. It contains no product API or control plane. |
-| Architecture coordination | `racepilot` (this repository; named `race-pilot` at snapshot time) | **Current fact:** documentation-only issues #34/#38 baseline, including a machine-readable tenant resource inventory and its validator. No production module or deployment exists here. |
-| Community distribution | None found | **Current fact:** no Docker Compose, Helm chart, container build, or generic self-host bundle was found in the inspected repositories. |
-| Cloud control plane | None found | **Current fact:** no organization lifecycle, tenant/domain registry, subscription, billing, or entitlement module was found in the inspected repositories. |
+| Shared product | `vinzenzgeisler/racepilot` | **Current fact:** public npm-workspaces monorepo with core, contracts, API, worker, UI, and adapters. Packages remain unreleased; this issue's pack contract is not a registry publication. |
+| Community distribution | `vinzenzgeisler/racepilot` | **Current fact:** not yet available; no supported installation, upgrade, backup, or restore bundle exists. |
+| Cloud repository | Private `vinzenzgeisler/racepilot-cloud` | **Current fact:** private repository exists and currently contains the product website only. Its presence does not prove a running Cloud platform. |
+| Product website | `vinzenzgeisler/racepilot-cloud/apps/website` | **Current fact:** private website app with its own build/deploy path; it is not a product runtime dependency. Website deployment does not establish Cloud subscriptions, product runtime, or tenant provisioning. |
+| Cloud runtime and control plane | Private `vinzenzgeisler/racepilot-cloud` | **Current fact:** no verified production runtime, tenant provisioning, subscription, billing, or entitlement implementation. These remain future work. |
+| MSC repositories | `MSC-Event-Backend`, `MSC-Event-Frontend`, and related references | **Historical reference only:** inspected snapshots documented below; they are read-only references and are not modified or consumed as product sources. |
 
 ### Repository naming note
 
@@ -56,10 +52,10 @@ clean rebuild in this repository, and the MSC repositories remain read-only refe
 | Community distribution | `vinzenzgeisler/racepilot` (`deploy/community`) | Public | Container images and Compose first: web, API, workers, PostgreSQL, and reference adapters. Include upgrades, migrations, backup/restore, and health checks. |
 | Cloud runtime assembly and AWS infrastructure | Private `vinzenzgeisler/racepilot-cloud` | Private | AWS CDK, environment configuration, deployment workflows, and runtime entry points. Depends only on released public artifacts, ports, and contracts. |
 | Cloud control plane | Private `vinzenzgeisler/racepilot-cloud` | Private | Tenant and membership lifecycle, domain mapping, subscriptions/entitlements, billing integration, platform support, and audit. It calls public product contracts; it does not own copied domain logic. |
-| Marketing | The separate marketing-site repository (named `racepilot` at snapshot time) | Public by default; separate deployable | Keep independent of product uptime and authentication. Claims about Community/Cloud availability must track release evidence. |
+| Product website | Private `vinzenzgeisler/racepilot-cloud/apps/website` | Private; separately deployable | Keep independent of product uptime and authentication. Claims about Community/Cloud availability must track release evidence. This is the current website boundary, not a claim about a future public promotion. |
 
-Names for not-yet-created physical repositories are allocation labels. Creating or
-renaming them requires a separate, reviewed change.
+Current repository names above are verified on 2026-10-28. The MSC repository names
+below refer only to historical, read-only source snapshots.
 
 ## Dependency direction
 
