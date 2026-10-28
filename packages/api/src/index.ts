@@ -29,6 +29,9 @@ import {
   type EntryRepository,
   type EntryListQuery,
   type EntryExportRepository,
+  type EntryConfirmationRepository,
+  type ConfirmationDocumentRepository,
+  type ObjectStorageProvider,
   entryExportFields,
   renderEntryCsv,
   type OrganizationRepository,
@@ -81,8 +84,13 @@ const configSchema = z.object({
   }),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   ...mailConfigSchema.shape,
-  STORAGE_PROVIDER: z.enum(['disabled', 'local']).default('disabled'),
+  STORAGE_PROVIDER: z.enum(['disabled', 'local', 's3']).default('disabled'),
   STORAGE_LOCAL_ROOT: z.string().optional(),
+  STORAGE_S3_BUCKET: z.string().optional(),
+  STORAGE_S3_REGION: z.string().optional(),
+  STORAGE_S3_ENDPOINT: z.string().url().optional(),
+  STORAGE_S3_ACCESS_KEY_ID: z.string().optional(),
+  STORAGE_S3_SECRET_ACCESS_KEY: z.string().optional(),
   OIDC_PROVIDER: z.enum(['disabled', 'oidc']).default('disabled'),
   OIDC_ISSUER_URL: z.string().optional(),
   OIDC_AUDIENCE: z.string().optional(),
@@ -129,16 +137,24 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
   if (
     parsed.data.STORAGE_PROVIDER === 'local' &&
     !parsed.data.STORAGE_LOCAL_ROOT
-  ) {
+  )
     throw new Error('Invalid configuration variables: STORAGE_LOCAL_ROOT');
-  }
+  if (parsed.data.STORAGE_PROVIDER === 's3' && !parsed.data.STORAGE_S3_BUCKET)
+    throw new Error('Invalid configuration variables: STORAGE_S3_BUCKET');
+  if (
+    Boolean(parsed.data.STORAGE_S3_ACCESS_KEY_ID) !==
+    Boolean(parsed.data.STORAGE_S3_SECRET_ACCESS_KEY)
+  )
+    throw new Error(
+      'Invalid configuration variables: STORAGE_S3_ACCESS_KEY_ID, STORAGE_S3_SECRET_ACCESS_KEY',
+    );
   return {
     ...parsed.data,
     ...mailConfig,
     mailEnabled:
       parsed.data.MAIL_PROVIDER === 'smtp' &&
       Boolean(parsed.data.CANONICAL_BASE_URL),
-    storageEnabled: parsed.data.STORAGE_PROVIDER === 'local',
+    storageEnabled: parsed.data.STORAGE_PROVIDER !== 'disabled',
     deploymentMode: parseDeploymentMode(parsed.data.DEPLOYMENT_MODE),
   };
 }
@@ -152,6 +168,9 @@ export interface ApiDeps {
   classes?: EventClassRepository;
   entries?: EntryRepository;
   entryExports?: EntryExportRepository;
+  entryConfirmations?: EntryConfirmationRepository;
+  confirmationDocuments?: ConfirmationDocumentRepository;
+  objectStorage?: ObjectStorageProvider;
   payments?: InvoicePaymentRepository;
   paymentRecipients?: PaymentRecipientRepository;
   pricing?: EventClassPricingRepository;
@@ -338,12 +357,33 @@ export function createApp(deps: ApiDeps) {
           deps.bootstrap,
         )
         .catch(() => new Set<string>())) ?? new Set<string>();
+    const capabilities = new Set(deps.runtimeBootstrap?.capabilities ?? []);
+    capabilities.delete('payment.bank_transfer');
+    if (deps.paymentRecipients) {
+      try {
+        const recipient = await deps.paymentRecipients.get(
+          createRequestContext({
+            deploymentMode: 'community',
+            organizationId: organizationId(deps.config.organizationId),
+            permissions,
+            capabilities: new Set(),
+            correlationId: crypto.randomUUID(),
+          }),
+        );
+        if (recipient) {
+          validatePaymentRecipient(recipient);
+          capabilities.add('payment.bank_transfer');
+        }
+      } catch {
+        /* capability fails closed */
+      }
+    }
     return createRequestContext({
       deploymentMode: 'community',
       organizationId: organizationId(deps.config.organizationId),
       subject: { issuer: identity.issuer, subject: identity.subject },
       permissions,
-      capabilities: new Set(),
+      capabilities,
       correlationId: crypto.randomUUID(),
     });
   };
@@ -392,6 +432,119 @@ export function createApp(deps: ApiDeps) {
     } catch {
       return c.json({ error: 'Forbidden' }, 403);
     }
+  });
+  app.post(
+    '/admin/events/:eventId/registration-groups/:groupId/confirmation',
+    async (c) => {
+      const context = await resolveContext(c.req.raw);
+      if (!context) return c.json({ error: 'Unauthorized' }, 401);
+      if (!context.permissions.has('entry:read'))
+        return c.json({ error: 'Forbidden' }, 403);
+      const eventId = c.req.param('eventId');
+      const groupId = c.req.param('groupId');
+      if (
+        !z.string().uuid().safeParse(eventId).success ||
+        !z.string().uuid().safeParse(groupId).success
+      )
+        return c.json({ error: 'Not found' }, 404);
+      if (
+        !deps.entryConfirmations ||
+        !deps.confirmationDocuments ||
+        !deps.objectStorage
+      )
+        return c.json({ error: 'Not found' }, 404);
+      const data = await deps.entryConfirmations.getByGroup(
+        context,
+        eventId,
+        groupId,
+      );
+      if (!data) return c.json({ error: 'Not found' }, 404);
+      const organization = await deps.organizations.getById(context);
+      if (!organization) return c.json({ error: 'Not found' }, 404);
+      const bankTransferCapability = context.capabilities.has(
+        'payment.bank_transfer',
+      );
+      let paymentRecipient = null;
+      if (bankTransferCapability && deps.paymentRecipients) {
+        try {
+          const candidate = await deps.paymentRecipients.get(context);
+          if (candidate) paymentRecipient = validatePaymentRecipient(candidate);
+        } catch {
+          return c.json({ error: 'Payment configuration unavailable' }, 503);
+        }
+      }
+      const { createEntryConfirmationPdf } = await import('./documents.js');
+      const pdf = await createEntryConfirmationPdf({
+        eventName: data.eventName,
+        eventStartsOn: data.eventStartsOn,
+        driverName: data.driverName,
+        vehicle: data.vehicles.join(', '),
+        classes: data.classes,
+        priceSnapshot: data.priceSnapshot,
+        paymentRecipient,
+        paymentReference: data.paymentReference,
+        bankTransferCapability,
+        branding: {
+          organizationName: organization.name,
+          primaryColor:
+            deps.runtimeBootstrap?.branding?.primaryColor ?? '#174ea6',
+          contactEmail: organization.contactEmail,
+          version: deps.runtimeBootstrap?.configurationVersion ?? '1',
+        },
+      });
+      const object = await deps.objectStorage.put({
+        organizationId: context.organizationId,
+        body: pdf,
+        contentType: 'application/pdf',
+      });
+      try {
+        const document = await deps.confirmationDocuments.create(context, {
+          eventId,
+          registrationGroupId: groupId,
+          objectId: object.objectId,
+          sha256: object.sha256,
+        });
+        c.header('Cache-Control', 'private, no-store');
+        return c.json({ documentId: document.id }, 201);
+      } catch (error) {
+        await deps.objectStorage
+          .delete(context.organizationId, object.objectId)
+          .catch(() => undefined);
+        throw error;
+      }
+    },
+  );
+  app.get('/admin/documents/:documentId', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    const id = c.req.param('documentId');
+    if (
+      !z.string().uuid().safeParse(id).success ||
+      !deps.confirmationDocuments ||
+      !deps.objectStorage
+    )
+      return c.json({ error: 'Not found' }, 404);
+    const document = await deps.confirmationDocuments.getById(context, id);
+    if (!document) return c.json({ error: 'Not found' }, 404);
+    const stored = await deps.objectStorage.get(
+      context.organizationId,
+      document.objectId,
+    );
+    if (
+      !stored ||
+      stored.ref.sha256 !== document.sha256 ||
+      stored.ref.contentType !== 'application/pdf'
+    )
+      return c.json({ error: 'Not found' }, 404);
+    c.header('Content-Type', 'application/pdf');
+    c.header(
+      'Content-Disposition',
+      `attachment; filename="entry-confirmation-${document.id}.pdf"`,
+    );
+    c.header('Cache-Control', 'private, no-store');
+    return c.body(new Blob([Buffer.from(stored.body)]));
   });
   app.get('/admin/events/:eventId/entries.csv', async (c) => {
     const context = await resolveContext(c.req.raw);

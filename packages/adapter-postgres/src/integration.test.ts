@@ -26,6 +26,7 @@ import {
   createVehicleRepository,
   createEntryRepository,
   createInvoiceRepository,
+<<<<<<< HEAD
   createPublicRegistrationService,
   createRegistrationSettingsRepository,
   createEventConsentRepository,
@@ -35,6 +36,11 @@ import {
   saveMailTemplateVersion,
   emailOutbox,
   consentEvidence,
+=======
+  createEntryExportRepository,
+  createEntryConfirmationRepository,
+  createConfirmationDocumentRepository,
+>>>>>>> 13e4dbe (feat: complete entry confirmation documents and exports)
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
@@ -369,7 +375,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       await pool.end();
     }
   });
-  it('isolates registration resources and serializes duplicate start numbers; records no audit event when cross-tenant entry creation is rejected', async () => {
+  it('cloud fixture limits CSV and PDF data to organization and selected event; isolates registration resources and serializes duplicate start numbers; records no audit event when cross-tenant entry creation is rejected', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();
     let orgA: string | undefined;
@@ -540,6 +546,17 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         classA!.id,
       );
       expect(entryA).toBeDefined();
+      const snapshot = {
+        version: '1' as const,
+        currency: 'EUR',
+        calculatedAt: '2030-01-01T00:00:00.000Z',
+        totalCents: 12500,
+        lines: [],
+      };
+      await db
+        .update(entries)
+        .set({ priceSnapshotVersion: '1', priceSnapshot: snapshot })
+        .where(eq(entries.id, entryA!.id));
       await expect(
         attempted(personA!.id, vehicleA!.id, groupA!.id, classA!.id),
       ).rejects.toThrow();
@@ -577,9 +594,14 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
               ?.id
           : undefined;
       expect(foreignEntryId).toBeDefined();
+      await db
+        .update(entries)
+        .set({ priceSnapshotVersion: '1', priceSnapshot: snapshot })
+        .where(eq(entries.id, foreignEntryId!));
       expect(
         await createEntryRepository(db).getById(ctxA, foreignEntryId!),
       ).toBeNull();
+
       const adminEntries = createEntryRepository(db);
       const pageA = await adminEntries.listAdmin!(ctxA, {
         page: 1,
@@ -625,6 +647,60 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           direction: 'desc',
         }),
       ).toMatchObject({ items: [], total: 0 });
+const cloudCtxA = { ...ctxA, deploymentMode: 'cloud' as const };
+      const csvRows = await createEntryExportRepository(db).listByEvent(
+        cloudCtxA,
+        eventA!.id,
+      );
+      expect(csvRows).toHaveLength(1);
+      expect(csvRows[0]).toMatchObject({
+        driver: 'Same Name',
+        vehicle: 'X Y',
+        class: 'A',
+        priceCents: 12500,
+      });
+      expect(
+        await createEntryExportRepository(db).listByEvent(
+          cloudCtxA,
+          eventB!.id,
+        ),
+      ).toEqual([]);
+      const confirmations = createEntryConfirmationRepository(db);
+      const confirmation = await confirmations.getByGroup(
+        cloudCtxA,
+        eventA!.id,
+        groupA!.id,
+      );
+      expect(confirmation).toMatchObject({
+        eventName: 'Race',
+        driverName: 'Same Name',
+        vehicles: ['X Y'],
+        classes: ['A'],
+        priceSnapshot: snapshot,
+      });
+      expect(
+        await confirmations.getByGroup(cloudCtxA, eventB!.id, groupB!.id),
+      ).toBeNull();
+      expect(
+        await confirmations.getByGroup(cloudCtxA, eventA!.id, groupB!.id),
+      ).toBeNull();
+      const docs = createConfirmationDocumentRepository(db);
+      const storedDocument = await docs.create(cloudCtxA, {
+        eventId: eventA!.id,
+        registrationGroupId: groupA!.id,
+        objectId: crypto.randomUUID(),
+        sha256: 'a'.repeat(64),
+      });
+      expect(await docs.getById(cloudCtxA, storedDocument.id)).toMatchObject({
+        organizationId: organizationId(orgA),
+      });
+      expect(
+        await docs.getById(
+          { ...cloudCtxA, organizationId: organizationId(orgB) },
+          storedDocument.id,
+        ),
+      ).toBeNull();
+
       expect(
         await db
           .select()

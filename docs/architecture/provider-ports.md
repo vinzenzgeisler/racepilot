@@ -27,3 +27,21 @@ must be supplied as a complete pair. Selecting local storage requires
 `STORAGE_LOCAL_ROOT`. Invalid enabled configuration fails startup with variable names
 only, never values. Disabled adapters expose corresponding `mailEnabled` and
 `storageEnabled` capability flags as false.
+
+## Documents and exports (#65)
+
+The API composes the object-storage port with a tenant-filtered confirmation read model
+and document metadata repository. The PDF is synchronously rendered on the authenticated
+request path and stored with a server-issued object ID; downloads re-check `entry:read`,
+organization ownership, and the stored SHA-256 before streaming. `pdf-lib` was selected
+for maintained, pure-TypeScript PDF composition with explicit metadata timestamps; the
+small `qrcode` package renders the EPC transfer payload as a QR only when the
+server-computed `payment.bank_transfer` capability is active. The PDF metadata dates
+come from the immutable price snapshot, not wall-clock time. CSV fields are allow-listed
+and formula/control-character prefixes are neutralized before quoting.
+
+`STORAGE_PROVIDER` accepts `disabled`, `local`, or `s3`. Local storage requires
+`STORAGE_LOCAL_ROOT`; the S3-compatible adapter accepts `STORAGE_S3_BUCKET`, optional
+`STORAGE_S3_REGION`/`STORAGE_S3_ENDPOINT`, and an optional complete pair of
+`STORAGE_S3_ACCESS_KEY_ID` and `STORAGE_S3_SECRET_ACCESS_KEY`. Supplying an endpoint
+enables path-style addressing by default for MinIO.

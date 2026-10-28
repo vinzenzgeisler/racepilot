@@ -524,6 +524,10 @@
       "isolation": "Requires entry:read; event is resolved in tenant context and the export query filters organizationId and eventId; selected columns are allow-listed and cells are formula-safe.",
       "negativeTests": [
         {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "cloud fixture limits CSV and PDF data to organization and selected event"
+        },
+        {
           "file": "packages/api/src/index.test.ts",
           "name": "requires entry:read for CSV export"
         }
@@ -532,12 +536,16 @@
     {
       "id": "entry-confirmation-pdf",
       "kind": "route",
-      "tenantKey": "organization/{organizationId}/{server-issued-objectId}",
-      "isolation": "Storage adapter generates UUID keys under organization namespace; download APIs must authorize document ownership before storage get.",
+      "tenantKey": "organization_id + event_id + registration_group_id + server-issued objectId",
+      "isolation": "Admin generation requires entry:read and a tenant-scoped event/group query; storage keys are server-issued organization/{organizationId}/{objectId}; document metadata and storage owner/hash are checked again for downloads.",
       "negativeTests": [
         {
-          "file": "packages/adapter-local-storage/src/contract.test.ts",
-          "name": "round-trips an object and enforces organization-scoped access"
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "cloud fixture limits CSV and PDF data to organization and selected event"
+        },
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "streams only tenant-owned documents after permission and scoped group lookup"
         }
       ]
     },
@@ -549,7 +557,43 @@
       "negativeTests": [
         {
           "file": "packages/adapter-s3/src/contract.test.ts",
-          "name": "round-trips and scopes objects to organization namespaces"
+          "name": "satisfies the shared object storage contract"
+        }
+      ]
+    },
+    {
+      "id": "entry_confirmation_document",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + registration_group_id",
+      "isolation": "Composite foreign key binds document metadata to the tenant-owned registration group; every lookup filters the trusted organizationId; objectId is issued by storage adapter and SHA-256 is checked on download.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "cloud fixture limits CSV and PDF data to organization and selected event"
+        }
+      ]
+    },
+    {
+      "id": "admin-entry-confirmation-create",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId + registrationGroupId",
+      "isolation": "Requires entry:read; scoped group query and organization branding are server loaded; storage-generated object reference is persisted with tenant-bound metadata.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "streams only tenant-owned documents after permission and scoped group lookup"
+        }
+      ]
+    },
+    {
+      "id": "admin-document-download",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + documentId",
+      "isolation": "Requires entry:read; document lookup and storage get are tenant scoped; foreign IDs/keys return 404 and stored content hash/type must match metadata.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "streams only tenant-owned documents after permission and scoped group lookup"
         }
       ]
     }

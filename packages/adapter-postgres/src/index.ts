@@ -755,6 +755,192 @@ export const registrationSettingsAudit = pgTable(
       .defaultNow(),
   },
 );
+export function createEntryConfirmationRepository(
+  db: Database,
+): EntryConfirmationRepository {
+  return {
+    getByGroup: async (ctx, eventId, groupId) => {
+      const rows = await db
+        .select({
+          eventName: events.name,
+          eventStartsOn: events.startsOn,
+          groupId: registrationGroups.id,
+          driverFirst: people.firstName,
+          driverLast: people.lastName,
+          vehicleMake: vehicles.make,
+          vehicleModel: vehicles.model,
+          className: eventClasses.name,
+          snapshot: entries.priceSnapshot,
+          paymentReference: invoices.paymentReference,
+        })
+        .from(registrationGroups)
+        .innerJoin(
+          events,
+          and(
+            eq(events.organizationId, registrationGroups.organizationId),
+            eq(events.id, registrationGroups.eventId),
+          ),
+        )
+        .innerJoin(
+          entries,
+          and(
+            eq(entries.organizationId, registrationGroups.organizationId),
+            eq(entries.eventId, registrationGroups.eventId),
+            eq(entries.registrationGroupId, registrationGroups.id),
+            sql`${entries.deletedAt} is null`,
+          ),
+        )
+        .innerJoin(
+          people,
+          and(
+            eq(people.organizationId, entries.organizationId),
+            eq(people.id, entries.driverPersonId),
+            sql`${people.deletedAt} is null`,
+          ),
+        )
+        .innerJoin(
+          vehicles,
+          and(
+            eq(vehicles.organizationId, entries.organizationId),
+            eq(vehicles.id, entries.vehicleId),
+            sql`${vehicles.deletedAt} is null`,
+          ),
+        )
+        .innerJoin(
+          eventClasses,
+          and(
+            eq(eventClasses.organizationId, entries.organizationId),
+            eq(eventClasses.eventId, entries.eventId),
+            eq(eventClasses.id, entries.classId),
+          ),
+        )
+        .leftJoin(
+          invoices,
+          and(
+            eq(invoices.organizationId, registrationGroups.organizationId),
+            eq(invoices.eventId, registrationGroups.eventId),
+            eq(invoices.registrationGroupId, registrationGroups.id),
+          ),
+        )
+        .where(
+          and(
+            eq(registrationGroups.organizationId, ctx.organizationId),
+            eq(registrationGroups.eventId, eventId),
+            eq(registrationGroups.id, groupId),
+          ),
+        );
+      if (!rows.length || !rows[0]!.snapshot) return null;
+      const snapshot = rows[0]!.snapshot;
+      if (
+        rows.some(
+          (row) =>
+            !row.snapshot ||
+            row.snapshot.version !== snapshot.version ||
+            row.snapshot.calculatedAt !== snapshot.calculatedAt ||
+            row.snapshot.currency !== snapshot.currency ||
+            row.snapshot.totalCents !== snapshot.totalCents,
+        )
+      )
+        throw new Error('Registration group price snapshot mismatch');
+      const reference = rows[0]!.paymentReference ?? '';
+      return {
+        eventId,
+        eventName: rows[0]!.eventName,
+        eventStartsOn: String(rows[0]!.eventStartsOn),
+        registrationGroupId: rows[0]!.groupId,
+        driverName: `${rows[0]!.driverFirst} ${rows[0]!.driverLast}`,
+        vehicles: [
+          ...new Set(
+            rows.map((row) => `${row.vehicleMake} ${row.vehicleModel}`),
+          ),
+        ],
+        classes: [...new Set(rows.map((row) => row.className))],
+        priceSnapshot: snapshot,
+        paymentReference: reference,
+      };
+    },
+  };
+}
+export function createConfirmationDocumentRepository(
+  db: Database,
+): ConfirmationDocumentRepository {
+  return {
+    create: async (ctx, input) => {
+      const [row] = await db
+        .insert(confirmationDocuments)
+        .values({
+          organizationId: ctx.organizationId,
+          eventId: input.eventId,
+          registrationGroupId: input.registrationGroupId,
+          objectId: input.objectId,
+          sha256: input.sha256,
+        })
+        .returning();
+      return {
+        ...row!,
+        organizationId: organizationId(row!.organizationId),
+        createdAt: row!.createdAt.toISOString(),
+      };
+    },
+    getById: async (ctx, id) => {
+      const [row] = await db
+        .select()
+        .from(confirmationDocuments)
+        .where(
+          and(
+            eq(confirmationDocuments.organizationId, ctx.organizationId),
+            eq(confirmationDocuments.id, id),
+          ),
+        );
+      return row
+        ? {
+            ...row,
+            organizationId: organizationId(row.organizationId),
+            createdAt: row.createdAt.toISOString(),
+          }
+        : null;
+    },
+  };
+}
+
+export const confirmationDocuments = pgTable(
+  'entry_confirmation_document',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    registrationGroupId: uuid('registration_group_id').notNull(),
+    objectId: uuid('object_id').notNull(),
+    sha256: text('sha256').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('entry_confirmation_document_org_id_unique').on(
+      t.organizationId,
+      t.id,
+    ),
+    unique('entry_confirmation_document_org_object_unique').on(
+      t.organizationId,
+      t.objectId,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'entry_confirmation_document_group_fk',
+    }).onDelete('cascade'),
+    check(
+      'entry_confirmation_document_sha256_check',
+      sql`${t.sha256} ~ '^[a-f0-9]{64}$'`,
+    ),
+  ],
+);
+
 export type Database = ReturnType<typeof drizzle>;
 export async function migrate(databaseUrl: string): Promise<void> {
   const { Pool } = await import('pg');

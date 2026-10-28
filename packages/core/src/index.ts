@@ -471,6 +471,48 @@ export interface ObjectStorageProvider {
   delete(organizationId: OrganizationId, objectId: string): Promise<void>;
 }
 
+/** Executable, provider-neutral assertions shared by adapter contract tests. */
+export async function verifyObjectStorageContract(
+  storage: ObjectStorageProvider,
+): Promise<void> {
+  const owner = organizationId('contract_org_a');
+  const foreign = organizationId('contract_org_b');
+  const body = new TextEncoder().encode('storage port contract');
+  const ref = await storage.put({
+    organizationId: owner,
+    body,
+    contentType: 'text/plain',
+  });
+  if (
+    !/^[0-9a-f-]{36}$/.test(ref.objectId) ||
+    ref.organizationId !== owner ||
+    ref.size !== body.length ||
+    !/^[a-f0-9]{64}$/.test(ref.sha256)
+  )
+    throw new Error('Storage put contract failed');
+  const result = await storage.get(owner, ref.objectId);
+  if (
+    !result ||
+    result.ref.sha256 !== ref.sha256 ||
+    result.ref.contentType !== ref.contentType ||
+    result.body.length !== body.length ||
+    result.body.some((value, index) => value !== body[index])
+  )
+    throw new Error('Storage get contract failed');
+  if ((await storage.get(foreign, ref.objectId)) !== null)
+    throw new Error('Foreign organization must not read object');
+  let rejected = false;
+  try {
+    await storage.get(owner, '../etc/passwd');
+  } catch (error) {
+    rejected = error instanceof ProviderError && error.code === 'invalid_input';
+  }
+  if (!rejected) throw new Error('Invalid object identifier must be rejected');
+  await storage.delete(owner, ref.objectId);
+  if ((await storage.get(owner, ref.objectId)) !== null)
+    throw new Error('Deleted object must not be returned');
+}
+
 export type EntryVerificationStatus = 'unverified' | 'verified';
 export type EntryAcceptanceStatus =
   'pending' | 'accepted' | 'rejected' | 'waitlisted' | 'withdrawn';
@@ -601,6 +643,44 @@ export interface EntryExportRepository {
     ctx: RequestContext,
     eventId: string,
   ): Promise<readonly EntryExportRow[]>;
+}
+
+export interface EntryConfirmationData {
+  readonly eventId: string;
+  readonly eventName: string;
+  readonly eventStartsOn: string;
+  readonly registrationGroupId: string;
+  readonly driverName: string;
+  readonly vehicles: readonly string[];
+  readonly classes: readonly string[];
+  readonly priceSnapshot: PriceSnapshot;
+  readonly paymentReference: string;
+}
+export interface EntryConfirmationRepository {
+  getByGroup(
+    ctx: RequestContext,
+    eventId: string,
+    registrationGroupId: string,
+  ): Promise<EntryConfirmationData | null>;
+}
+export interface ConfirmationDocument {
+  readonly id: string;
+  readonly organizationId: OrganizationId;
+  readonly eventId: string;
+  readonly registrationGroupId: string;
+  readonly objectId: string;
+  readonly sha256: string;
+  readonly createdAt: string;
+}
+export interface ConfirmationDocumentRepository {
+  create(
+    ctx: RequestContext,
+    input: Omit<ConfirmationDocument, 'id' | 'organizationId' | 'createdAt'>,
+  ): Promise<ConfirmationDocument>;
+  getById(
+    ctx: RequestContext,
+    id: string,
+  ): Promise<ConfirmationDocument | null>;
 }
 export interface EntryRepository {
   create?(

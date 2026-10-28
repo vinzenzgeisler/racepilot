@@ -98,6 +98,10 @@ export async function createEntryConfirmationPdf(
         48,
         490,
       );
+      if (input.paymentRecipient) {
+        text('Empfänger: ' + input.paymentRecipient.accountName, 48, 472);
+        text('IBAN: ' + input.paymentRecipient.iban, 48, 454);
+      }
       const qr = await QRCode.toBuffer(instruction, {
         type: 'png',
         errorCorrectionLevel: 'M',

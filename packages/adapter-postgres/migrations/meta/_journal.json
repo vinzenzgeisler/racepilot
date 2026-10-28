@@ -64,6 +64,13 @@
       "when": 1793232002000,
       "tag": "0008_submission_request_fingerprint",
       "breakpoints": false
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793235600000,
+      "tag": "0009_entry_confirmation_documents",
+      "breakpoints": false
     }
   ]
 }

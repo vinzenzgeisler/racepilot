@@ -13,6 +13,12 @@
     },
     {
       "path": "../adapter-oidc"
+    },
+    {
+      "path": "../adapter-local-storage"
+    },
+    {
+      "path": "../adapter-s3"
     }
   ],
   "compilerOptions": {
