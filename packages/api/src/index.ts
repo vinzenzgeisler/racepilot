@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { mailConfigSchema, validateMailConfig } from '@racepilot/contracts';
 import {
   parseDeploymentMode,
   createRequestContext,
@@ -69,15 +70,7 @@ const configSchema = z.object({
     }
   }),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-  MAIL_PROVIDER: z.enum(['disabled', 'smtp']).default('disabled'),
-  SMTP_HOST: z.string().optional(),
-  SMTP_PORT: z.coerce.number().int().min(1).max(65535).optional(),
-  SMTP_SECURE: z.enum(['true', 'false']).default('false'),
-  SMTP_USER: z.string().optional(),
-  SMTP_PASSWORD: z.string().optional(),
-  SMTP_FROM: z.string().optional(),
-  SMTP_REPLY_TO: z.string().optional(),
-  CANONICAL_BASE_URL: z.string().optional(),
+  ...mailConfigSchema.shape,
   STORAGE_PROVIDER: z.enum(['disabled', 'local']).default('disabled'),
   STORAGE_LOCAL_ROOT: z.string().optional(),
   OIDC_PROVIDER: z.enum(['disabled', 'oidc']).default('disabled'),
@@ -98,40 +91,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     ];
     throw new Error(`Invalid configuration variables: ${names.join(', ')}`);
   }
-  if (
-    parsed.data.MAIL_PROVIDER === 'smtp' &&
-    (!parsed.data.SMTP_HOST ||
-      !parsed.data.SMTP_PORT ||
-      !parsed.data.SMTP_FROM ||
-      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsed.data.SMTP_FROM) ||
-      (parsed.data.SMTP_REPLY_TO !== undefined &&
-        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(parsed.data.SMTP_REPLY_TO)) ||
-      Boolean(parsed.data.SMTP_USER) !== Boolean(parsed.data.SMTP_PASSWORD))
-  ) {
-    throw new Error(
-      'Invalid configuration variables: SMTP_HOST, SMTP_PORT, SMTP_FROM, SMTP_REPLY_TO, SMTP_USER, SMTP_PASSWORD',
-    );
-  }
-  if (parsed.data.CANONICAL_BASE_URL) {
-    try {
-      const url = new URL(parsed.data.CANONICAL_BASE_URL);
-      if (
-        !['https:', 'http:'].includes(url.protocol) ||
-        url.username ||
-        url.password ||
-        url.search ||
-        url.hash
-      )
-        throw new Error();
-      if (
-        url.protocol !== 'https:' &&
-        !['localhost', '127.0.0.1'].includes(url.hostname)
-      )
-        throw new Error();
-    } catch {
-      throw new Error('Invalid configuration variables: CANONICAL_BASE_URL');
-    }
-  }
+  const mailConfig = validateMailConfig(env);
   if (parsed.data.OIDC_PROVIDER === 'oidc') {
     const d = parsed.data;
     if (
@@ -164,6 +124,7 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
   }
   return {
     ...parsed.data,
+    ...mailConfig,
     mailEnabled:
       parsed.data.MAIL_PROVIDER === 'smtp' &&
       Boolean(parsed.data.CANONICAL_BASE_URL),

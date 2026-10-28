@@ -160,8 +160,13 @@ export async function processMailOutboxJob(input: {
 }): Promise<void> {
   const { ctx, deps } = input;
   const row = await deps.repository.get(ctx, input.outboxId);
-  if (!row || row.organizationId !== ctx.organizationId)
-    throw new Error('Mail outbox unavailable');
+  if (!row || row.organizationId !== ctx.organizationId) {
+    console.warn('Mail outbox job references an unavailable tenant row', {
+      outboxId: input.outboxId,
+      organizationId: ctx.organizationId,
+    });
+    return;
+  }
   if (row.status === 'sent' || row.status === 'failed') return;
   const claimed = await deps.repository.claim(ctx, row.id);
   if (!claimed) return;
@@ -210,7 +215,7 @@ export async function processMailOutboxJob(input: {
           ? error.message.slice(0, 500)
           : 'Mail delivery failed',
     });
-    // The repository schedules a new Graphile job at availableAt; do not let Graphile's own retry race that schedule.
+    // The retry is persisted in Graphile in the same transaction as this status update.
   }
 }
 
@@ -224,26 +229,52 @@ export function createMailOutboxTask(deps: {
   canonicalBaseUrl: string;
 }) {
   return async (payload: unknown, helpers: { job: { id: string } }) => {
-    const envelope = JobEnvelope.parse(payload);
+    let envelope: ReturnType<typeof JobEnvelope.parse>;
+    try {
+      envelope = JobEnvelope.parse(payload);
+    } catch {
+      console.warn('Ignoring invalid mail outbox job envelope');
+      return;
+    }
     if (
       envelope.type !== 'mail.outbox' ||
       typeof envelope.payload !== 'object' ||
       envelope.payload === null ||
       !('outboxId' in envelope.payload) ||
       typeof envelope.payload.outboxId !== 'string'
-    )
-      throw new Error('Invalid mail outbox job');
-    const ctx = await createJobContext(envelope, {
-      deploymentMode: deps.deploymentMode,
-      ...(deps.communityOrganizationId
-        ? { communityOrganizationId: deps.communityOrganizationId }
-        : {}),
-      getOrganization: deps.getOrganization,
-      jobId: helpers.job.id,
-    });
+    ) {
+      console.warn('Ignoring invalid mail outbox job payload');
+      return;
+    }
+    let ctx: JobContext;
+    try {
+      ctx = await createJobContext(envelope, {
+        deploymentMode: deps.deploymentMode,
+        ...(deps.communityOrganizationId
+          ? { communityOrganizationId: deps.communityOrganizationId }
+          : {}),
+        getOrganization: deps.getOrganization,
+        jobId: helpers.job.id,
+      });
+    } catch (error) {
+      if (
+        !(error instanceof Error) ||
+        error.message !== 'Organization unavailable'
+      )
+        throw error;
+      console.warn('Ignoring mail outbox job for unavailable organization', {
+        organizationId: envelope.organizationId,
+      });
+      return;
+    }
     const row = await deps.repository.get(ctx, envelope.payload.outboxId);
-    if (!row || row.organizationId !== ctx.organizationId)
-      throw new Error('Mail outbox unavailable');
+    if (!row || row.organizationId !== ctx.organizationId) {
+      console.warn('Ignoring mail outbox job with unavailable row', {
+        outboxId: envelope.payload.outboxId,
+        organizationId: ctx.organizationId,
+      });
+      return;
+    }
     const variables = { ...row.variables };
     if (row.templateKey === 'verification') {
       const url = new URL(

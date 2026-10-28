@@ -5,8 +5,9 @@ import {
   organizations,
 } from '@racepilot/adapter-postgres';
 import { createSmtpMailProvider } from '@racepilot/adapter-smtp';
-import { eq } from 'drizzle-orm';
-import { createMailOutboxTask, type MailOutboxRepository } from './mail.js';
+import { validateMailConfig } from '@racepilot/contracts';
+import { and, eq } from 'drizzle-orm';
+import { createMailOutboxTask } from './mail.js';
 
 const env = process.env;
 const databaseUrl = env.DATABASE_URL;
@@ -14,39 +15,22 @@ if (!databaseUrl) throw new Error('DATABASE_URL is required');
 const mode = env.DEPLOYMENT_MODE;
 if (mode !== 'community' && mode !== 'cloud')
   throw new Error('Invalid DEPLOYMENT_MODE');
-const mailProvider = env.MAIL_PROVIDER ?? 'disabled';
-if (mailProvider !== 'disabled' && mailProvider !== 'smtp')
-  throw new Error('Invalid MAIL_PROVIDER');
-const canonicalBaseUrl = env.CANONICAL_BASE_URL;
-const mailEnabled = mailProvider === 'smtp' && Boolean(canonicalBaseUrl);
+const mailConfig = validateMailConfig(env);
+const mailEnabled =
+  mailConfig.MAIL_PROVIDER === 'smtp' && Boolean(mailConfig.CANONICAL_BASE_URL);
+const smtpTimeoutMs = 30_000;
+const leaseMs = Number(env.MAIL_OUTBOX_LEASE_MS ?? 300_000);
+if (!Number.isSafeInteger(leaseMs) || leaseMs <= smtpTimeoutMs * 3)
+  throw new Error('MAIL_OUTBOX_LEASE_MS must be greater than the SMTP timeout');
 let mail;
 if (mailEnabled) {
-  if (
-    !env.SMTP_HOST ||
-    !env.SMTP_PORT ||
-    !env.SMTP_FROM ||
-    !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(env.SMTP_FROM) ||
-    Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASSWORD)
-  )
-    throw new Error(
-      'Invalid mail configuration: SMTP_HOST, SMTP_PORT, SMTP_FROM, SMTP_USER, SMTP_PASSWORD',
-    );
-  const base = new URL(canonicalBaseUrl!);
-  if (
-    !['https:', 'http:'].includes(base.protocol) ||
-    base.username ||
-    base.password ||
-    (base.protocol !== 'https:' &&
-      !['localhost', '127.0.0.1'].includes(base.hostname))
-  )
-    throw new Error('Invalid mail configuration: CANONICAL_BASE_URL');
   mail = createSmtpMailProvider({
-    host: env.SMTP_HOST,
-    port: Number(env.SMTP_PORT),
-    secure: env.SMTP_SECURE === 'true',
-    from: env.SMTP_FROM,
-    ...(env.SMTP_USER
-      ? { user: env.SMTP_USER, password: env.SMTP_PASSWORD! }
+    host: mailConfig.SMTP_HOST!,
+    port: mailConfig.SMTP_PORT!,
+    secure: mailConfig.SMTP_SECURE === 'true',
+    from: mailConfig.SMTP_FROM!,
+    ...(mailConfig.SMTP_USER
+      ? { user: mailConfig.SMTP_USER, password: mailConfig.SMTP_PASSWORD! }
       : {}),
   });
 }
@@ -54,13 +38,25 @@ console.info(
   `Mail delivery capability: ${mailEnabled ? 'enabled' : 'disabled (SMTP or CANONICAL_BASE_URL is not fully configured)'}`,
 );
 const { db, pool } = await createDatabase(databaseUrl);
+let communityOrganizationId: string | undefined;
+if (mode === 'community') {
+  const slug = env.COMMUNITY_ORGANIZATION_SLUG;
+  if (!slug) throw new Error('COMMUNITY_ORGANIZATION_SLUG is required');
+  const [organization] = await db
+    .select({ id: organizations.id, status: organizations.status })
+    .from(organizations)
+    .where(
+      and(eq(organizations.slug, slug), eq(organizations.status, 'active')),
+    );
+  if (!organization)
+    throw new Error('Configured community organization is unavailable');
+  communityOrganizationId = organization.id;
+}
 const taskList = mailEnabled
   ? {
       mail_outbox: createMailOutboxTask({
         deploymentMode: mode,
-        ...(env.COMMUNITY_ORGANIZATION_ID
-          ? { communityOrganizationId: env.COMMUNITY_ORGANIZATION_ID }
-          : {}),
+        ...(communityOrganizationId ? { communityOrganizationId } : {}),
         getOrganization: async (id) => {
           const [organization] = await db
             .select({ status: organizations.status })
@@ -68,11 +64,9 @@ const taskList = mailEnabled
             .where(eq(organizations.id, id));
           return organization ?? null;
         },
-        repository: createMailOutboxRepository(
-          db,
-        ) as unknown as MailOutboxRepository,
+        repository: createMailOutboxRepository(db, { leaseMs }),
         mail: mail!,
-        canonicalBaseUrl: canonicalBaseUrl!,
+        canonicalBaseUrl: mailConfig.CANONICAL_BASE_URL!,
       }),
     }
   : {};

@@ -57,6 +57,8 @@ export const organizations = pgTable(
     name: text('name').notNull(),
     status: text('status').notNull().default('active'),
     contactEmail: text('contact_email'),
+    mailFrom: text('mail_from'),
+    mailReplyTo: text('mail_reply_to'),
     websiteUrl: text('website_url'),
     timezone: text('timezone').notNull(),
     locale: text('locale').notNull(),
@@ -72,6 +74,14 @@ export const organizations = pgTable(
     check(
       'organization_status_check',
       sql`${t.status} in ('active','disabled')`,
+    ),
+    check(
+      'organization_mail_from_check',
+      sql`${t.mailFrom} is null or (length(trim(${t.mailFrom})) > 3 and position('@' in ${t.mailFrom}) > 1)`,
+    ),
+    check(
+      'organization_mail_reply_to_check',
+      sql`${t.mailReplyTo} is null or (length(trim(${t.mailReplyTo})) > 3 and position('@' in ${t.mailReplyTo}) > 1)`,
     ),
   ],
 );
@@ -431,221 +441,6 @@ export const entryAuditEvents = pgTable(
   ],
 );
 
-export const emailTemplateVersions = pgTable(
-  'email_template_version',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id').notNull(),
-    templateKey: text('template_key').notNull(),
-    version: integer('version').notNull(),
-    locale: text('locale').notNull(),
-    subject: text('subject').notNull(),
-    textBody: text('text_body').notNull(),
-    htmlBody: text('html_body').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    unique('email_template_version_org_id_unique').on(t.organizationId, t.id),
-    unique('email_template_version_org_full_unique').on(
-      t.organizationId,
-      t.id,
-      t.templateKey,
-      t.version,
-      t.locale,
-    ),
-    unique('email_template_version_org_key_version_locale_unique').on(
-      t.organizationId,
-      t.templateKey,
-      t.version,
-      t.locale,
-    ),
-    foreignKey({
-      columns: [t.organizationId],
-      foreignColumns: [organizations.id],
-      name: 'email_template_version_org_fk',
-    }).onDelete('cascade'),
-    check(
-      'email_template_version_key_check',
-      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
-    ),
-    check('email_template_version_version_check', sql`${t.version} > 0`),
-    check(
-      'email_template_version_locale_check',
-      sql`${t.locale} in ('de','en')`,
-    ),
-  ],
-);
-export const emailOutbox = pgTable(
-  'email_outbox',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id').notNull(),
-    eventId: uuid('event_id'),
-    templateKey: text('template_key').notNull(),
-    templateVersion: integer('template_version').notNull(),
-    templateVersionId: uuid('template_version_id'),
-    locale: text('locale').notNull(),
-    recipient: text('recipient').notNull(),
-    idempotencyKey: text('idempotency_key').notNull(),
-    variables: jsonb('variables')
-      .$type<Record<string, string>>()
-      .notNull()
-      .default({}),
-    status: text('status').notNull().default('pending'),
-    attempts: integer('attempts').notNull().default(0),
-    availableAt: timestamp('available_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    claimedAt: timestamp('claimed_at', { withTimezone: true }),
-    sentAt: timestamp('sent_at', { withTimezone: true }),
-    lastError: text('last_error'),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    unique('email_outbox_org_id_unique').on(t.organizationId, t.id),
-    unique('email_outbox_org_idempotency_unique').on(
-      t.organizationId,
-      t.idempotencyKey,
-    ),
-    foreignKey({
-      columns: [t.organizationId],
-      foreignColumns: [organizations.id],
-      name: 'email_outbox_org_fk',
-    }).onDelete('cascade'),
-    foreignKey({
-      columns: [t.organizationId, t.eventId],
-      foreignColumns: [events.organizationId, events.id],
-      name: 'email_outbox_org_event_fk',
-    }),
-    foreignKey({
-      columns: [
-        t.organizationId,
-        t.templateVersionId,
-        t.templateKey,
-        t.templateVersion,
-        t.locale,
-      ],
-      foreignColumns: [
-        emailTemplateVersions.organizationId,
-        emailTemplateVersions.id,
-        emailTemplateVersions.templateKey,
-        emailTemplateVersions.version,
-        emailTemplateVersions.locale,
-      ],
-      name: 'email_outbox_org_template_fk',
-    }),
-    check('email_outbox_version_check', sql`${t.templateVersion} > 0`),
-    check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
-    check(
-      'email_outbox_template_key_check',
-      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
-    ),
-    check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
-    check(
-      'email_outbox_status_check',
-      sql`${t.status} in ('pending','sending','sent','failed')`,
-    ),
-    index('email_outbox_due_idx')
-      .on(t.availableAt)
-      .where(sql`${t.status} in ('pending','sending')`),
-  ],
-);
-export const emailDeliveries = pgTable(
-  'email_delivery',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id').notNull(),
-    outboxId: uuid('outbox_id').notNull(),
-    attempt: integer('attempt').notNull(),
-    outcome: text('outcome').notNull(),
-    error: text('error'),
-    occurredAt: timestamp('occurred_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.organizationId, t.outboxId],
-      foreignColumns: [emailOutbox.organizationId, emailOutbox.id],
-      name: 'email_delivery_org_outbox_fk',
-    }).onDelete('cascade'),
-    unique('email_delivery_org_attempt_unique').on(
-      t.organizationId,
-      t.outboxId,
-      t.attempt,
-    ),
-    check(
-      'email_delivery_outcome_check',
-      sql`${t.outcome} in ('sent','retry','failed')`,
-    ),
-  ],
-);
-
-export type Database = ReturnType<typeof drizzle>;
-export async function migrate(databaseUrl: string): Promise<void> {
-  const { Pool } = await import('pg');
-  const pool = new Pool({ connectionString: databaseUrl });
-  try {
-    await drizzleMigrate(drizzle(pool), {
-      migrationsFolder: new URL('../migrations', import.meta.url).pathname,
-    });
-  } finally {
-    await pool.end();
-  }
-}
-export async function withOrganizationTransaction<T>(
-  db: Database,
-  ctx: RequestContext,
-  fn: (tx: Database) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select set_config('app.organization_id', ${ctx.organizationId}, true)`,
-    );
-    return fn(tx as unknown as Database);
-  });
-}
-export async function ensureCommunityOrganization(
-  db: Database,
-  config: { slug: string; name: string; timezone: string; locale: string },
-): Promise<Organization> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext('racepilot.community.bootstrap'))`,
-    );
-    const rows = await tx.select().from(organizations);
-    if (rows.length > 1)
-      throw new Error('Community deployment requires exactly one organization');
-    if (rows.length === 1) {
-      if (rows[0]!.slug !== config.slug)
-        throw new Error(
-          'Community organization slug does not match configuration',
-        );
-      return mapOrg(rows[0]!);
-    }
-    const [row] = await tx
-      .insert(organizations)
-      .values({ ...config })
-      .returning();
-    return mapOrg(row!);
-  });
-}
-function mapOrg(r: typeof organizations.$inferSelect): Organization {
-  return {
-    id: organizationId(r.id),
-    slug: r.slug,
-    name: r.name,
-    status: r.status as 'active' | 'disabled',
-    contactEmail: r.contactEmail,
-    websiteUrl: r.websiteUrl,
-    timezone: r.timezone,
-    locale: r.locale,
-  };
-}
 export const eventClassPricingRules = pgTable(
   'event_class_pricing_rule',
   {
@@ -860,6 +655,160 @@ function mapOrg(r: typeof organizations.$inferSelect): Organization {
     currency: r.currency,
   };
 }
+export const emailTemplateVersions = pgTable(
+  'email_template_version',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    templateKey: text('template_key').notNull(),
+    version: integer('version').notNull(),
+    locale: text('locale').notNull(),
+    subject: text('subject').notNull(),
+    textBody: text('text_body').notNull(),
+    htmlBody: text('html_body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('email_template_version_org_id_unique').on(t.organizationId, t.id),
+    unique('email_template_version_org_full_unique').on(
+      t.organizationId,
+      t.id,
+      t.templateKey,
+      t.version,
+      t.locale,
+    ),
+    unique('email_template_version_org_key_version_locale_unique').on(
+      t.organizationId,
+      t.templateKey,
+      t.version,
+      t.locale,
+    ),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'email_template_version_org_fk',
+    }).onDelete('cascade'),
+    check(
+      'email_template_version_key_check',
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
+    ),
+    check('email_template_version_version_check', sql`${t.version} > 0`),
+    check(
+      'email_template_version_locale_check',
+      sql`${t.locale} in ('de','en')`,
+    ),
+  ],
+);
+export const emailOutbox = pgTable(
+  'email_outbox',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id'),
+    templateKey: text('template_key').notNull(),
+    templateVersion: integer('template_version').notNull(),
+    templateVersionId: uuid('template_version_id'),
+    locale: text('locale').notNull(),
+    recipient: text('recipient').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    variables: jsonb('variables')
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    availableAt: timestamp('available_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('email_outbox_org_id_unique').on(t.organizationId, t.id),
+    unique('email_outbox_org_idempotency_unique').on(
+      t.organizationId,
+      t.idempotencyKey,
+    ),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'email_outbox_org_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'email_outbox_org_event_fk',
+    }),
+    foreignKey({
+      columns: [
+        t.organizationId,
+        t.templateVersionId,
+        t.templateKey,
+        t.templateVersion,
+        t.locale,
+      ],
+      foreignColumns: [
+        emailTemplateVersions.organizationId,
+        emailTemplateVersions.id,
+        emailTemplateVersions.templateKey,
+        emailTemplateVersions.version,
+        emailTemplateVersions.locale,
+      ],
+      name: 'email_outbox_org_template_fk',
+    }),
+    check('email_outbox_version_check', sql`${t.templateVersion} > 0`),
+    check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
+    check(
+      'email_outbox_template_key_check',
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
+    ),
+    check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
+    check(
+      'email_outbox_status_check',
+      sql`${t.status} in ('pending','sending','sent','failed')`,
+    ),
+    index('email_outbox_due_idx')
+      .on(t.availableAt)
+      .where(sql`${t.status} in ('pending','sending')`),
+  ],
+);
+export const emailDeliveries = pgTable(
+  'email_delivery',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    outboxId: uuid('outbox_id').notNull(),
+    attempt: integer('attempt').notNull(),
+    outcome: text('outcome').notNull(),
+    error: text('error'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.outboxId],
+      foreignColumns: [emailOutbox.organizationId, emailOutbox.id],
+      name: 'email_delivery_org_outbox_fk',
+    }).onDelete('cascade'),
+    unique('email_delivery_org_attempt_unique').on(
+      t.organizationId,
+      t.outboxId,
+      t.attempt,
+    ),
+    check(
+      'email_delivery_outcome_check',
+      sql`${t.outcome} in ('sent','retry','failed')`,
+    ),
+  ],
+);
+
 export function createOrganizationRepository(
   db: Database,
 ): OrganizationRepository {
@@ -1708,7 +1657,10 @@ export function createInvoiceRepository(db: Database): InvoiceRepository {
 }
 
 /** Drizzle's database and transaction objects both satisfy this executor. */
-export type MailOutboxExecutor = Pick<Database, 'execute'>;
+export type MailOutboxExecutor = Pick<
+  Database,
+  'execute' | 'insert' | 'select'
+>;
 export interface NewMailOutboxMessage {
   eventId?: string | null;
   templateKey: string;
@@ -1718,47 +1670,175 @@ export interface NewMailOutboxMessage {
   recipient: string;
   idempotencyKey: string;
   variables: Record<string, string>;
+  correlationId?: string;
 }
 /** Call with the caller's Drizzle transaction to atomically enqueue with domain writes. */
 export async function enqueueMailOutbox(
-  executor: MailOutboxExecutor,
+  db: Database,
   organization: string,
   input: NewMailOutboxMessage,
+  executor: MailOutboxExecutor = db,
 ): Promise<string> {
-  const result = await executor.execute(sql`insert into email_outbox
-    (organization_id,event_id,template_key,template_version,template_version_id,locale,recipient,idempotency_key,variables)
-    values (${organization},${input.eventId ?? null},${input.templateKey},${input.templateVersion},${input.templateVersionId ?? null},${input.locale},${input.recipient},${input.idempotencyKey},${JSON.stringify(input.variables)}::jsonb)
-    on conflict (organization_id,idempotency_key) do nothing returning id`);
-  const rows = (result as unknown as { rows: Array<{ id: string }> }).rows;
-  if (rows[0]) return rows[0].id;
-  const existing = await executor.execute(
-    sql`select id from email_outbox where organization_id=${organization} and idempotency_key=${input.idempotencyKey}`,
-  );
-  const existingRows = (existing as unknown as { rows: Array<{ id: string }> })
-    .rows;
-  if (!existingRows[0]) throw new Error('Mail outbox enqueue failed');
-  return existingRows[0].id;
+  const [inserted] = await executor
+    .insert(emailOutbox)
+    .values({
+      organizationId: organization,
+      eventId: input.eventId ?? null,
+      templateKey: input.templateKey,
+      templateVersion: input.templateVersion,
+      templateVersionId: input.templateVersionId ?? null,
+      locale: input.locale,
+      recipient: input.recipient,
+      idempotencyKey: input.idempotencyKey,
+      variables: input.variables,
+    })
+    .onConflictDoNothing({
+      target: [emailOutbox.organizationId, emailOutbox.idempotencyKey],
+    })
+    .returning({ id: emailOutbox.id });
+  if (inserted) {
+    const envelope = {
+      type: 'mail.outbox',
+      schemaVersion: 1,
+      organizationId: organization,
+      correlationId: input.correlationId ?? input.idempotencyKey,
+      payload: { outboxId: inserted.id },
+    };
+    await executor.execute(
+      sql`select graphile_worker.add_job('mail_outbox', ${JSON.stringify(envelope)}::json, null, now(), 25, ${`mail-outbox:${inserted.id}`})`,
+    );
+    return inserted.id;
+  }
+  const [existing] = await executor
+    .select({ id: emailOutbox.id })
+    .from(emailOutbox)
+    .where(
+      and(
+        eq(emailOutbox.organizationId, organization),
+        eq(emailOutbox.idempotencyKey, input.idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (!existing) throw new Error('Mail outbox enqueue failed');
+  return existing.id;
 }
 
-export function createMailOutboxRepository(db: Database) {
+export async function setOrganizationMailConfiguration(
+  db: Database,
+  organization: string,
+  config: { from: string; replyTo?: string },
+): Promise<void> {
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (
+    !email.test(config.from) ||
+    (config.replyTo && !email.test(config.replyTo))
+  )
+    throw new Error('Invalid organization mail configuration');
+  await db
+    .update(organizations)
+    .set({ mailFrom: config.from, mailReplyTo: config.replyTo ?? null })
+    .where(eq(organizations.id, organization));
+}
+
+export async function getOrganizationMailConfiguration(
+  db: Database,
+  organization: string,
+) {
+  const [row] = await db
+    .select({
+      from: organizations.mailFrom,
+      replyTo: organizations.mailReplyTo,
+    })
+    .from(organizations)
+    .where(
+      and(
+        eq(organizations.id, organization),
+        eq(organizations.status, 'active'),
+      ),
+    )
+    .limit(1);
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return row?.from &&
+    email.test(row.from) &&
+    (row.replyTo === null || email.test(row.replyTo))
+    ? { from: row.from, replyTo: row.replyTo }
+    : null;
+}
+
+export async function saveMailTemplateVersion(
+  db: Database,
+  organization: string,
+  input: {
+    templateKey: string;
+    version: number;
+    locale: 'de' | 'en';
+    subject: string;
+    text: string;
+    html: string;
+  },
+): Promise<string> {
+  const [row] = await db
+    .insert(emailTemplateVersions)
+    .values({
+      organizationId: organization,
+      templateKey: input.templateKey,
+      version: input.version,
+      locale: input.locale,
+      subject: input.subject,
+      textBody: input.text,
+      htmlBody: input.html,
+    })
+    .returning({ id: emailTemplateVersions.id });
+  if (!row) throw new Error('Mail template version could not be stored');
+  return row.id;
+}
+
+export function createMailOutboxRepository(
+  db: Database,
+  options: { leaseMs?: number } = {},
+) {
+  const leaseMs = options.leaseMs ?? 5 * 60_000;
+  const mapOutbox = (row: typeof emailOutbox.$inferSelect) => ({
+    id: row.id,
+    organizationId: row.organizationId,
+    eventId: row.eventId,
+    templateKey: row.templateKey as
+      'verification' | 'entry-received' | 'accepted' | 'rejected',
+    templateVersion: row.templateVersion,
+    locale: row.locale as 'de' | 'en',
+    recipient: row.recipient,
+    idempotencyKey: row.idempotencyKey,
+    variables: row.variables,
+    status: row.status as 'pending' | 'sending' | 'sent' | 'failed',
+    attempts: row.attempts,
+  });
   return {
     get: async (ctx: { organizationId: string }, id: string) => {
-      const result = await db.execute(
-        sql`select id,organization_id as "organizationId",event_id as "eventId",template_key as "templateKey",template_version as "templateVersion",locale,recipient,idempotency_key as "idempotencyKey",variables,status,attempts from email_outbox where organization_id=${ctx.organizationId} and id=${id}`,
-      );
-      return (
-        (result as unknown as { rows: Array<Record<string, unknown>> })
-          .rows[0] ?? null
-      );
+      const [row] = await db
+        .select()
+        .from(emailOutbox)
+        .where(
+          and(
+            eq(emailOutbox.organizationId, ctx.organizationId),
+            eq(emailOutbox.id, id),
+          ),
+        )
+        .limit(1);
+      return row ? mapOutbox(row) : null;
     },
     claim: async (ctx: { organizationId: string }, id: string) => {
-      const result = await db.execute(
-        sql`update email_outbox set status='sending',claimed_at=now() where organization_id=${ctx.organizationId} and id=${id} and status='pending' and available_at<=now() returning id,organization_id as "organizationId",event_id as "eventId",template_key as "templateKey",template_version as "templateVersion",locale,recipient,idempotency_key as "idempotencyKey",variables,status,attempts`,
-      );
-      return (
-        (result as unknown as { rows: Array<Record<string, unknown>> })
-          .rows[0] ?? null
-      );
+      const [row] = await db
+        .update(emailOutbox)
+        .set({ status: 'sending', claimedAt: new Date() })
+        .where(
+          and(
+            eq(emailOutbox.organizationId, ctx.organizationId),
+            eq(emailOutbox.id, id),
+            sql`(${emailOutbox.status} = 'pending' and ${emailOutbox.availableAt} <= now()) or (${emailOutbox.status} = 'sending' and ${emailOutbox.claimedAt} < now() - (${leaseMs} * interval '1 millisecond'))`,
+          ),
+        )
+        .returning();
+      return row ? mapOutbox(row) : null;
     },
     template: async (
       ctx: { organizationId: string },
@@ -1766,28 +1846,47 @@ export function createMailOutboxRepository(db: Database) {
       version: number,
       locale: string,
     ) => {
-      const result = await db.execute(
-        sql`select subject,text_body as text,html_body as html from email_template_version where organization_id=${ctx.organizationId} and template_key=${key} and version=${version} and locale=${locale}`,
-      );
-      return (
-        (
-          result as unknown as {
-            rows: Array<{ subject: string; text: string; html: string }>;
-          }
-        ).rows[0] ?? null
-      );
+      const [row] = await db
+        .select({
+          subject: emailTemplateVersions.subject,
+          text: emailTemplateVersions.textBody,
+          html: emailTemplateVersions.htmlBody,
+        })
+        .from(emailTemplateVersions)
+        .where(
+          and(
+            eq(emailTemplateVersions.organizationId, ctx.organizationId),
+            eq(emailTemplateVersions.templateKey, key),
+            eq(emailTemplateVersions.version, version),
+            eq(emailTemplateVersions.locale, locale),
+          ),
+        )
+        .limit(1);
+      return row
+        ? { subject: row.subject, text: row.text, html: row.html }
+        : null;
     },
     organizationMailConfig: async (ctx: { organizationId: string }) => {
-      const result = await db.execute(
-        sql`select mail_from as "from",mail_reply_to as "replyTo" from organization where id=${ctx.organizationId} and status='active'`,
-      );
-      return (
-        (
-          result as unknown as {
-            rows: Array<{ from: string | null; replyTo: string | null }>;
-          }
-        ).rows[0] ?? null
-      );
+      const [row] = await db
+        .select({
+          from: organizations.mailFrom,
+          replyTo: organizations.mailReplyTo,
+        })
+        .from(organizations)
+        .where(
+          and(
+            eq(organizations.id, ctx.organizationId),
+            eq(organizations.status, 'active'),
+          ),
+        )
+        .limit(1);
+      const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return row?.from &&
+        email.test(row.from) &&
+        (row.replyTo === null ||
+          (row.replyTo !== null && email.test(row.replyTo)))
+        ? { from: row.from, replyTo: row.replyTo }
+        : null;
     },
     finish: async (
       ctx: { organizationId: string },
@@ -1800,12 +1899,49 @@ export function createMailOutboxRepository(db: Database) {
       },
     ) => {
       await db.transaction(async (tx) => {
-        await tx.execute(
-          sql`update email_outbox set status=${outcome.outcome === 'retry' ? 'pending' : outcome.outcome},attempts=${outcome.attempts},available_at=${outcome.availableAt ?? new Date()},sent_at=${outcome.outcome === 'sent' ? new Date() : null},claimed_at=null,last_error=${outcome.error ?? null} where organization_id=${ctx.organizationId} and id=${id} and status='sending'`,
-        );
-        await tx.execute(
-          sql`insert into email_delivery(organization_id,outbox_id,attempt,outcome,error) values (${ctx.organizationId},${id},${outcome.attempts},${outcome.outcome},${outcome.error ?? null}) on conflict (organization_id,outbox_id,attempt) do nothing`,
-        );
+        await tx
+          .update(emailOutbox)
+          .set({
+            status: outcome.outcome === 'retry' ? 'pending' : outcome.outcome,
+            attempts: outcome.attempts,
+            availableAt: outcome.availableAt ?? new Date(),
+            sentAt: outcome.outcome === 'sent' ? new Date() : null,
+            claimedAt: null,
+            lastError: outcome.error ?? null,
+          })
+          .where(
+            and(
+              eq(emailOutbox.organizationId, ctx.organizationId),
+              eq(emailOutbox.id, id),
+              eq(emailOutbox.status, 'sending'),
+            ),
+          );
+        await tx
+          .insert(emailDeliveries)
+          .values({
+            organizationId: ctx.organizationId,
+            outboxId: id,
+            attempt: outcome.attempts,
+            outcome: outcome.outcome,
+            error: outcome.error ?? null,
+          })
+          .onConflictDoNothing();
+        if (outcome.outcome === 'retry' && outcome.availableAt) {
+          const envelope = {
+            type: 'mail.outbox',
+            schemaVersion: 1,
+            organizationId: ctx.organizationId,
+            correlationId: id,
+            payload: { outboxId: id },
+          };
+          await tx.execute(sql`select graphile_worker.add_job(
+            identifier := 'mail_outbox',
+            payload := ${JSON.stringify(envelope)}::json,
+            run_at := ${outcome.availableAt},
+            job_key := ${`mail-outbox:${id}`},
+            job_key_mode := 'replace'
+          )`);
+        }
       });
     },
   };

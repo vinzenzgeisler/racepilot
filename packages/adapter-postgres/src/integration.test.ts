@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { organizationId, createPaymentReference } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
@@ -26,8 +26,6 @@ import {
   createVehicleRepository,
   createEntryRepository,
   createInvoiceRepository,
-  enqueueMailOutbox,
-  createMailOutboxRepository,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
