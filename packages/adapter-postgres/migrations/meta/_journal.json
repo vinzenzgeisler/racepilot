@@ -54,7 +54,6 @@
     {
       "idx": 7,
       "version": "7",
-<<<<<<< HEAD
       "when": 1793232001000,
       "tag": "0007_public_registration",
       "breakpoints": false
@@ -69,21 +68,12 @@
     {
       "idx": 9,
       "version": "7",
-      "when": 1793235600000,
-      "tag": "0009_entry_confirmation_documents",
+      "when": 1793239200000,
+      "tag": "0009_artifact_jobs",
       "breakpoints": false
     },
     {
       "idx": 10,
-      "version": "7",
-=======
->>>>>>> 0f19f82 (fix: download generated PDFs through artifact jobs)
-      "when": 1793239200000,
-      "tag": "0010_artifact_jobs",
-      "breakpoints": false
-    },
-    {
-      "idx": 8,
       "version": "7",
       "when": 1793239201000,
       "tag": "0010_artifact_claim_fencing",
