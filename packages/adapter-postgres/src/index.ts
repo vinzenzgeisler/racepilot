@@ -1491,3 +1491,107 @@ export function createInvoiceRepository(db: Database): InvoiceRepository {
     },
   };
 }
+
+/** Drizzle's database and transaction objects both satisfy this executor. */
+export type MailOutboxExecutor = Pick<Database, 'execute'>;
+export interface NewMailOutboxMessage {
+  eventId?: string | null;
+  templateKey: string;
+  templateVersion: number;
+  templateVersionId?: string | null;
+  locale: 'de' | 'en';
+  recipient: string;
+  idempotencyKey: string;
+  variables: Record<string, string>;
+}
+/** Call with the caller's Drizzle transaction to atomically enqueue with domain writes. */
+export async function enqueueMailOutbox(
+  executor: MailOutboxExecutor,
+  organization: string,
+  input: NewMailOutboxMessage,
+): Promise<string> {
+  const result = await executor.execute(sql`insert into email_outbox
+    (organization_id,event_id,template_key,template_version,template_version_id,locale,recipient,idempotency_key,variables)
+    values (${organization},${input.eventId ?? null},${input.templateKey},${input.templateVersion},${input.templateVersionId ?? null},${input.locale},${input.recipient},${input.idempotencyKey},${JSON.stringify(input.variables)}::jsonb)
+    on conflict (organization_id,idempotency_key) do nothing returning id`);
+  const rows = (result as unknown as { rows: Array<{ id: string }> }).rows;
+  if (rows[0]) return rows[0].id;
+  const existing = await executor.execute(
+    sql`select id from email_outbox where organization_id=${organization} and idempotency_key=${input.idempotencyKey}`,
+  );
+  const existingRows = (existing as unknown as { rows: Array<{ id: string }> })
+    .rows;
+  if (!existingRows[0]) throw new Error('Mail outbox enqueue failed');
+  return existingRows[0].id;
+}
+
+export function createMailOutboxRepository(db: Database) {
+  return {
+    get: async (ctx: { organizationId: string }, id: string) => {
+      const result = await db.execute(
+        sql`select id,organization_id as "organizationId",event_id as "eventId",template_key as "templateKey",template_version as "templateVersion",locale,recipient,idempotency_key as "idempotencyKey",variables,status,attempts from email_outbox where organization_id=${ctx.organizationId} and id=${id}`,
+      );
+      return (
+        (result as unknown as { rows: Array<Record<string, unknown>> })
+          .rows[0] ?? null
+      );
+    },
+    claim: async (ctx: { organizationId: string }, id: string) => {
+      const result = await db.execute(
+        sql`update email_outbox set status='sending',claimed_at=now() where organization_id=${ctx.organizationId} and id=${id} and status='pending' and available_at<=now() returning id,organization_id as "organizationId",event_id as "eventId",template_key as "templateKey",template_version as "templateVersion",locale,recipient,idempotency_key as "idempotencyKey",variables,status,attempts`,
+      );
+      return (
+        (result as unknown as { rows: Array<Record<string, unknown>> })
+          .rows[0] ?? null
+      );
+    },
+    template: async (
+      ctx: { organizationId: string },
+      key: string,
+      version: number,
+      locale: string,
+    ) => {
+      const result = await db.execute(
+        sql`select subject,text_body as text,html_body as html from email_template_version where organization_id=${ctx.organizationId} and template_key=${key} and version=${version} and locale=${locale}`,
+      );
+      return (
+        (
+          result as unknown as {
+            rows: Array<{ subject: string; text: string; html: string }>;
+          }
+        ).rows[0] ?? null
+      );
+    },
+    organizationMailConfig: async (ctx: { organizationId: string }) => {
+      const result = await db.execute(
+        sql`select mail_from as "from",mail_reply_to as "replyTo" from organization where id=${ctx.organizationId} and status='active'`,
+      );
+      return (
+        (
+          result as unknown as {
+            rows: Array<{ from: string | null; replyTo: string | null }>;
+          }
+        ).rows[0] ?? null
+      );
+    },
+    finish: async (
+      ctx: { organizationId: string },
+      id: string,
+      outcome: {
+        outcome: 'sent' | 'retry' | 'failed';
+        attempts: number;
+        availableAt?: Date;
+        error?: string;
+      },
+    ) => {
+      await db.transaction(async (tx) => {
+        await tx.execute(
+          sql`update email_outbox set status=${outcome.outcome === 'retry' ? 'pending' : outcome.outcome},attempts=${outcome.attempts},available_at=${outcome.availableAt ?? new Date()},sent_at=${outcome.outcome === 'sent' ? new Date() : null},claimed_at=null,last_error=${outcome.error ?? null} where organization_id=${ctx.organizationId} and id=${id} and status='sending'`,
+        );
+        await tx.execute(
+          sql`insert into email_delivery(organization_id,outbox_id,attempt,outcome,error) values (${ctx.organizationId},${id},${outcome.attempts},${outcome.outcome},${outcome.error ?? null}) on conflict (organization_id,outbox_id,attempt) do nothing`,
+        );
+      });
+    },
+  };
+}

@@ -43,6 +43,13 @@
       "when": 1793177562343,
       "tag": "0005_invoice_reference_counter",
       "breakpoints": false
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793232000000,
+      "tag": "0006_mail_outbox",
+      "breakpoints": false
     }
   ]
 }
