@@ -10,7 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@racepilot/contracts": "*",
     "@racepilot/core": "*",
-    "@racepilot/contracts": "*"
+    "graphile-worker": "^0.16.6"
   }
 }
