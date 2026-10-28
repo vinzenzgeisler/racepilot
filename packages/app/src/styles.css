@@ -16,7 +16,7 @@ body {
 }
 .shell {
   --brand-primary: #174ea6;
-  --brand-accent: #f4b400;
+  --brand-accent: #8a5a00;
   max-width: 72rem;
   margin: auto;
   padding: clamp(1rem, 4vw, 3rem);
