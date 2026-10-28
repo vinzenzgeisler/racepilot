@@ -1477,7 +1477,7 @@ export function createEntryRepository(
         predicates.push(
           or(
             ilike(entries.requestedStartNumber, pattern),
-            ilike(entries.id, pattern),
+            sql`${entries.id}::text ilike ${pattern}`,
             ilike(people.firstName, pattern),
             ilike(people.lastName, pattern),
             ilike(vehicles.make, pattern),
