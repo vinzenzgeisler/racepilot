@@ -580,6 +580,51 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       expect(
         await createEntryRepository(db).getById(ctxA, foreignEntryId!),
       ).toBeNull();
+      const adminEntries = createEntryRepository(db);
+      const pageA = await adminEntries.listAdmin!(ctxA, {
+        page: 1,
+        pageSize: 100,
+        eventId: eventA!.id,
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      expect(pageA.items.map((entry) => entry.id)).toEqual([entryA!.id]);
+      expect(pageA.total).toBe(1);
+      const byDriverName = await adminEntries.listAdmin!(ctxA, {
+        page: 1,
+        pageSize: 100,
+        search: 'Same',
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      expect(byDriverName.items.map((entry) => entry.id)).toEqual([entryA!.id]);
+      expect(byDriverName.total).toBe(1);
+      const byEntryId = await adminEntries.listAdmin!(ctxA, {
+        page: 1,
+        pageSize: 100,
+        search: entryA!.id.slice(0, 8),
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      expect(byEntryId.items.map((entry) => entry.id)).toEqual([entryA!.id]);
+      expect(byEntryId.total).toBe(1);
+      const foreignIdSearch = await adminEntries.listAdmin!(ctxA, {
+        page: 1,
+        pageSize: 100,
+        search: foreignEntryId!.slice(0, 8),
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      expect(foreignIdSearch).toMatchObject({ items: [], total: 0 });
+      expect(
+        await adminEntries.listAdmin!(ctxA, {
+          page: 1,
+          pageSize: 100,
+          eventId: eventB!.id,
+          sort: 'createdAt',
+          direction: 'desc',
+        }),
+      ).toMatchObject({ items: [], total: 0 });
       expect(
         await db
           .select()

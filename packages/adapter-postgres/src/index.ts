@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { createHash, randomBytes } from 'node:crypto';
 import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator';
-import { eq, and, inArray, desc } from 'drizzle-orm';
+import { eq, and, inArray, asc, desc, ilike, or, count } from 'drizzle-orm';
 import {
   pgTable,
   primaryKey,
@@ -1457,6 +1457,108 @@ export function createEntryRepository(
           ),
         );
       return row ? mapEntry(row) : null;
+    },
+    listAdmin: async (ctx, query) => {
+      const predicates = [
+        eq(entries.organizationId, ctx.organizationId),
+        sql`${entries.deletedAt} is null`,
+      ];
+      if (query.eventId) predicates.push(eq(entries.eventId, query.eventId));
+      if (query.classId) predicates.push(eq(entries.classId, query.classId));
+      if (query.acceptanceStatus)
+        predicates.push(eq(entries.acceptanceStatus, query.acceptanceStatus));
+      if (query.verificationStatus)
+        predicates.push(
+          eq(entries.verificationStatus, query.verificationStatus),
+        );
+      const search = query.search?.trim();
+      if (search) {
+        const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
+        predicates.push(
+          or(
+            ilike(entries.requestedStartNumber, pattern),
+            sql`${entries.id}::text ilike ${pattern}`,
+            ilike(people.firstName, pattern),
+            ilike(people.lastName, pattern),
+            ilike(vehicles.make, pattern),
+            ilike(vehicles.model, pattern),
+            ilike(vehicles.registration, pattern),
+            ilike(eventClasses.name, pattern),
+          )!,
+        );
+      }
+      const where = and(...predicates);
+      const sortColumns = {
+        createdAt: entries.createdAt,
+        requestedStartNumber: entries.requestedStartNumber,
+        acceptanceStatus: entries.acceptanceStatus,
+        verificationStatus: entries.verificationStatus,
+      } as const;
+      const sortColumn = sortColumns[query.sort];
+      const [rows, totals] = await Promise.all([
+        db
+          .select({ entry: entries })
+          .from(entries)
+          .innerJoin(
+            people,
+            and(
+              eq(people.id, entries.driverPersonId),
+              eq(people.organizationId, entries.organizationId),
+            ),
+          )
+          .innerJoin(
+            vehicles,
+            and(
+              eq(vehicles.id, entries.vehicleId),
+              eq(vehicles.organizationId, entries.organizationId),
+            ),
+          )
+          .innerJoin(
+            eventClasses,
+            and(
+              eq(eventClasses.id, entries.classId),
+              eq(eventClasses.eventId, entries.eventId),
+              eq(eventClasses.organizationId, entries.organizationId),
+            ),
+          )
+          .where(where)
+          .orderBy(
+            query.direction === 'asc' ? asc(sortColumn) : desc(sortColumn),
+            asc(entries.id),
+          )
+          .limit(query.pageSize)
+          .offset((query.page - 1) * query.pageSize),
+        db
+          .select({ total: count() })
+          .from(entries)
+          .innerJoin(
+            people,
+            and(
+              eq(people.id, entries.driverPersonId),
+              eq(people.organizationId, entries.organizationId),
+            ),
+          )
+          .innerJoin(
+            vehicles,
+            and(
+              eq(vehicles.id, entries.vehicleId),
+              eq(vehicles.organizationId, entries.organizationId),
+            ),
+          )
+          .innerJoin(
+            eventClasses,
+            and(
+              eq(eventClasses.id, entries.classId),
+              eq(eventClasses.eventId, entries.eventId),
+              eq(eventClasses.organizationId, entries.organizationId),
+            ),
+          )
+          .where(where),
+      ]);
+      return {
+        items: rows.map((row) => mapEntry(row.entry)),
+        total: totals[0]?.total ?? 0,
+      };
     },
     transition: async (
       ctx,
