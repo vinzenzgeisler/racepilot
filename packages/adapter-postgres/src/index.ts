@@ -1,7 +1,18 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { createHash, randomBytes } from 'node:crypto';
 import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator';
-import { eq, and, inArray, asc, desc, ilike, or, count } from 'drizzle-orm';
+import {
+  eq,
+  and,
+  inArray,
+  asc,
+  desc,
+  ilike,
+  or,
+  count,
+  lt,
+  lte,
+} from 'drizzle-orm';
 import {
   pgTable,
   primaryKey,
@@ -1017,7 +1028,13 @@ export function createArtifactJobRepository(
           and(
             eq(artifactJobs.organizationId, ctx.organizationId),
             eq(artifactJobs.id, id),
-            sql`${artifactJobs.status} = 'queued' or (${artifactJobs.status} = 'processing' and ${artifactJobs.claimedAt} < now() - interval '5 minutes')`,
+            or(
+              eq(artifactJobs.status, 'queued'),
+              and(
+                eq(artifactJobs.status, 'processing'),
+                lt(artifactJobs.claimedAt, sql`now() - interval '5 minutes'`),
+              ),
+            ),
           ),
         )
         .returning();
@@ -2488,7 +2505,19 @@ export function createMailOutboxRepository(
           and(
             eq(emailOutbox.organizationId, ctx.organizationId),
             eq(emailOutbox.id, id),
-            sql`(${emailOutbox.status} = 'pending' and ${emailOutbox.availableAt} <= now()) or (${emailOutbox.status} = 'sending' and ${emailOutbox.claimedAt} < now() - (${leaseMs} * interval '1 millisecond'))`,
+            or(
+              and(
+                eq(emailOutbox.status, 'pending'),
+                lte(emailOutbox.availableAt, sql`now()`),
+              ),
+              and(
+                eq(emailOutbox.status, 'sending'),
+                lt(
+                  emailOutbox.claimedAt,
+                  sql`now() - (${leaseMs} * interval '1 millisecond')`,
+                ),
+              ),
+            ),
           ),
         )
         .returning();

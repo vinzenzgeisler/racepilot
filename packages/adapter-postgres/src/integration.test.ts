@@ -39,6 +39,7 @@ import {
   createEntryExportRepository,
   createEntryConfirmationRepository,
   createArtifactJobRepository,
+  artifactJobs as artifactJobTable,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
@@ -525,6 +526,46 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(duplicateArtifact.id).toBe(firstArtifact.id);
       expect(firstArtifact.status).toBe('queued');
+      const ctxB = { ...ctxA, organizationId: organizationId(orgB!) };
+      const staleSameTenant = await artifactJobs.enqueue(ctxA, {
+        eventId: eventA!.id,
+        kind: 'entries_csv',
+        idempotencyKey: `stale-same-tenant-${suffix}`,
+      });
+      const staleForeignTenant = await artifactJobs.enqueue(ctxB, {
+        eventId: eventB!.id,
+        kind: 'entries_csv',
+        idempotencyKey: `stale-foreign-tenant-${suffix}`,
+      });
+      const staleClaimedAt = new Date(Date.now() - 10 * 60_000);
+      const staleSameTenantToken = crypto.randomUUID();
+      const staleForeignTenantToken = crypto.randomUUID();
+      await db
+        .update(artifactJobTable)
+        .set({
+          status: 'processing',
+          claimedAt: staleClaimedAt,
+          claimToken: staleSameTenantToken,
+        })
+        .where(
+          and(
+            eq(artifactJobTable.organizationId, ctxA.organizationId),
+            eq(artifactJobTable.id, staleSameTenant.id),
+          ),
+        );
+      await db
+        .update(artifactJobTable)
+        .set({
+          status: 'processing',
+          claimedAt: staleClaimedAt,
+          claimToken: staleForeignTenantToken,
+        })
+        .where(
+          and(
+            eq(artifactJobTable.organizationId, ctxB.organizationId),
+            eq(artifactJobTable.id, staleForeignTenant.id),
+          ),
+        );
       const claimContexts = [
         { ...ctxA, jobId: `worker-a-${suffix}` },
         { ...ctxA, jobId: `worker-b-${suffix}` },
@@ -535,6 +576,20 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         ),
       );
       expect(claims.filter(Boolean)).toHaveLength(1);
+      for (const [job, expectedToken] of [
+        [staleSameTenant, staleSameTenantToken],
+        [staleForeignTenant, staleForeignTenantToken],
+      ] as const) {
+        const [unchanged] = await db
+          .select()
+          .from(artifactJobTable)
+          .where(eq(artifactJobTable.id, job.id));
+        expect(unchanged).toMatchObject({
+          status: 'processing',
+          claimToken: expectedToken,
+          claimedAt: staleClaimedAt,
+        });
+      }
       const winnerIndex = claims.findIndex(Boolean);
       const firstClaim = claims[winnerIndex]!;
       const winnerContext = claimContexts[winnerIndex]!;
@@ -735,7 +790,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           direction: 'desc',
         }),
       ).toMatchObject({ items: [], total: 0 });
-const cloudCtxA = { ...ctxA, deploymentMode: 'cloud' as const };
+      const cloudCtxA = { ...ctxA, deploymentMode: 'cloud' as const };
       const csvRows = await createEntryExportRepository(db).listByEvent(
         cloudCtxA,
         eventA!.id,

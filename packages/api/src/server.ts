@@ -47,10 +47,20 @@ const storage =
     : config.STORAGE_PROVIDER === 's3'
       ? createS3ObjectStorage({
           bucket: config.STORAGE_S3_BUCKET!,
-          ...(config.STORAGE_S3_REGION ? { region: config.STORAGE_S3_REGION } : {}),
-          ...(config.STORAGE_S3_ENDPOINT ? { endpoint: config.STORAGE_S3_ENDPOINT } : {}),
-          ...(config.STORAGE_S3_ACCESS_KEY_ID && config.STORAGE_S3_SECRET_ACCESS_KEY
-            ? { credentials: { accessKeyId: config.STORAGE_S3_ACCESS_KEY_ID, secretAccessKey: config.STORAGE_S3_SECRET_ACCESS_KEY } }
+          ...(config.STORAGE_S3_REGION
+            ? { region: config.STORAGE_S3_REGION }
+            : {}),
+          ...(config.STORAGE_S3_ENDPOINT
+            ? { endpoint: config.STORAGE_S3_ENDPOINT }
+            : {}),
+          ...(config.STORAGE_S3_ACCESS_KEY_ID &&
+          config.STORAGE_S3_SECRET_ACCESS_KEY
+            ? {
+                credentials: {
+                  accessKeyId: config.STORAGE_S3_ACCESS_KEY_ID,
+                  secretAccessKey: config.STORAGE_S3_SECRET_ACCESS_KEY,
+                },
+              }
             : {}),
         })
       : undefined;
