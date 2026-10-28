@@ -26,6 +26,15 @@ import {
   createVehicleRepository,
   createEntryRepository,
   createInvoiceRepository,
+  createPublicRegistrationService,
+  createRegistrationSettingsRepository,
+  createEventConsentRepository,
+  registrationSettingsAudit,
+  eventConsentTermsAudit,
+  groupEmailVerifications,
+  saveMailTemplateVersion,
+  emailOutbox,
+  consentEvidence,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
@@ -922,6 +931,595 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
             `price-b-${suffix}`,
           ]),
         );
+      await pool.end();
+    }
+  });
+
+  it('submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    const [org] = await db
+      .insert(organizations)
+      .values({
+        id: '10000000-0000-4000-8000-000000000001',
+        slug: 'tenant-a',
+        name: 'Public Registration',
+        timezone: 'UTC',
+        locale: 'en',
+      })
+      .returning();
+    const orgId = organizationId(org!.id);
+    let foreignOrgId: string | null = null;
+    try {
+      const termText = 'Terms configured by the event organizer.';
+      const { createHash } = await import('node:crypto');
+      const termHash = createHash('sha256').update(termText).digest('hex');
+      const [event] = await db
+        .insert(events)
+        .values({
+          organizationId: org!.id,
+          id: '20000000-0000-4000-8000-000000000001',
+          slug: `event-${suffix}`,
+          name: 'E2E Event',
+          startsOn: '2030-10-20',
+          endsOn: '2030-10-21',
+          status: 'open',
+          consentTerms: [
+            {
+              key: 'terms',
+              version: '2030.1',
+              language: 'en',
+              text: termText,
+              hash: termHash,
+            },
+          ],
+        })
+        .returning();
+      const classValues = ['A', 'B'].map((code) => ({
+        organizationId: org!.id,
+        eventId: event!.id,
+        name: `Class ${code}`,
+        code,
+        vehicleType: 'car',
+        sortOrder: code === 'A' ? 0 : 1,
+        maxParticipants: 20,
+      }));
+      const classes = await db
+        .insert(eventClasses)
+        .values(classValues)
+        .returning();
+      const settingsRepository = createRegistrationSettingsRepository(db);
+      const consentRepository = createEventConsentRepository(db);
+      await db.insert(eventClassPricingRules).values(
+        classes.map((eventClass) => ({
+          organizationId: org!.id,
+          eventId: event!.id,
+          classId: eventClass.id,
+          baseCents: 5000,
+          additionalEntryAdjustmentCents: 0,
+          earlyBirdDiscountCents: 0,
+        })),
+      );
+      await saveMailTemplateVersion(db, org!.id, {
+        templateKey: 'verification',
+        version: 1,
+        locale: 'en',
+        subject: 'Verify',
+        text: 'Verify: {{verificationUrl}}',
+        html: '<a href="{{verificationUrl}}">Verify</a>',
+      });
+      const service = createPublicRegistrationService(db, {
+        canonicalBaseUrl: 'https://racepilot.example.test',
+      });
+      const [foreignOrg] = await db
+        .insert(organizations)
+        .values({
+          id: '10000000-0000-4000-8000-000000000002',
+          slug: 'tenant-b',
+          name: 'Foreign Tenant',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      foreignOrgId = foreignOrg!.id;
+      const [foreignEvent] = await db
+        .insert(events)
+        .values({
+          organizationId: foreignOrg!.id,
+          id: '20000000-0000-4000-8000-000000000002',
+          slug: `foreign-event-${suffix}`,
+          name: 'Foreign Event',
+          startsOn: '2030-10-20',
+          endsOn: '2030-10-21',
+          status: 'open',
+        })
+        .returning();
+      const [foreignClass] = await db
+        .insert(eventClasses)
+        .values({
+          organizationId: foreignOrg!.id,
+          eventId: foreignEvent!.id,
+          name: 'Foreign Class',
+          code: 'F',
+          vehicleType: 'car',
+          sortOrder: 0,
+          maxParticipants: 20,
+        })
+        .returning();
+      const [foreignPerson] = await db
+        .insert(people)
+        .values({
+          organizationId: foreignOrg!.id,
+          firstName: 'Foreign',
+          lastName: 'Person',
+          email: 'foreign@example.test',
+          emailNormalized: 'foreign@example.test',
+          dateOfBirth: '1990-01-01',
+        })
+        .returning();
+      const [foreignGroup] = await db
+        .insert(registrationGroups)
+        .values({
+          organizationId: foreignOrg!.id,
+          eventId: foreignEvent!.id,
+          personId: foreignPerson!.id,
+        })
+        .returning();
+      const foreignToken = 'tenant-b-verification-token';
+      await db.insert(groupEmailVerifications).values({
+        organizationId: foreignOrg!.id,
+        eventId: foreignEvent!.id,
+        registrationGroupId: foreignGroup!.id,
+        tokenHash: createHash('sha256').update(foreignToken).digest('hex'),
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      const input = (
+        submissionId: string,
+        person: {
+          firstName: string;
+          lastName: string;
+          dateOfBirth: string;
+          guardianName?: string;
+          guardianEmail?: string;
+          email?: string;
+        },
+      ) => ({
+        submissionId,
+        formVersion: '1.0' as const,
+        eventSlug: event!.slug,
+        language: 'en' as const,
+        person: { ...person, email: person.email ?? 'family@example.test' },
+        entries: classes.map((eventClass, index) => ({
+          classId: eventClass.id,
+          vehicle: {
+            make: 'Maker',
+            model: `Car ${index}`,
+            year: 2020,
+            registration: null,
+          },
+        })),
+        consents: [
+          {
+            key: 'terms',
+            version: '2030.1',
+            hash: termHash,
+            accepted: true as const,
+          },
+        ],
+      });
+      const ctx = {
+        deploymentMode: 'cloud' as const,
+        organizationId: orgId,
+        permissions: new Set<string>(),
+        capabilities: new Set<string>(),
+        correlationId: 'test',
+      };
+      expect(await service.getForm(ctx, foreignEvent!.slug)).toBeNull();
+      expect(await service.verify(ctx, foreignToken)).toBe(false);
+      expect(
+        (
+          await db
+            .select()
+            .from(groupEmailVerifications)
+            .where(eq(groupEmailVerifications.organizationId, foreignOrg!.id))
+        ).at(0)?.consumedAt,
+      ).toBeNull();
+      const foreignClassPayload = {
+        ...input(crypto.randomUUID(), {
+          firstName: 'Cross',
+          lastName: 'Tenant',
+          dateOfBirth: '1990-01-01',
+        }),
+        entries: [
+          {
+            classId: foreignClass!.id,
+            vehicle: {
+              make: 'Make',
+              model: 'Model',
+              year: null,
+              registration: null,
+            },
+          },
+        ],
+      };
+      await expect(
+        service.submit(ctx, event!.slug, foreignClassPayload),
+      ).rejects.toThrow('Registration unavailable');
+      expect(
+        await db
+          .select()
+          .from(entries)
+          .where(eq(entries.organizationId, foreignOrg!.id)),
+      ).toHaveLength(0);
+      const submissionId = crypto.randomUUID();
+      const body = input(submissionId, {
+        firstName: 'Avery',
+        lastName: 'Driver',
+        dateOfBirth: '1990-01-01',
+      });
+      expect(
+        await Promise.all([
+          service.submit(ctx, event!.slug, body),
+          service.submit(ctx, event!.slug, body),
+        ]),
+      ).toEqual([
+        { accepted: true, entryCount: 2 },
+        { accepted: true, entryCount: 2 },
+      ]);
+      await expect(
+        service.submit(ctx, event!.slug, {
+          ...body,
+          person: { ...body.person, firstName: 'Different' },
+        }),
+      ).rejects.toThrow('Submission ID conflict');
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Avery',
+            lastName: 'Driver',
+            dateOfBirth: '1990-01-01',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Avery',
+            lastName: 'Driver',
+            dateOfBirth: '1990-01-01',
+            email: 'different-contact@example.test',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+      const groups = await db
+        .select()
+        .from(registrationGroups)
+        .where(eq(registrationGroups.organizationId, org!.id));
+      expect(groups).toHaveLength(1);
+      const savedEntries = await db
+        .select()
+        .from(entries)
+        .where(eq(entries.organizationId, org!.id));
+      expect(savedEntries).toHaveLength(2);
+      expect(
+        savedEntries.every(
+          (entry) =>
+            entry.verificationStatus === 'unverified' &&
+            entry.acceptanceStatus === 'pending',
+        ),
+      ).toBe(true);
+      expect(
+        await db
+          .select()
+          .from(invoices)
+          .where(eq(invoices.organizationId, org!.id)),
+      ).toHaveLength(1);
+      expect(
+        await db
+          .select()
+          .from(consentEvidence)
+          .where(eq(consentEvidence.organizationId, org!.id)),
+      ).toHaveLength(1);
+      const outbox = (
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, org!.id))
+      )[0]!;
+      const verificationUrl = outbox.variables.verificationUrl!;
+      const token = new URL(verificationUrl).searchParams.get('token')!;
+      expect(new URL(verificationUrl).origin).toBe(
+        'https://racepilot.example.test',
+      );
+      const expiredToken = 'expired-verification-token';
+      await db.insert(groupEmailVerifications).values({
+        organizationId: org!.id,
+        eventId: event!.id,
+        registrationGroupId: groups[0]!.id,
+        tokenHash: createHash('sha256').update(expiredToken).digest('hex'),
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      expect(await service.verify(ctx, expiredToken)).toBe(false);
+      expect(await service.verify(ctx, `${token}tampered`)).toBe(false);
+      expect(
+        (
+          await db
+            .select()
+            .from(entries)
+            .where(eq(entries.organizationId, org!.id))
+        ).every((entry) => entry.verificationStatus === 'unverified'),
+      ).toBe(true);
+      expect(await service.verify(ctx, token)).toBe(true);
+      expect(await service.verify(ctx, token)).toBe(false);
+      expect(
+        (
+          await db
+            .select()
+            .from(entries)
+            .where(eq(entries.organizationId, org!.id))
+        ).every((entry) => entry.verificationStatus === 'verified'),
+      ).toBe(true);
+      expect(
+        await db
+          .select()
+          .from(entryAuditEvents)
+          .where(eq(entryAuditEvents.organizationId, org!.id)),
+      ).toHaveLength(2);
+      expect(await service.submit(ctx, event!.slug, body)).toEqual({
+        accepted: true,
+        entryCount: 2,
+      });
+      // A different person may use the same contact address with the default organization policy.
+      await service.submit(
+        ctx,
+        event!.slug,
+        input(crypto.randomUUID(), {
+          firstName: 'Casey',
+          lastName: 'Driver',
+          dateOfBirth: '2000-02-02',
+        }),
+      );
+      const newSettings = {
+        sharedContactEmail: 'disallowed' as const,
+        minimumAge: 16,
+        guardianRequiredBelowAge: 18,
+        maximumClassesPerGroup: 8,
+      };
+      await settingsRepository.update(ctx, newSettings, 'test-admin');
+      expect(
+        (
+          await db
+            .select()
+            .from(registrationSettingsAudit)
+            .where(eq(registrationSettingsAudit.organizationId, org!.id))
+        ).at(-1)?.actor,
+      ).toBe('test-admin');
+      await consentRepository.update(
+        ctx,
+        event!.id,
+        [
+          {
+            key: 'terms',
+            version: '2030.1',
+            language: 'en',
+            text: termText,
+            hash: termHash,
+          },
+        ],
+        'test-admin',
+      );
+      expect(
+        await db
+          .select()
+          .from(eventConsentTermsAudit)
+          .where(eq(eventConsentTermsAudit.organizationId, org!.id)),
+      ).toHaveLength(1);
+      await settingsRepository.update(
+        ctx,
+        {
+          sharedContactEmail: 'disallowed',
+          minimumAge: null,
+          guardianRequiredBelowAge: 18,
+          maximumClassesPerGroup: 8,
+        },
+        'test-admin',
+      );
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Morgan',
+            lastName: 'Driver',
+            dateOfBirth: '2001-03-03',
+            email: 'FAMILY@example.test',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Minor',
+            lastName: 'Driver',
+            dateOfBirth: '2018-01-01',
+            email: 'minor-no-guardian@example.test',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Minor',
+            lastName: 'Driver',
+            dateOfBirth: '2018-01-01',
+            guardianName: 'Guardian',
+            guardianEmail: 'guardian@example.test',
+            email: 'minor-guardian@example.test',
+          }),
+        ),
+      ).resolves.toMatchObject({ accepted: true });
+      await settingsRepository.update(
+        ctx,
+        {
+          sharedContactEmail: 'allowed',
+          minimumAge: 16,
+          guardianRequiredBelowAge: 18,
+          maximumClassesPerGroup: 8,
+        },
+        'test-admin',
+      );
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Too Young',
+            lastName: 'Driver',
+            dateOfBirth: '2020-01-01',
+            email: 'min-age@example.test',
+            guardianName: 'Guardian',
+            guardianEmail: 'guardian@example.test',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+      await settingsRepository.update(
+        ctx,
+        {
+          sharedContactEmail: 'allowed',
+          minimumAge: null,
+          guardianRequiredBelowAge: 18,
+          maximumClassesPerGroup: 1,
+        },
+        'test-admin',
+      );
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Too Many Classes',
+            lastName: 'Driver',
+            dateOfBirth: '1990-01-01',
+            email: 'too-many@example.test',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+      await settingsRepository.update(
+        ctx,
+        {
+          sharedContactEmail: 'allowed',
+          minimumAge: null,
+          guardianRequiredBelowAge: 18,
+          maximumClassesPerGroup: 8,
+        },
+        'test-admin',
+      );
+      await db
+        .update(eventClasses)
+        .set({ closed: true })
+        .where(eq(eventClasses.id, classes[0]!.id));
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Closed Class',
+            lastName: 'Driver',
+            dateOfBirth: '1990-01-01',
+            email: 'closed-class@example.test',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+      await db
+        .update(eventClasses)
+        .set({ closed: false })
+        .where(eq(eventClasses.id, classes[0]!.id));
+      const concurrentId = crypto.randomUUID();
+      const concurrentPayloadA = input(concurrentId, {
+        firstName: 'Concurrent A',
+        lastName: 'Driver',
+        dateOfBirth: '1990-01-01',
+      });
+      const concurrentPayloadB = {
+        ...concurrentPayloadA,
+        consents: [],
+      };
+      const concurrentResults = await Promise.allSettled([
+        service.submit(ctx, event!.slug, concurrentPayloadA),
+        service.submit(ctx, event!.slug, concurrentPayloadB),
+      ]);
+      expect(
+        concurrentResults.filter((result) => result.status === 'fulfilled'),
+      ).toHaveLength(1);
+      expect(
+        concurrentResults.filter((result) => result.status === 'rejected'),
+      ).toHaveLength(1);
+      expect(
+        concurrentResults.find((result) => result.status === 'rejected'),
+      ).toMatchObject({
+        reason: expect.objectContaining({ message: 'Submission ID conflict' }),
+      });
+      await db
+        .update(events)
+        .set({ registrationClosesAt: new Date(Date.now() - 1000) })
+        .where(eq(events.id, event!.id));
+      expect(await service.submit(ctx, event!.slug, body)).toEqual({
+        accepted: true,
+        entryCount: 2,
+      });
+      await expect(
+        service.submit(ctx, event!.slug, {
+          ...body,
+          entries: body.entries.map((entry) => ({
+            ...entry,
+            vehicle: { ...entry.vehicle, model: 'Changed after close' },
+          })),
+        }),
+      ).rejects.toThrow('Submission ID conflict');
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Late',
+            lastName: 'Driver',
+            dateOfBirth: '1990-01-01',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+      await db
+        .update(events)
+        .set({ status: 'closed' })
+        .where(eq(events.id, event!.id));
+      await expect(
+        service.submit(
+          ctx,
+          event!.slug,
+          input(crypto.randomUUID(), {
+            firstName: 'Late',
+            lastName: 'Driver',
+            dateOfBirth: '1990-01-01',
+          }),
+        ),
+      ).rejects.toThrow('Registration unavailable');
+    } finally {
+      if (foreignOrgId) {
+        await db.delete(events).where(eq(events.organizationId, foreignOrgId));
+        await db
+          .delete(organizations)
+          .where(eq(organizations.id, foreignOrgId));
+      }
+      await db.delete(emailOutbox).where(eq(emailOutbox.organizationId, orgId));
+      await db.delete(events).where(eq(events.organizationId, orgId));
+      await db.delete(organizations).where(eq(organizations.id, orgId));
       await pool.end();
     }
   });

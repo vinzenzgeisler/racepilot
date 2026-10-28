@@ -116,7 +116,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run db:migrate
-      - run: npm test -- --run $(find packages -type f \( -name '*.integration.test.ts' -o -name 'integration.test.ts' \) -print)
+      - run: npm test -- --run --no-file-parallelism $(find packages -type f \( -name '*.integration.test.ts' -o -name 'integration.test.ts' \) -print)
 
   core-community:
     name: core (community)

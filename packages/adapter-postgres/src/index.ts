@@ -1,8 +1,10 @@
 import { drizzle } from 'drizzle-orm/node-postgres';
+import { createHash, randomBytes } from 'node:crypto';
 import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray, desc } from 'drizzle-orm';
 import {
   pgTable,
+  primaryKey,
   uuid,
   text,
   boolean,
@@ -43,10 +45,13 @@ import type {
 import {
   organizationId,
   permissionsForRole,
+  calculatePrice,
+  assertEntryTransition,
   normalizeEmail,
   normalizeRequestedStartNumber,
   deriveInvoiceStatus,
   createPaymentReference,
+  ProviderError,
 } from '@racepilot/core';
 import type { Pool } from 'pg';
 export const organizations = pgTable(
@@ -63,6 +68,20 @@ export const organizations = pgTable(
     timezone: text('timezone').notNull(),
     locale: text('locale').notNull(),
     currency: text('currency').notNull().default('EUR'),
+    registrationSettings: jsonb('registration_settings')
+      .$type<{
+        sharedContactEmail: 'allowed' | 'disallowed';
+        minimumAge: number | null;
+        guardianRequiredBelowAge: number;
+        maximumClassesPerGroup: number;
+      }>()
+      .notNull()
+      .default({
+        sharedContactEmail: 'allowed',
+        minimumAge: null,
+        guardianRequiredBelowAge: 18,
+        maximumClassesPerGroup: 8,
+      }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -82,6 +101,10 @@ export const organizations = pgTable(
     check(
       'organization_mail_reply_to_check',
       sql`${t.mailReplyTo} is null or (length(trim(${t.mailReplyTo})) > 3 and position('@' in ${t.mailReplyTo}) > 1)`,
+    ),
+    check(
+      'organization_registration_settings_check',
+      sql`jsonb_typeof(${t.registrationSettings}) = 'object' and ${t.registrationSettings} ?& array['sharedContactEmail','minimumAge','guardianRequiredBelowAge','maximumClassesPerGroup'] and (${t.registrationSettings} - 'sharedContactEmail' - 'minimumAge' - 'guardianRequiredBelowAge' - 'maximumClassesPerGroup') = '{}'::jsonb and ${t.registrationSettings}->>'sharedContactEmail' in ('allowed','disallowed') and (${t.registrationSettings}->>'guardianRequiredBelowAge')::int between 0 and 100 and (${t.registrationSettings}->>'maximumClassesPerGroup')::int between 1 and 100 and (jsonb_typeof(${t.registrationSettings}->'minimumAge') = 'null' or (${t.registrationSettings}->>'minimumAge')::int between 0 and 100)`,
     ),
   ],
 );
@@ -106,6 +129,18 @@ export const events = pgTable(
     openedAt: timestamp('opened_at', { withTimezone: true }),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    consentTerms: jsonb('consent_terms')
+      .$type<
+        Array<{
+          key: string;
+          version: string;
+          language: 'de' | 'en';
+          text: string;
+          hash: string;
+        }>
+      >()
+      .notNull()
+      .default([]),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -241,10 +276,6 @@ export const people = pgTable(
   },
   (t) => [
     unique('person_org_id_unique').on(t.organizationId, t.id),
-    // Soft-deleted people release their email for a new person record.
-    uniqueIndex('person_org_email_unique')
-      .on(t.organizationId, t.emailNormalized)
-      .where(sql`${t.deletedAt} is null`),
     foreignKey({
       columns: [t.organizationId],
       foreignColumns: [organizations.id],
@@ -291,6 +322,9 @@ export const registrationGroups = pgTable(
     organizationId: uuid('organization_id').notNull(),
     eventId: uuid('event_id').notNull(),
     personId: uuid('person_id').notNull(),
+    contactEmail: text('contact_email'),
+    guardianName: text('guardian_name'),
+    guardianEmail: text('guardian_email'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -593,6 +627,134 @@ export const invoicePaymentAuditEvents = pgTable(
   ],
 );
 
+export const publicEntrySubmissions = pgTable(
+  'public_entry_submission',
+  {
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    submissionId: uuid('submission_id').notNull(),
+    requestFingerprint: text('request_fingerprint'),
+    registrationGroupId: uuid('registration_group_id'),
+    response: jsonb('response').$type<{
+      accepted: true;
+      entryCount: number;
+    } | null>(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.eventId, t.submissionId] }),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'public_entry_submission_event_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'public_entry_submission_group_fk',
+    }),
+  ],
+);
+export const groupEmailVerifications = pgTable(
+  'registration_group_email_verification',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    registrationGroupId: uuid('registration_group_id').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'group_email_verification_group_fk',
+    }).onDelete('cascade'),
+    index('group_email_verification_expiry_idx')
+      .on(t.expiresAt)
+      .where(sql`${t.consumedAt} is null`),
+  ],
+);
+export const consentEvidence = pgTable(
+  'consent_evidence',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    registrationGroupId: uuid('registration_group_id').notNull(),
+    textKey: text('text_key').notNull(),
+    textVersion: text('text_version').notNull(),
+    language: text('language').notNull(),
+    textHash: text('text_hash').notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'consent_evidence_group_fk',
+    }).onDelete('cascade'),
+    index('consent_evidence_group_idx').on(
+      t.organizationId,
+      t.registrationGroupId,
+    ),
+  ],
+);
+export const eventConsentTermsAudit = pgTable(
+  'event_consent_terms_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    actor: text('actor').notNull(),
+    beforeTerms: jsonb('before_terms').notNull(),
+    afterTerms: jsonb('after_terms').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'event_consent_terms_audit_event_fk',
+    }).onDelete('cascade'),
+  ],
+);
+export const registrationSettingsAudit = pgTable(
+  'registration_settings_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    actor: text('actor').notNull(),
+    beforeSettings: jsonb('before_settings').notNull(),
+    afterSettings: jsonb('after_settings').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
 export type Database = ReturnType<typeof drizzle>;
 export async function migrate(databaseUrl: string): Promise<void> {
   const { Pool } = await import('pg');
@@ -1944,5 +2106,730 @@ export function createMailOutboxRepository(
         }
       });
     },
+  };
+}
+
+export type RegistrationSettings = {
+  sharedContactEmail: 'allowed' | 'disallowed';
+  minimumAge: number | null;
+  guardianRequiredBelowAge: number;
+  maximumClassesPerGroup: number;
+};
+export function createRegistrationSettingsRepository(db: Database) {
+  return {
+    get: async (ctx: RequestContext): Promise<RegistrationSettings> => {
+      const [row] = await db
+        .select({ settings: organizations.registrationSettings })
+        .from(organizations)
+        .where(eq(organizations.id, ctx.organizationId));
+      return (
+        row?.settings ?? {
+          sharedContactEmail: 'allowed',
+          minimumAge: null,
+          guardianRequiredBelowAge: 18,
+          maximumClassesPerGroup: 8,
+        }
+      );
+    },
+    update: async (
+      ctx: RequestContext,
+      settings: RegistrationSettings,
+      actor: string,
+    ): Promise<RegistrationSettings> =>
+      db.transaction(async (tx) => {
+        const [before] = await tx
+          .select({ settings: organizations.registrationSettings })
+          .from(organizations)
+          .where(eq(organizations.id, ctx.organizationId))
+          .for('update');
+        if (!before) throw new Error('Organization not found');
+        const [updated] = await tx
+          .update(organizations)
+          .set({ registrationSettings: settings, updatedAt: new Date() })
+          .where(eq(organizations.id, ctx.organizationId))
+          .returning({ settings: organizations.registrationSettings });
+        await tx.insert(registrationSettingsAudit).values({
+          organizationId: ctx.organizationId,
+          actor,
+          beforeSettings: before.settings,
+          afterSettings: settings,
+        });
+        return updated!.settings;
+      }),
+  };
+}
+
+export interface PublicRegistrationPayload {
+  submissionId: string;
+  formVersion: '1.0';
+  eventSlug: string;
+  language: 'de' | 'en';
+  person: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    dateOfBirth: string;
+    guardianName?: string | undefined;
+    guardianEmail?: string | undefined;
+  };
+  entries: Array<{
+    classId: string;
+    vehicle: {
+      make: string;
+      model: string;
+      year: number | null;
+      registration: string | null;
+    };
+  }>;
+  consents: Array<{
+    key: string;
+    version: string;
+    hash: string;
+    accepted: true;
+  }>;
+}
+export function createPublicRegistrationService(
+  db: Database,
+  options: { canonicalBaseUrl: string; tokenTtlMs?: number },
+) {
+  const canonicalBase = new URL(options.canonicalBaseUrl);
+  if (!['https:', 'http:'].includes(canonicalBase.protocol))
+    throw new Error('Invalid canonical URL');
+  const hashToken = (token: string) =>
+    createHash('sha256').update(token).digest('hex');
+  return {
+    getForm: async (ctx: RequestContext, eventSlug: string) => {
+      const [event] = await db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.slug, eventSlug),
+            eq(events.status, 'open'),
+          ),
+        )
+        .limit(1);
+      if (
+        !event ||
+        (event.registrationOpensAt && event.registrationOpensAt > new Date()) ||
+        (event.registrationClosesAt && event.registrationClosesAt < new Date())
+      )
+        return null;
+      const classRows = await db
+        .select()
+        .from(eventClasses)
+        .where(
+          and(
+            eq(eventClasses.organizationId, ctx.organizationId),
+            eq(eventClasses.eventId, event.id),
+            eq(eventClasses.closed, false),
+          ),
+        )
+        .orderBy(eventClasses.sortOrder);
+      const [organization] = await db
+        .select({ registrationSettings: organizations.registrationSettings })
+        .from(organizations)
+        .where(eq(organizations.id, ctx.organizationId))
+        .limit(1);
+      return {
+        event: {
+          id: event.id,
+          slug: event.slug,
+          name: event.name,
+          startsOn: event.startsOn,
+        },
+        classes: classRows,
+        consents: event.consentTerms,
+        registrationSettings: organization?.registrationSettings ?? {
+          sharedContactEmail: 'allowed',
+          minimumAge: null,
+          guardianRequiredBelowAge: 18,
+          maximumClassesPerGroup: 8,
+        },
+      };
+    },
+    submit: async (
+      ctx: RequestContext,
+      eventSlug: string,
+      payload: PublicRegistrationPayload,
+    ) => {
+      const token = randomBytes(32).toString('base64url');
+      const tokenHash = hashToken(token);
+      const canonicalize = (value: unknown): string => {
+        if (Array.isArray(value))
+          return `[${value.map(canonicalize).join(',')}]`;
+        if (value && typeof value === 'object') {
+          const record = value as Record<string, unknown>;
+          return `{${Object.keys(record)
+            .sort()
+            .map((key) => `${JSON.stringify(key)}:${canonicalize(record[key])}`)
+            .join(',')}}`;
+        }
+        return JSON.stringify(value) ?? 'null';
+      };
+      const requestFingerprint = createHash('sha256')
+        .update(canonicalize(payload))
+        .digest('hex');
+      const receivedAt = new Date();
+      return db.transaction(async (tx) => {
+        const [event] = await tx
+          .select()
+          .from(events)
+          .where(
+            and(
+              eq(events.organizationId, ctx.organizationId),
+              eq(events.slug, eventSlug),
+            ),
+          )
+          .for('share')
+          .limit(1);
+        const unavailable = () => new Error('Registration unavailable');
+        const submissionConflict = () =>
+          new ProviderError('conflict', 'Submission ID conflict');
+        if (!event) throw unavailable();
+        const [existingSubmission] = await tx
+          .select()
+          .from(publicEntrySubmissions)
+          .where(
+            and(
+              eq(publicEntrySubmissions.organizationId, ctx.organizationId),
+              eq(publicEntrySubmissions.eventId, event.id),
+              eq(publicEntrySubmissions.submissionId, payload.submissionId),
+            ),
+          )
+          .limit(1);
+        if (existingSubmission) {
+          if (existingSubmission.requestFingerprint !== requestFingerprint)
+            throw submissionConflict();
+          if (existingSubmission.response) return existingSubmission.response;
+        }
+        if (
+          event.status !== 'open' ||
+          (event.registrationOpensAt &&
+            event.registrationOpensAt > receivedAt) ||
+          (event.registrationClosesAt &&
+            event.registrationClosesAt < receivedAt)
+        )
+          throw unavailable();
+        if (!existingSubmission) {
+          const [reservation] = await tx
+            .insert(publicEntrySubmissions)
+            .values({
+              organizationId: ctx.organizationId,
+              eventId: event.id,
+              submissionId: payload.submissionId,
+              requestFingerprint,
+            })
+            .onConflictDoUpdate({
+              target: [
+                publicEntrySubmissions.organizationId,
+                publicEntrySubmissions.eventId,
+                publicEntrySubmissions.submissionId,
+              ],
+              set: {
+                requestFingerprint: sql`${publicEntrySubmissions.requestFingerprint}`,
+              },
+            })
+            .returning({
+              requestFingerprint: publicEntrySubmissions.requestFingerprint,
+              response: publicEntrySubmissions.response,
+              inserted: sql<boolean>`xmax = 0`,
+            });
+          if (!reservation) throw unavailable();
+          if (!reservation.inserted) {
+            if (reservation.requestFingerprint !== requestFingerprint)
+              throw submissionConflict();
+            if (reservation.response) return reservation.response;
+            throw unavailable();
+          }
+        }
+        const [org] = await tx
+          .select({
+            settings: organizations.registrationSettings,
+            currency: organizations.currency,
+          })
+          .from(organizations)
+          .where(eq(organizations.id, ctx.organizationId))
+          .limit(1);
+        if (!org) throw unavailable();
+        const settings = org.settings ?? {
+          sharedContactEmail: 'allowed' as const,
+          minimumAge: null,
+          guardianRequiredBelowAge: 18,
+          maximumClassesPerGroup: 8,
+        };
+        const emailNormalized = normalizeEmail(payload.person.email);
+        const normalizedName = (value: string) =>
+          value.trim().normalize('NFKC').toLocaleLowerCase('en-US');
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${ctx.organizationId}:email:${emailNormalized}`}, 0))`,
+        );
+        await tx.execute(
+          sql`select pg_advisory_xact_lock(hashtextextended(${`${ctx.organizationId}:person:${normalizedName(payload.person.firstName)}:${normalizedName(payload.person.lastName)}:${payload.person.dateOfBirth}`}, 0))`,
+        );
+        const dob = new Date(`${payload.person.dateOfBirth}T00:00:00.000Z`);
+        const eventStart = new Date(`${event.startsOn}T00:00:00.000Z`);
+        if (!Number.isFinite(dob.getTime()) || dob > eventStart)
+          throw unavailable();
+        let age = eventStart.getUTCFullYear() - dob.getUTCFullYear();
+        if (
+          eventStart.getUTCMonth() < dob.getUTCMonth() ||
+          (eventStart.getUTCMonth() === dob.getUTCMonth() &&
+            eventStart.getUTCDate() < dob.getUTCDate())
+        )
+          age--;
+        if (settings.minimumAge !== null && age < settings.minimumAge)
+          throw unavailable();
+        const needsGuardian = age < settings.guardianRequiredBelowAge;
+        if (
+          needsGuardian &&
+          (!payload.person.guardianName?.trim() ||
+            !payload.person.guardianEmail)
+        )
+          throw unavailable();
+        const uniqueClassIds = [
+          ...new Set(payload.entries.map((entry) => entry.classId)),
+        ];
+        if (uniqueClassIds.length > settings.maximumClassesPerGroup)
+          throw unavailable();
+        const classes = await tx
+          .select()
+          .from(eventClasses)
+          .where(
+            and(
+              eq(eventClasses.organizationId, ctx.organizationId),
+              eq(eventClasses.eventId, event.id),
+              inArray(eventClasses.id, uniqueClassIds),
+            ),
+          )
+          .orderBy(eventClasses.id)
+          .for('update');
+        if (
+          classes.length !== uniqueClassIds.length ||
+          classes.some((eventClass) => eventClass.closed)
+        )
+          throw unavailable();
+        for (const eventClass of classes) {
+          const count = await tx
+            .select({ count: sql<number>`count(*)::int` })
+            .from(entries)
+            .where(
+              and(
+                eq(entries.organizationId, ctx.organizationId),
+                eq(entries.eventId, event.id),
+                eq(entries.classId, eventClass.id),
+                sql`${entries.deletedAt} is null`,
+                sql`${entries.acceptanceStatus} <> 'withdrawn'`,
+              ),
+            );
+          if (
+            eventClass.maxParticipants !== null &&
+            Number(count[0]?.count ?? 0) +
+              payload.entries.filter((entry) => entry.classId === eventClass.id)
+                .length >
+              eventClass.maxParticipants
+          )
+            throw unavailable();
+        }
+        const emailOwners = await tx
+          .select({
+            id: people.id,
+            firstName: people.firstName,
+            lastName: people.lastName,
+            dateOfBirth: people.dateOfBirth,
+          })
+          .from(people)
+          .where(
+            and(
+              eq(people.organizationId, ctx.organizationId),
+              eq(people.emailNormalized, emailNormalized),
+              sql`${people.deletedAt} is null`,
+            ),
+          );
+        const samePerson = emailOwners.find(
+          (person) =>
+            normalizedName(person.firstName) ===
+              normalizedName(payload.person.firstName) &&
+            normalizedName(person.lastName) ===
+              normalizedName(payload.person.lastName) &&
+            person.dateOfBirth === payload.person.dateOfBirth,
+        );
+        if (
+          settings.sharedContactEmail === 'disallowed' &&
+          emailOwners.some((person) => person.id !== samePerson?.id)
+        )
+          throw unavailable();
+        let personId = samePerson?.id;
+        if (!personId) {
+          const sameBirthDate = await tx
+            .select({
+              id: people.id,
+              firstName: people.firstName,
+              lastName: people.lastName,
+            })
+            .from(people)
+            .where(
+              and(
+                eq(people.organizationId, ctx.organizationId),
+                eq(people.dateOfBirth, payload.person.dateOfBirth),
+                sql`${people.deletedAt} is null`,
+              ),
+            );
+          if (
+            sameBirthDate.some(
+              (person) =>
+                normalizedName(person.firstName) ===
+                  normalizedName(payload.person.firstName) &&
+                normalizedName(person.lastName) ===
+                  normalizedName(payload.person.lastName),
+            )
+          )
+            throw unavailable();
+          const [person] = await tx
+            .insert(people)
+            .values({
+              organizationId: ctx.organizationId,
+              firstName: payload.person.firstName.trim(),
+              lastName: payload.person.lastName.trim(),
+              email: payload.person.email.trim(),
+              emailNormalized,
+              dateOfBirth: payload.person.dateOfBirth,
+            })
+            .returning({ id: people.id });
+          personId = person!.id;
+        }
+        const consentTerms = event.consentTerms ?? [];
+        const selectedTerms = payload.consents.map((consent) => {
+          const term = consentTerms.find(
+            (item) =>
+              item.key === consent.key &&
+              item.version === consent.version &&
+              item.language === payload.language &&
+              item.hash === consent.hash,
+          );
+          if (!term) throw unavailable();
+          const actualHash = createHash('sha256')
+            .update(term.text)
+            .digest('hex');
+          if (actualHash !== consent.hash) throw unavailable();
+          return term;
+        });
+        if (
+          selectedTerms.length !==
+          consentTerms.filter((term) => term.language === payload.language)
+            .length
+        )
+          throw unavailable();
+        const [priorGroup] = await tx
+          .select({ id: registrationGroups.id })
+          .from(registrationGroups)
+          .where(
+            and(
+              eq(registrationGroups.organizationId, ctx.organizationId),
+              eq(registrationGroups.eventId, event.id),
+              eq(registrationGroups.personId, personId),
+            ),
+          )
+          .limit(1);
+        if (priorGroup) throw unavailable();
+        const [group] = await tx
+          .insert(registrationGroups)
+          .values({
+            organizationId: ctx.organizationId,
+            eventId: event.id,
+            personId,
+            contactEmail: payload.person.email.trim(),
+            guardianName: needsGuardian
+              ? payload.person.guardianName!.trim()
+              : null,
+            guardianEmail: needsGuardian
+              ? payload.person.guardianEmail!.trim()
+              : null,
+          })
+          .returning({ id: registrationGroups.id });
+        const [template] = await tx
+          .select()
+          .from(emailTemplateVersions)
+          .where(
+            and(
+              eq(emailTemplateVersions.organizationId, ctx.organizationId),
+              eq(emailTemplateVersions.templateKey, 'verification'),
+              eq(emailTemplateVersions.locale, payload.language),
+            ),
+          )
+          .orderBy(desc(emailTemplateVersions.version))
+          .limit(1);
+        const classRules = await tx
+          .select()
+          .from(eventClassPricingRules)
+          .where(
+            and(
+              eq(eventClassPricingRules.organizationId, ctx.organizationId),
+              eq(eventClassPricingRules.eventId, event.id),
+            ),
+          )
+          .for('share');
+        const selectedRules = classRules.filter((rule) =>
+          uniqueClassIds.includes(rule.classId),
+        );
+        if (
+          classRules.length > 0 &&
+          selectedRules.length !== uniqueClassIds.length
+        )
+          throw unavailable();
+        const snapshot =
+          classRules.length > 0
+            ? calculatePrice({
+                currency: org.currency,
+                submittedAt: receivedAt.toISOString(),
+                lines: selectedRules.map((rule) => ({
+                  classId: rule.classId,
+                  quantity: payload.entries.filter(
+                    (entry) => entry.classId === rule.classId,
+                  ).length,
+                  rule: {
+                    classId: rule.classId,
+                    baseCents: rule.baseCents,
+                    additionalEntryAdjustmentCents:
+                      rule.additionalEntryAdjustmentCents,
+                    earlyBirdDeadline:
+                      rule.earlyBirdDeadline?.toISOString() ?? null,
+                    earlyBirdDiscountCents: rule.earlyBirdDiscountCents,
+                  },
+                })),
+              })
+            : null;
+        const entryRepo = createEntryRepository(db);
+        const invoiceRepo = createInvoiceRepository(db);
+        const entryIds: string[] = [];
+        for (const requestEntry of payload.entries) {
+          const [vehicle] = await tx
+            .insert(vehicles)
+            .values({
+              organizationId: ctx.organizationId,
+              make: requestEntry.vehicle.make.trim(),
+              model: requestEntry.vehicle.model.trim(),
+              year: requestEntry.vehicle.year,
+              registration: requestEntry.vehicle.registration?.trim() ?? null,
+            })
+            .returning({ id: vehicles.id });
+          const entry = await entryRepo.create!(
+            ctx,
+            {
+              eventId: event.id,
+              classId: requestEntry.classId,
+              registrationGroupId: group!.id,
+              driverPersonId: personId,
+              vehicleId: vehicle!.id,
+              requestedStartNumber: null,
+              priceSnapshotVersion: snapshot?.version ?? null,
+              priceSnapshot: snapshot,
+              formSnapshotVersion: payload.formVersion,
+            },
+            tx,
+          );
+          entryIds.push(entry.id);
+        }
+        if (snapshot)
+          await invoiceRepo.issue(ctx, event.id, group!.id, snapshot, tx);
+        for (const term of selectedTerms)
+          await tx.insert(consentEvidence).values({
+            organizationId: ctx.organizationId,
+            eventId: event.id,
+            registrationGroupId: group!.id,
+            textKey: term.key,
+            textVersion: term.version,
+            language: payload.language,
+            textHash: term.hash,
+            acceptedAt: receivedAt,
+          });
+        await tx.insert(groupEmailVerifications).values({
+          organizationId: ctx.organizationId,
+          eventId: event.id,
+          registrationGroupId: group!.id,
+          tokenHash,
+          expiresAt: new Date(
+            receivedAt.getTime() + (options.tokenTtlMs ?? 24 * 60 * 60_000),
+          ),
+        });
+        const verificationUrl = new URL(
+          `/registration/verify?token=${encodeURIComponent(token)}`,
+          canonicalBase,
+        ).toString();
+        await enqueueMailOutbox(
+          db,
+          ctx.organizationId,
+          {
+            eventId: event.id,
+            templateKey: 'verification',
+            templateVersion: template?.version ?? 1,
+            templateVersionId: template?.id ?? null,
+            locale: payload.language,
+            recipient: payload.person.email,
+            idempotencyKey: `registration-verification:${payload.submissionId}`,
+            variables: {
+              verificationUrl,
+              recipientName: `${payload.person.firstName.trim()} ${payload.person.lastName.trim()}`,
+            },
+            correlationId: payload.submissionId,
+          },
+          tx,
+        );
+        const response = {
+          accepted: true as const,
+          entryCount: entryIds.length,
+        };
+        await tx
+          .update(publicEntrySubmissions)
+          .set({ registrationGroupId: group!.id, response })
+          .where(
+            and(
+              eq(publicEntrySubmissions.organizationId, ctx.organizationId),
+              eq(publicEntrySubmissions.eventId, event.id),
+              eq(publicEntrySubmissions.submissionId, payload.submissionId),
+            ),
+          );
+        return response;
+      });
+    },
+    verify: async (ctx: RequestContext, token: string) =>
+      db.transaction(async (tx) => {
+        const now = new Date();
+        const digest = hashToken(token);
+        const [verification] = await tx
+          .select()
+          .from(groupEmailVerifications)
+          .where(
+            and(
+              eq(groupEmailVerifications.organizationId, ctx.organizationId),
+              eq(groupEmailVerifications.tokenHash, digest),
+              sql`${groupEmailVerifications.consumedAt} is null`,
+              sql`${groupEmailVerifications.expiresAt} > ${now}`,
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!verification) return false;
+        const consumed = await tx
+          .update(groupEmailVerifications)
+          .set({ consumedAt: now })
+          .where(
+            and(
+              eq(groupEmailVerifications.organizationId, ctx.organizationId),
+              eq(groupEmailVerifications.id, verification.id),
+              sql`${groupEmailVerifications.consumedAt} is null`,
+              sql`${groupEmailVerifications.expiresAt} > ${now}`,
+            ),
+          )
+          .returning({ id: groupEmailVerifications.id });
+        if (!consumed.length) return false;
+        const groupEntries = await tx
+          .select({
+            id: entries.id,
+            verificationStatus: entries.verificationStatus,
+          })
+          .from(entries)
+          .where(
+            and(
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.eventId, verification.eventId),
+              eq(entries.registrationGroupId, verification.registrationGroupId),
+              sql`${entries.deletedAt} is null`,
+            ),
+          );
+        for (const entry of groupEntries) {
+          if (entry.verificationStatus === 'verified') continue;
+          assertEntryTransition(
+            'verification',
+            entry.verificationStatus,
+            'verified',
+          );
+          const updated = await tx
+            .update(entries)
+            .set({ verificationStatus: 'verified' })
+            .where(
+              and(
+                eq(entries.organizationId, ctx.organizationId),
+                eq(entries.id, entry.id),
+                eq(entries.verificationStatus, entry.verificationStatus),
+              ),
+            )
+            .returning({ id: entries.id });
+          if (updated.length)
+            await tx.insert(entryAuditEvents).values({
+              organizationId: ctx.organizationId,
+              entryId: entry.id,
+              transition: 'verification',
+              fromStatus: entry.verificationStatus,
+              toStatus: 'verified',
+              actor: 'email-verification',
+              reason: 'Registration group email verified',
+            });
+        }
+        return groupEntries.length > 0;
+      }),
+  };
+}
+
+export function createEventConsentRepository(db: Database) {
+  return {
+    get: async (ctx: RequestContext, eventId: string) => {
+      const [row] = await db
+        .select({ terms: events.consentTerms })
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.id, eventId),
+          ),
+        )
+        .limit(1);
+      return row?.terms ?? null;
+    },
+    update: async (
+      ctx: RequestContext,
+      eventId: string,
+      terms: Array<{
+        key: string;
+        version: string;
+        language: 'de' | 'en';
+        text: string;
+        hash: string;
+      }>,
+      actor: string,
+    ) =>
+      db.transaction(async (tx) => {
+        const [current] = await tx
+          .select({ terms: events.consentTerms })
+          .from(events)
+          .where(
+            and(
+              eq(events.organizationId, ctx.organizationId),
+              eq(events.id, eventId),
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!current) return null;
+        const [row] = await tx
+          .update(events)
+          .set({ consentTerms: terms, updatedAt: new Date() })
+          .where(
+            and(
+              eq(events.organizationId, ctx.organizationId),
+              eq(events.id, eventId),
+            ),
+          )
+          .returning({ terms: events.consentTerms });
+        await tx.insert(eventConsentTermsAudit).values({
+          organizationId: ctx.organizationId,
+          eventId,
+          actor,
+          beforeTerms: current.terms,
+          afterTerms: terms,
+        });
+        return row?.terms ?? null;
+      }),
   };
 }

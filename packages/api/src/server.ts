@@ -7,13 +7,16 @@ import {
   createOrganizationRepository,
   createEventRepository,
   createEventClassRepository,
+  createRegistrationSettingsRepository,
+  createEventConsentRepository,
+  createPublicRegistrationService,
   createMembershipRepository,
   createInvoicePaymentRepository,
   createPaymentRecipientRepository,
   createEventClassPricingRepository,
   getOrganizationMailConfiguration,
 } from '@racepilot/adapter-postgres';
-import { createApp } from './index.js';
+import { createApp, createInMemoryRegistrationRateLimiter } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
 const config = loadConfig(process.env);
 await migrate(config.DATABASE_URL);
@@ -27,6 +30,11 @@ const org = await ensureCommunityOrganization(db, {
 const organizationMail = config.mailEnabled
   ? await getOrganizationMailConfiguration(db, org.id)
   : null;
+const canonicalBaseUrl = config.CANONICAL_BASE_URL;
+const publicRegistration =
+  config.mailEnabled && canonicalBaseUrl
+    ? createPublicRegistrationService(db, { canonicalBaseUrl })
+    : undefined;
 const identityProvider =
   config.OIDC_PROVIDER === 'oidc'
     ? await createOIDCIdentityProvider({
@@ -40,6 +48,17 @@ serve({
     organizations: createOrganizationRepository(db),
     events: createEventRepository(db),
     classes: createEventClassRepository(db),
+    registrationSettings: createRegistrationSettingsRepository(db),
+    eventConsents: createEventConsentRepository(db),
+    ...(publicRegistration
+      ? {
+          publicRegistration,
+          registrationRateLimiter: createInMemoryRegistrationRateLimiter(),
+        }
+      : {}),
+    ...(config.CANONICAL_BASE_URL
+      ? { canonicalBaseUrl: config.CANONICAL_BASE_URL }
+      : {}),
     memberships: createMembershipRepository(db),
     payments: createInvoicePaymentRepository(db),
     paymentRecipients: createPaymentRecipientRepository(db),

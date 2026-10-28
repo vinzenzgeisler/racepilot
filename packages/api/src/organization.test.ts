@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { createApp, loadConfig, type ApiDeps } from './index.js';
+import {
+  createApp,
+  createInMemoryRegistrationRateLimiter,
+  loadConfig,
+  type ApiDeps,
+} from './index.js';
+import type { RegistrationSettings } from '@racepilot/contracts';
 import {
   createRequestContext,
   getEvent,
@@ -123,7 +129,7 @@ describe('admin organization routes', () => {
     const context = createRequestContext({
       deploymentMode: 'cloud',
       organizationId: organizationId(tenantA!.organizationId),
-      permissions: new Set(['event:read']),
+      permissions: new Set(['event:read', 'event:write']),
       capabilities: new Set(),
       correlationId: 'fixture',
     });
@@ -237,5 +243,257 @@ describe('admin organization routes', () => {
     expect(() => loadConfig({ DATABASE_URL: 'secret-value' })).not.toThrow(
       /secret-value/,
     );
+  });
+});
+
+describe('registration administration and public endpoints', () => {
+  it('reads defaults and records actor-scoped audited setting updates', async () => {
+    const api = deps();
+    let settings: RegistrationSettings = {
+      sharedContactEmail: 'allowed',
+      minimumAge: null,
+      guardianRequiredBelowAge: 18,
+      maximumClassesPerGroup: 8,
+    };
+    let actor = '';
+    api.registrationSettings = {
+      get: async () => settings,
+      update: async (_context, next, by) => {
+        settings = next;
+        actor = by;
+        return settings;
+      },
+    };
+    const app = createApp(api);
+    const get = await app.request('/admin/organization/registration-settings');
+    expect(get.status).toBe(200);
+    expect(await get.json()).toMatchObject({
+      sharedContactEmail: 'allowed',
+      guardianRequiredBelowAge: 18,
+    });
+    const update = await app.request(
+      '/admin/organization/registration-settings',
+      {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sharedContactEmail: 'disallowed',
+          minimumAge: 16,
+          guardianRequiredBelowAge: 18,
+          maximumClassesPerGroup: 5,
+        }),
+      },
+    );
+    expect(update.status).toBe(200);
+    expect(settings.sharedContactEmail).toBe('disallowed');
+    expect(actor).toBe('test|user');
+    expect(
+      (
+        await app.request('/admin/organization/registration-settings', {
+          method: 'PATCH',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ...settings, extra: true }),
+        })
+      ).status,
+    ).toBe(400);
+  });
+
+  it('does not trust spoofed client forwarding headers for registration rate limits', async () => {
+    const api = deps();
+    api.publicRegistration = {
+      getForm: async () => ({ event: { name: 'Demo' } }),
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    const observed: string[] = [];
+    api.registrationRateLimiter = {
+      consume: async (ip) => {
+        observed.push(ip);
+        return true;
+      },
+    };
+    const app = createApp(api);
+    const path = `/public/organizations/${config.organizationId}/events/event/registration/submissions`;
+    for (const value of ['192.0.2.1', '198.51.100.2', '203.0.113.3']) {
+      const response = await app.request(path, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'cf-connecting-ip': value,
+          'x-real-ip': value,
+          'x-forwarded-for': value,
+        },
+        body: JSON.stringify({
+          submissionId: '10000000-0000-4000-8000-000000000099',
+          formVersion: '1.0',
+          language: 'en',
+          eventSlug: 'event',
+          person: {
+            firstName: 'Test',
+            lastName: 'Driver',
+            email: 'test@example.test',
+            dateOfBirth: '2000-01-01',
+          },
+          entries: [
+            {
+              classId: '20000000-0000-4000-8000-000000000099',
+              vehicle: {
+                make: 'Maker',
+                model: 'Model',
+                year: 2020,
+                registration: null,
+              },
+            },
+          ],
+          consents: [
+            {
+              key: 'terms',
+              version: 'v1',
+              hash: 'a'.repeat(64),
+              accepted: true,
+            },
+          ],
+        }),
+      });
+      expect(response.status).toBe(202);
+    }
+    expect(observed).toEqual(['unknown', 'unknown', 'unknown']);
+  });
+
+  it('uses generic public verification responses and rate-limits by IP and event', async () => {
+    const api = deps();
+    api.publicRegistration = {
+      getForm: async () => ({ event: { name: 'Demo' } }),
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    api.registrationRateLimiter = {
+      consume: async (ip, event) =>
+        ip !== '192.0.2.1' || !event.endsWith(':event'),
+    };
+    const app = createApp(api);
+    const form = await app.request(
+      `/public/organizations/${config.organizationId}/events/event/registration/form`,
+    );
+    expect(form.status).toBe(200);
+    expect((await form.json()).form.version).toBe('1.0');
+    const registration = {
+      submissionId: '10000000-0000-4000-8000-000000000099',
+      formVersion: '1.0',
+      language: 'en',
+      eventSlug: 'event',
+      person: {
+        firstName: 'Test',
+        lastName: 'Driver',
+        email: 'test@example.test',
+        dateOfBirth: '2000-01-01',
+      },
+      entries: [
+        {
+          classId: '20000000-0000-4000-8000-000000000099',
+          vehicle: {
+            make: 'Maker',
+            model: 'Model',
+            year: 2020,
+            registration: null,
+          },
+        },
+      ],
+      consents: [
+        { key: 'terms', version: 'v1', hash: 'a'.repeat(64), accepted: true },
+      ],
+    };
+    const submitted = await app.request(
+      `/public/organizations/${config.organizationId}/events/event/registration/submissions`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(registration),
+      },
+    );
+    expect(submitted.status).toBe(202);
+    expect(await submitted.json()).toEqual({ accepted: true });
+    const invalid = await app.request('/public/registration/verify', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: 'not-a-token' }),
+    });
+    expect(await invalid.json()).toEqual({ verified: false });
+    const forbiddenTenant = await app.request(
+      '/public/organizations/20000000-0000-4000-8000-000000000001/events/event/registration/form',
+    );
+    expect(forbiddenTenant.status).toBe(404);
+    const invalidPayload = await app.request(
+      `/public/organizations/${config.organizationId}/events/event/registration/submissions`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ unexpected: true }),
+      },
+    );
+    expect(invalidPayload.status).toBe(400);
+    let now = 1000;
+    const limiter = createInMemoryRegistrationRateLimiter({
+      limit: 1,
+      windowMs: 100,
+      now: () => now,
+    });
+    expect(await limiter.consume('192.0.2.5', 'org:event')).toBe(true);
+    expect(await limiter.consume('192.0.2.5', 'org:event')).toBe(false);
+    expect(await limiter.consume('192.0.2.5', 'org:other')).toBe(true);
+    now += 101;
+    expect(await limiter.consume('192.0.2.5', 'org:event')).toBe(true);
+  });
+
+  it('requires event:write to change versioned event consent text and rejects wrong hashes', async () => {
+    const api = deps();
+    api.memberships = {
+      resolvePermissions: async () => new Set(['event:read', 'event:write']),
+    };
+    const records: string[] = [];
+    api.eventConsents = {
+      get: async () => [],
+      update: async (_context, _eventId, terms, actor) => {
+        records.push(`${terms.length}:${actor}`);
+        return terms;
+      },
+    };
+    const hash = await import('node:crypto').then(({ createHash }) =>
+      createHash('sha256').update('Terms').digest('hex'),
+    );
+    const app = createApp(api);
+    const good = await app.request(`/admin/events/${foreignEventId}/consents`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        terms: [
+          {
+            key: 'terms',
+            version: '2026-1',
+            language: 'en',
+            text: 'Terms',
+            hash,
+          },
+        ],
+      }),
+    });
+    expect(good.status).toBe(200);
+    expect(records[0]).toContain('test|user');
+    const bad = await app.request(`/admin/events/${foreignEventId}/consents`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        terms: [
+          {
+            key: 'terms',
+            version: '2026-1',
+            language: 'en',
+            text: 'Terms',
+            hash: '0'.repeat(64),
+          },
+        ],
+      }),
+    });
+    expect(bad.status).toBe(400);
   });
 });
