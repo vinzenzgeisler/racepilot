@@ -9,6 +9,7 @@ import { validateMailConfig } from '@racepilot/contracts';
 import { and, eq } from 'drizzle-orm';
 import { createMailOutboxTask } from './mail.js';
 import { createArtifactTask } from './artifacts.js';
+import { composeWorkerTasks } from './index.js';
 import { createLocalObjectStorage } from '@racepilot/adapter-local-storage';
 import { createS3ObjectStorage } from '@racepilot/adapter-s3';
 import {
@@ -98,7 +99,7 @@ if (mode === 'community') {
     throw new Error('Configured community organization is unavailable');
   communityOrganizationId = organization.id;
 }
-const taskList = {
+const taskList = composeWorkerTasks({
   ...(storage
     ? {
         artifact_generate: createArtifactTask({
@@ -138,7 +139,7 @@ const taskList = {
         }),
       }
     : {}),
-};
+});
 const runner = await run({ connectionString: databaseUrl, taskList });
 const stop = async () => {
   await runner.stop();

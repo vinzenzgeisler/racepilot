@@ -63,4 +63,51 @@ describe('App', () => {
       globalThis.fetch = originalFetch;
     }
   });
+
+  it('passes server bootstrap capabilities to the composed UI slot', async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        schemaVersion: 1,
+        configurationVersion: 'v1',
+        deploymentMode: 'community',
+        organization: {
+          id: '10000000-0000-4000-8000-000000000001',
+          slug: 'demo',
+          name: 'Demo Org',
+        },
+        branding: {
+          logoUrl: null,
+          primaryColor: '#174ea6',
+          accentColor: '#8a5a00',
+          contactEmail: null,
+          eventImageUrl: null,
+        },
+        locale: 'en',
+        activeEvent: null,
+        capabilities: ['private-example'],
+        legalLinks: [],
+      }),
+    });
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      await act(async () => {
+        root.render(
+          <App
+            renderContribution={(config) =>
+              config.capabilities.includes('private-example') ? (
+                <aside>Private runtime contribution</aside>
+              ) : null
+            }
+          />,
+        );
+      });
+      expect(container.textContent).toContain('Private runtime contribution');
+    } finally {
+      root.unmount();
+      globalThis.fetch = originalFetch;
+    }
+  });
 });
