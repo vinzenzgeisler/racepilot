@@ -74,6 +74,7 @@ export function AdminEntries() {
   const [totalPages, setTotalPages] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
+  const [refreshRevision, setRefreshRevision] = useState(0);
   const [draft, setDraft] = useState<EntryQuery>(initialQuery);
   const [applied, setApplied] = useState<EntryQuery>(initialQuery);
   const [classes, setClasses] = useState<Array<{ id: string; name: string }>>(
@@ -205,7 +206,7 @@ export function AdminEntries() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadEntries();
     return () => invalidate(gate);
-  }, [loadEntries]);
+  }, [loadEntries, refreshRevision]);
 
   useEffect(
     () => () => invalidateContextRequests(),
@@ -298,7 +299,7 @@ export function AdminEntries() {
         return;
       setSelected(updated);
       setReason('');
-      await loadEntries();
+      setRefreshRevision((revision) => revision + 1);
     } catch {
       if (isCurrent(transitionGate.current, generation, controller))
         setActionError('The status change could not be completed.');
@@ -337,10 +338,17 @@ export function AdminEntries() {
   }
 
   function changeSort(nextSort: string, nextDirection = draft.direction) {
-    const next = { ...draft, sort: nextSort, direction: nextDirection };
-    setDraft(next);
+    setDraft((value) => ({
+      ...value,
+      sort: nextSort,
+      direction: nextDirection,
+    }));
     setPage(1);
-    setApplied(next);
+    setApplied((value) => ({
+      ...value,
+      sort: nextSort,
+      direction: nextDirection,
+    }));
   }
 
   if (apiState === 'loading' && events.length === 0)

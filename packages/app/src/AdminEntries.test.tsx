@@ -159,6 +159,14 @@ function listCalls() {
     .map(([url]) => String(url))
     .filter((url) => url.startsWith('/admin/entries?'));
 }
+function visibleEntryIds() {
+  return [...container.querySelectorAll('tbody .link-button')].map((button) =>
+    button.textContent?.trim(),
+  );
+}
+function detailEntryId() {
+  return container.querySelector('.admin-detail dl dd')?.textContent?.trim();
+}
 
 beforeEach(() => {
   (
@@ -222,11 +230,10 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await chooseEvent(eventB);
-    expect(container.textContent).toContain(entryB);
+    expect(visibleEntryIds()).toEqual([entryB]);
     await act(async () => slowA.resolve(listResponse(itemsA)));
     await flush();
-    expect(container.textContent).toContain(entryB);
-    expect(container.textContent).not.toContain(entryA);
+    expect(visibleEntryIds()).toEqual([entryB]);
   });
 
   it('ignores a slower response for a superseded filter query', async () => {
@@ -249,11 +256,10 @@ describe('AdminEntries', () => {
     await submitFilters();
     await setInput('Search', 'fast');
     await submitFilters();
-    expect(container.textContent).toContain(entryA2);
+    expect(visibleEntryIds()).toEqual([entryA2]);
     await act(async () => slowSearch.resolve(listResponse([itemsA[0]!])));
     await flush();
-    expect(container.textContent).toContain(entryA2);
-    expect(container.textContent).not.toContain(`${entryA}</button>`);
+    expect(visibleEntryIds()).toEqual([entryA2]);
   });
 
   it('ignores delayed details when selection changes and resets class/detail state on event switch', async () => {
@@ -280,18 +286,17 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await click(entryA2);
-    expect(container.textContent).toContain(entryA2);
+    expect(detailEntryId()).toBe(entryA2);
     await act(async () => slowDetail.resolve(Response.json(itemsA[0])));
     await flush();
-    expect(container.textContent).toContain(entryA2);
-    expect(container.textContent).not.toContain(entryA + '</dd>');
+    expect(detailEntryId()).toBe(entryA2);
     await setSelect('Class', classA);
     await submitFilters();
     expect(listCalls().at(-1)).toContain(`classId=${classA}`);
     await chooseEvent(eventB);
     expect((labeled('Class', 'select') as HTMLSelectElement).value).toBe('');
-    expect(container.textContent).not.toContain('Entry detail');
-    expect(container.textContent).not.toContain('Reason (required for audit)');
+    expect(detailEntryId()).toBeUndefined();
+    expect(container.querySelector('.admin-detail textarea')).toBeNull();
     await flush();
     expect(listCalls().at(-1)).toContain(`eventId=${eventB}`);
     expect(listCalls().at(-1)).not.toContain('classId=');
@@ -326,16 +331,15 @@ describe('AdminEntries', () => {
     await setInput('Reason (required for audit)', 'Reviewed');
     await click('accepted');
     await chooseEvent(eventB);
-    expect(container.textContent).toContain(entryB);
+    expect(visibleEntryIds()).toEqual([entryB]);
     await act(async () =>
       slowTransition.resolve(
         Response.json({ ...itemsA[0], acceptanceStatus: 'accepted' }),
       ),
     );
     await flush();
-    expect(container.textContent).toContain(entryB);
-    expect(container.textContent).not.toContain('Entry detail');
-    expect(container.textContent).not.toContain(entryA);
+    expect(visibleEntryIds()).toEqual([entryB]);
+    expect(detailEntryId()).toBeUndefined();
   });
 
   it('does not let a transition overwrite a different entry selected before it resolves', async () => {
@@ -372,6 +376,47 @@ describe('AdminEntries', () => {
     );
   });
 
+  it('refreshes after a pending transition using the latest applied query and page', async () => {
+    const slowTransition = deferred<Response>();
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith(`/events/${eventA}/classes`)) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) {
+        const params = new URL(url, 'http://localhost').searchParams;
+        return listResponse(itemsA, Number(params.get('page')), 2);
+      }
+      if (url === `/admin/entries/${entryA}`) return Response.json(itemsA[0]);
+      if (
+        url === `/admin/entries/${entryA}/transitions` &&
+        init?.method === 'POST'
+      )
+        return slowTransition.promise;
+      throw new Error(`Unexpected request ${url}`);
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await setInput('Reason (required for audit)', 'Reviewed');
+    await click('accepted');
+    await setSelect('Acceptance', 'accepted');
+    await submitFilters();
+    await click('Next');
+    expect(listCalls().at(-1)).toContain('page=2');
+    expect(listCalls().at(-1)).toContain('acceptanceStatus=accepted');
+    const callsBeforeTransitionResolves = listCalls().length;
+
+    await act(async () =>
+      slowTransition.resolve(
+        Response.json({ ...itemsA[0]!, acceptanceStatus: 'accepted' }),
+      ),
+    );
+    await flush();
+
+    const refreshes = listCalls().slice(callsBeforeTransitionResolves);
+    expect(refreshes).toHaveLength(1);
+    expect(refreshes[0]).toContain('page=2');
+    expect(refreshes[0]).toContain('acceptanceStatus=accepted');
+  });
+
   it('applies search only on submit and resets to page one for filters and sorting', async () => {
     await mount(async (url) => {
       if (url === '/admin/events') return eventList();
@@ -388,13 +433,17 @@ describe('AdminEntries', () => {
     const callsBeforeTyping = listCalls().length;
     await setInput('Search', 'driver one');
     expect(listCalls()).toHaveLength(callsBeforeTyping);
+    await setSelect('Sort', 'requestedStartNumber');
+    expect(listCalls().at(-1)).toContain('page=1');
+    expect(listCalls().at(-1)).toContain('sort=requestedStartNumber');
+    expect(listCalls().at(-1)).not.toContain('search=');
     await submitFilters();
     expect(listCalls().at(-1)).toContain('page=1');
     expect(listCalls().at(-1)).toContain('search=driver');
     await click('Next');
     expect(listCalls().at(-1)).toContain('page=2');
-    await setSelect('Sort', 'requestedStartNumber');
+    await setSelect('Sort', 'createdAt');
     expect(listCalls().at(-1)).toContain('page=1');
-    expect(listCalls().at(-1)).toContain('sort=requestedStartNumber');
+    expect(listCalls().at(-1)).toContain('sort=createdAt');
   });
 });
