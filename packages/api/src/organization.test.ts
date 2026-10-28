@@ -19,6 +19,7 @@ const org = {
   websiteUrl: null,
   timezone: 'UTC',
   locale: 'en',
+  currency: 'EUR',
 };
 const foreignEventId = '20000000-0000-4000-8000-000000000022';
 function deps(): ApiDeps {

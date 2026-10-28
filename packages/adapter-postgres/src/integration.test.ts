@@ -1,5 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { organizationId } from '@racepilot/core';
+import { organizationId, createPaymentReference } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
   createDatabase,
@@ -17,6 +17,11 @@ import {
   registrationGroups,
   entries,
   entryAuditEvents,
+  invoices,
+  invoicePayments,
+  invoicePaymentAuditEvents,
+  eventClassPricingRules,
+  createInvoicePaymentRepository,
   createPersonRepository,
   createVehicleRepository,
   createEntryRepository,
@@ -601,6 +606,225 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         await db.delete(organizations).where(eq(organizations.id, orgB));
       if (orgC)
         await db.delete(organizations).where(eq(organizations.id, orgC));
+      await pool.end();
+    }
+  });
+});
+
+describe.skipIf(!url)('pricing and invoice isolation', () => {
+  it('isolates identical payment references by organization and preserves payment corrections as audited reversals', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    try {
+      const [a] = await db
+        .insert(organizations)
+        .values({
+          slug: `price-a-${suffix}`,
+          name: 'A',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [b] = await db
+        .insert(organizations)
+        .values({
+          slug: `price-b-${suffix}`,
+          name: 'B',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [ea] = await db
+        .insert(events)
+        .values({
+          organizationId: a!.id,
+          slug: 'event',
+          name: 'A',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-01',
+        })
+        .returning();
+      const [eb] = await db
+        .insert(events)
+        .values({
+          organizationId: b!.id,
+          slug: 'event',
+          name: 'B',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-01',
+        })
+        .returning();
+      const [pa] = await db
+        .insert(people)
+        .values({ organizationId: a!.id, firstName: 'A', lastName: 'A' })
+        .returning();
+      const [pb] = await db
+        .insert(people)
+        .values({ organizationId: b!.id, firstName: 'B', lastName: 'B' })
+        .returning();
+      const [ga] = await db
+        .insert(registrationGroups)
+        .values({ organizationId: a!.id, eventId: ea!.id, personId: pa!.id })
+        .returning();
+      const [gb] = await db
+        .insert(registrationGroups)
+        .values({ organizationId: b!.id, eventId: eb!.id, personId: pb!.id })
+        .returning();
+      const ref = createPaymentReference(`group-${suffix}`);
+      const [ia] = await db
+        .insert(invoices)
+        .values({
+          organizationId: a!.id,
+          eventId: ea!.id,
+          registrationGroupId: ga!.id,
+          totalCents: 1000,
+          currency: 'EUR',
+          paymentReference: ref,
+        })
+        .returning();
+      const [ib] = await db
+        .insert(invoices)
+        .values({
+          organizationId: b!.id,
+          eventId: eb!.id,
+          registrationGroupId: gb!.id,
+          totalCents: 1000,
+          currency: 'EUR',
+          paymentReference: ref,
+        })
+        .returning();
+      const [klass] = await db
+        .insert(eventClasses)
+        .values({
+          organizationId: a!.id,
+          eventId: ea!.id,
+          name: 'A',
+          code: 'A',
+          vehicleType: 'car',
+        })
+        .returning();
+      const [vehicle] = await db
+        .insert(vehicles)
+        .values({ organizationId: a!.id, make: 'X', model: 'Y' })
+        .returning();
+      const storedSnapshot = {
+        version: '1' as const,
+        currency: 'EUR',
+        calculatedAt: '2030-01-01T00:00:00.000Z',
+        totalCents: 1000,
+        lines: [
+          {
+            classId: klass!.id,
+            quantity: 1,
+            baseCents: 1000,
+            additionalEntryAdjustmentCents: 0,
+            earlyBirdDiscountCents: 0,
+            totalCents: 1000,
+          },
+        ],
+      };
+      const [entry] = await db
+        .insert(entries)
+        .values({
+          organizationId: a!.id,
+          eventId: ea!.id,
+          classId: klass!.id,
+          registrationGroupId: ga!.id,
+          driverPersonId: pa!.id,
+          vehicleId: vehicle!.id,
+          priceSnapshotVersion: '1',
+          priceSnapshot: storedSnapshot,
+        })
+        .returning();
+      await db.insert(eventClassPricingRules).values({
+        organizationId: a!.id,
+        eventId: ea!.id,
+        classId: klass!.id,
+        baseCents: 1000,
+      });
+      await db
+        .update(eventClassPricingRules)
+        .set({ baseCents: 5000 })
+        .where(eq(eventClassPricingRules.classId, klass!.id));
+      expect(
+        (await db.select().from(entries).where(eq(entries.id, entry!.id)))[0]
+          ?.priceSnapshot,
+      ).toEqual(storedSnapshot);
+      await expect(
+        db
+          .update(entries)
+          .set({ priceSnapshot: { ...storedSnapshot, totalCents: 5000 } })
+          .where(eq(entries.id, entry!.id)),
+      ).rejects.toThrow();
+      const ctxA = {
+        deploymentMode: 'community' as const,
+        organizationId: organizationId(a!.id),
+        permissions: new Set(['payment:write']),
+        capabilities: new Set<string>(),
+        correlationId: suffix,
+      };
+      const ctxB = { ...ctxA, organizationId: organizationId(b!.id) };
+      const repo = createInvoicePaymentRepository(db);
+      const receipt = await repo.record(
+        ctxA,
+        ia!.id,
+        1000,
+        'admin',
+        'bank transfer',
+      );
+      expect(receipt).not.toBeNull();
+      expect(
+        (
+          await db
+            .select()
+            .from(invoices)
+            .where(eq(invoices.organizationId, b!.id))
+        )[0]?.status,
+      ).toBe('open');
+      const payment = (
+        await db
+          .select()
+          .from(invoicePayments)
+          .where(eq(invoicePayments.invoiceId, ia!.id))
+      )[0]!;
+      const reversal = await repo.correct(
+        ctxA,
+        payment.id,
+        'admin',
+        'mistyped payment',
+      );
+      expect(reversal).not.toBeNull();
+      expect(
+        (
+          await db
+            .select()
+            .from(invoicePayments)
+            .where(eq(invoicePayments.invoiceId, ia!.id))
+        ).map((x) => x.amountCents),
+      ).toEqual([1000, -1000]);
+      expect(
+        await db
+          .select()
+          .from(invoicePaymentAuditEvents)
+          .where(eq(invoicePaymentAuditEvents.organizationId, a!.id)),
+      ).toHaveLength(2);
+      expect(
+        await repo.record(ctxB, ia!.id, 100, 'admin', 'foreign invoice'),
+      ).toBeNull();
+      expect(
+        (await db.select().from(invoices).where(eq(invoices.id, ib!.id)))[0]
+          ?.status,
+      ).toBe('open');
+    } finally {
+      await db.delete(events).where(eq(events.slug, 'event'));
+      await db
+        .delete(organizations)
+        .where(
+          inArray(organizations.slug, [
+            `price-a-${suffix}`,
+            `price-b-${suffix}`,
+          ]),
+        );
       await pool.end();
     }
   });
