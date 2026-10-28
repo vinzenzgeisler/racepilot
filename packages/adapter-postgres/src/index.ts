@@ -431,6 +431,221 @@ export const entryAuditEvents = pgTable(
   ],
 );
 
+export const emailTemplateVersions = pgTable(
+  'email_template_version',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    templateKey: text('template_key').notNull(),
+    version: integer('version').notNull(),
+    locale: text('locale').notNull(),
+    subject: text('subject').notNull(),
+    textBody: text('text_body').notNull(),
+    htmlBody: text('html_body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('email_template_version_org_id_unique').on(t.organizationId, t.id),
+    unique('email_template_version_org_full_unique').on(
+      t.organizationId,
+      t.id,
+      t.templateKey,
+      t.version,
+      t.locale,
+    ),
+    unique('email_template_version_org_key_version_locale_unique').on(
+      t.organizationId,
+      t.templateKey,
+      t.version,
+      t.locale,
+    ),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'email_template_version_org_fk',
+    }).onDelete('cascade'),
+    check(
+      'email_template_version_key_check',
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
+    ),
+    check('email_template_version_version_check', sql`${t.version} > 0`),
+    check(
+      'email_template_version_locale_check',
+      sql`${t.locale} in ('de','en')`,
+    ),
+  ],
+);
+export const emailOutbox = pgTable(
+  'email_outbox',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id'),
+    templateKey: text('template_key').notNull(),
+    templateVersion: integer('template_version').notNull(),
+    templateVersionId: uuid('template_version_id'),
+    locale: text('locale').notNull(),
+    recipient: text('recipient').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    variables: jsonb('variables')
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    availableAt: timestamp('available_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('email_outbox_org_id_unique').on(t.organizationId, t.id),
+    unique('email_outbox_org_idempotency_unique').on(
+      t.organizationId,
+      t.idempotencyKey,
+    ),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'email_outbox_org_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'email_outbox_org_event_fk',
+    }),
+    foreignKey({
+      columns: [
+        t.organizationId,
+        t.templateVersionId,
+        t.templateKey,
+        t.templateVersion,
+        t.locale,
+      ],
+      foreignColumns: [
+        emailTemplateVersions.organizationId,
+        emailTemplateVersions.id,
+        emailTemplateVersions.templateKey,
+        emailTemplateVersions.version,
+        emailTemplateVersions.locale,
+      ],
+      name: 'email_outbox_org_template_fk',
+    }),
+    check('email_outbox_version_check', sql`${t.templateVersion} > 0`),
+    check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
+    check(
+      'email_outbox_template_key_check',
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
+    ),
+    check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
+    check(
+      'email_outbox_status_check',
+      sql`${t.status} in ('pending','sending','sent','failed')`,
+    ),
+    index('email_outbox_due_idx')
+      .on(t.availableAt)
+      .where(sql`${t.status} in ('pending','sending')`),
+  ],
+);
+export const emailDeliveries = pgTable(
+  'email_delivery',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    outboxId: uuid('outbox_id').notNull(),
+    attempt: integer('attempt').notNull(),
+    outcome: text('outcome').notNull(),
+    error: text('error'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.outboxId],
+      foreignColumns: [emailOutbox.organizationId, emailOutbox.id],
+      name: 'email_delivery_org_outbox_fk',
+    }).onDelete('cascade'),
+    unique('email_delivery_org_attempt_unique').on(
+      t.organizationId,
+      t.outboxId,
+      t.attempt,
+    ),
+    check(
+      'email_delivery_outcome_check',
+      sql`${t.outcome} in ('sent','retry','failed')`,
+    ),
+  ],
+);
+
+export type Database = ReturnType<typeof drizzle>;
+export async function migrate(databaseUrl: string): Promise<void> {
+  const { Pool } = await import('pg');
+  const pool = new Pool({ connectionString: databaseUrl });
+  try {
+    await drizzleMigrate(drizzle(pool), {
+      migrationsFolder: new URL('../migrations', import.meta.url).pathname,
+    });
+  } finally {
+    await pool.end();
+  }
+}
+export async function withOrganizationTransaction<T>(
+  db: Database,
+  ctx: RequestContext,
+  fn: (tx: Database) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('app.organization_id', ${ctx.organizationId}, true)`,
+    );
+    return fn(tx as unknown as Database);
+  });
+}
+export async function ensureCommunityOrganization(
+  db: Database,
+  config: { slug: string; name: string; timezone: string; locale: string },
+): Promise<Organization> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext('racepilot.community.bootstrap'))`,
+    );
+    const rows = await tx.select().from(organizations);
+    if (rows.length > 1)
+      throw new Error('Community deployment requires exactly one organization');
+    if (rows.length === 1) {
+      if (rows[0]!.slug !== config.slug)
+        throw new Error(
+          'Community organization slug does not match configuration',
+        );
+      return mapOrg(rows[0]!);
+    }
+    const [row] = await tx
+      .insert(organizations)
+      .values({ ...config })
+      .returning();
+    return mapOrg(row!);
+  });
+}
+function mapOrg(r: typeof organizations.$inferSelect): Organization {
+  return {
+    id: organizationId(r.id),
+    slug: r.slug,
+    name: r.name,
+    status: r.status as 'active' | 'disabled',
+    contactEmail: r.contactEmail,
+    websiteUrl: r.websiteUrl,
+    timezone: r.timezone,
+    locale: r.locale,
+  };
+}
 export const eventClassPricingRules = pgTable(
   'event_class_pricing_rule',
   {

@@ -324,6 +324,54 @@
           "name": "validates RF references, IBAN recipient and fails closed for transfers without recipient"
         }
       ]
+    },
+    {
+      "id": "email_outbox",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + template_version_id",
+      "isolation": "Tenant-bound event and template composite FKs; all repository accesses filter JobContext.organizationId; insert accepts the caller's transaction.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "keeps mail outbox and template references tenant-bound"
+        }
+      ]
+    },
+    {
+      "id": "email_delivery",
+      "kind": "table",
+      "tenantKey": "organization_id + outbox_id",
+      "isolation": "Composite FK binds delivery attempts to the same-tenant outbox; attempt uniqueness makes delivery audit idempotent.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "keeps mail outbox and template references tenant-bound"
+        }
+      ]
+    },
+    {
+      "id": "mail-outbox-job",
+      "kind": "job-payload",
+      "tenantKey": "organizationId",
+      "isolation": "JobEnvelope validation and active-organization lookup precede context reconstruction; outbox claim filters tenant and pending/due state.",
+      "negativeTests": [
+        {
+          "file": "packages/worker/src/mail.test.ts",
+          "name": "rejects absent and foreign organization jobs"
+        }
+      ]
+    },
+    {
+      "id": "mail-runtime-config",
+      "kind": "config",
+      "tenantKey": "validated installation configuration and organization mail settings",
+      "isolation": "Mail capability requires complete SMTP plus a canonical base URL; URLs cannot be derived from Host and startup output contains no secrets.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "fails closed when mail lacks a canonical base URL"
+        }
+      ]
     }
   ]
 }

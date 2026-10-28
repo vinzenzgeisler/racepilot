@@ -11,6 +11,8 @@ import {
   createInvoicePaymentRepository,
   createPaymentRecipientRepository,
   createEventClassPricingRepository,
+  getOrganizationMailConfiguration,
+  setOrganizationMailConfiguration,
 } from '@racepilot/adapter-postgres';
 import { createApp } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
