@@ -127,6 +127,63 @@ export const EventResponse = EventSchema;
 export const PublicEventResponse = EventSchema.extend({
   classes: z.array(EventClassSchema),
 }).strict();
+export const PriceSnapshotSchema = z
+  .object({
+    version: z.literal('1'),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    calculatedAt: z.string().datetime({ offset: true }),
+    totalCents: z.number().int().nonnegative(),
+    lines: z.array(
+      z
+        .object({
+          classId: z.string().uuid(),
+          quantity: z.number().int().positive(),
+          baseCents: z.number().int().nonnegative(),
+          additionalEntryAdjustmentCents: z.number().int(),
+          earlyBirdDiscountCents: z.number().int().nonnegative(),
+          totalCents: z.number().int().nonnegative(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export const EntryResponse = z
+  .object({
+    id: z.string().uuid(),
+    organizationId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    classId: z.string().uuid(),
+    registrationGroupId: z.string().uuid(),
+    driverPersonId: z.string().uuid(),
+    vehicleId: z.string().uuid(),
+    verificationStatus: z.enum(['unverified', 'verified']),
+    acceptanceStatus: z.enum([
+      'pending',
+      'accepted',
+      'rejected',
+      'waitlisted',
+      'withdrawn',
+    ]),
+    requestedStartNumber: z.string().nullable(),
+    priceSnapshotVersion: z.string().nullable(),
+    formSnapshotVersion: z.string().nullable(),
+    priceSnapshot: PriceSnapshotSchema.nullable().optional(),
+    createdAt: z.string().datetime({ offset: true }),
+    deletedAt: z.string().datetime({ offset: true }).nullable(),
+    deletionReason: z.string().nullable(),
+  })
+  .strict();
+export const AdminEntryListResponse = z
+  .object({
+    items: z.array(EntryResponse),
+    page: z.number().int().positive(),
+    pageSize: z.number().int().positive().max(100),
+    total: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+  })
+  .strict();
+export type EntryResponse = z.infer<typeof EntryResponse>;
+export type AdminEntryListResponse = z.infer<typeof AdminEntryListResponse>;
 export const CreateEventClassRequest = EventClassSchema.omit({
   id: true,
   organizationId: true,

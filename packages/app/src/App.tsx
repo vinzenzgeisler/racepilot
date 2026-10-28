@@ -5,6 +5,7 @@ import {
 } from '@racepilot/contracts';
 import './styles.css';
 import { Registration, RegistrationVerification } from './Registration.js';
+import { AdminEntries } from './AdminEntries.js';
 
 type State =
   | { kind: 'loading' }
@@ -13,7 +14,9 @@ type State =
 
 export function App() {
   const [state, setState] = useState<State>({ kind: 'loading' });
+  const isAdmin = window.location.pathname.startsWith('/admin');
   useEffect(() => {
+    if (isAdmin) return;
     let current = true;
     fetch('/runtime/bootstrap', {
       credentials: 'same-origin',
@@ -33,7 +36,20 @@ export function App() {
     return () => {
       current = false;
     };
-  }, []);
+  }, [isAdmin]);
+
+  if (isAdmin)
+    return (
+      <main className="shell admin-shell">
+        <header className="masthead">
+          <div>
+            <p className="eyebrow">RacePilot · Administration</p>
+            <h1>Organization administration</h1>
+          </div>
+        </header>
+        <AdminEntries />
+      </main>
+    );
 
   if (state.kind === 'loading')
     return (
