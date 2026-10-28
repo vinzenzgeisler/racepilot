@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from 'react';
 import {
   AdminEntryListResponse,
   EntryResponse,
@@ -9,6 +15,23 @@ import {
 type Event = ReturnType<typeof EventSchema.parse>;
 type ApiState =
   'loading' | 'ready' | 'unauthorized' | 'forbidden' | 'unavailable';
+type EntryQuery = {
+  classId: string;
+  acceptanceStatus: string;
+  verificationStatus: string;
+  search: string;
+  sort: string;
+  direction: string;
+};
+const initialQuery: EntryQuery = {
+  classId: '',
+  acceptanceStatus: '',
+  verificationStatus: '',
+  search: '',
+  sort: 'createdAt',
+  direction: 'desc',
+};
+type Gate = { generation: number; controller: AbortController | null };
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
   return fetch(path, {
@@ -18,11 +41,28 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
     headers: { 'content-type': 'application/json', ...init?.headers },
   });
 }
-
 function messageFor(status: number): ApiState {
   if (status === 401) return 'unauthorized';
   if (status === 403) return 'forbidden';
   return 'unavailable';
+}
+function invalidate(gate: Gate) {
+  gate.generation += 1;
+  gate.controller?.abort();
+  gate.controller = null;
+}
+function begin(gate: Gate) {
+  invalidate(gate);
+  const controller = new AbortController();
+  gate.controller = controller;
+  return { generation: gate.generation, controller };
+}
+function isCurrent(
+  gate: Gate,
+  generation: number,
+  controller: AbortController,
+) {
+  return gate.generation === generation && !controller.signal.aborted;
 }
 
 export function AdminEntries() {
@@ -34,127 +74,158 @@ export function AdminEntries() {
   const [totalPages, setTotalPages] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize] = useState(25);
-  const [classId, setClassId] = useState('');
+  const [draft, setDraft] = useState<EntryQuery>(initialQuery);
+  const [applied, setApplied] = useState<EntryQuery>(initialQuery);
   const [classes, setClasses] = useState<Array<{ id: string; name: string }>>(
     [],
   );
-  const [acceptanceStatus, setAcceptanceStatus] = useState('');
-  const [verificationStatus, setVerificationStatus] = useState('');
-  const [search, setSearch] = useState('');
-  const [sort, setSort] = useState('createdAt');
-  const [direction, setDirection] = useState('desc');
   const [selected, setSelected] = useState<Entry | null>(null);
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const [busy, setBusy] = useState(false);
+  const listGate = useRef<Gate>({ generation: 0, controller: null });
+  const detailGate = useRef<Gate>({ generation: 0, controller: null });
+  const transitionGate = useRef<Gate>({ generation: 0, controller: null });
+  const classGate = useRef<Gate>({ generation: 0, controller: null });
+
+  const invalidateContextRequests = useCallback(() => {
+    invalidate(listGate.current);
+    invalidate(detailGate.current);
+    invalidate(transitionGate.current);
+    invalidate(classGate.current);
+  }, []);
 
   useEffect(() => {
     let active = true;
-    request('/admin/events')
+    const gate = classGate.current;
+    const { generation, controller } = begin(gate);
+    request('/admin/events', { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok)
           throw Object.assign(new Error(), { status: response.status });
         const payload: unknown = await response.json();
         if (!Array.isArray(payload)) throw new Error('Invalid event response');
         const parsed = payload.map((item) => EventSchema.parse(item));
-        if (!active) return;
+        if (!active || !isCurrent(gate, generation, controller)) return;
         setEvents(parsed);
         setApiState('ready');
       })
       .catch((error: { status?: number }) => {
-        if (active)
+        if (active && isCurrent(gate, generation, controller))
           setApiState(error.status ? messageFor(error.status) : 'unavailable');
       });
     return () => {
       active = false;
+      controller.abort();
+      if (gate.controller === controller) gate.controller = null;
     };
   }, []);
 
   useEffect(() => {
-    let active = true;
-    if (!eventId) {
-      return () => {
-        active = false;
-      };
-    }
-    request(`/admin/events/${encodeURIComponent(eventId)}/classes`)
+    if (!eventId) return;
+    const gate = classGate.current;
+    const { generation, controller } = begin(gate);
+    request(`/admin/events/${encodeURIComponent(eventId)}/classes`, {
+      signal: controller.signal,
+    })
       .then(async (response) => {
         if (!response.ok)
           throw Object.assign(new Error(), { status: response.status });
         const payload: unknown = await response.json();
         if (!Array.isArray(payload)) throw new Error('Invalid class response');
-        if (active)
-          setClasses(
-            payload.map((value) => ({ id: value.id, name: value.name })),
-          );
+        if (!isCurrent(gate, generation, controller)) return;
+        setClasses(
+          payload.map((value) => ({ id: value.id, name: value.name })),
+        );
       })
       .catch((error: { status?: number }) => {
-        if (active)
-          setActionError(
-            error.status === 403
-              ? 'You do not have permission to view event classes.'
-              : 'Event classes are unavailable.',
-          );
+        if (!isCurrent(gate, generation, controller)) return;
+        setActionError(
+          error.status === 403
+            ? 'You do not have permission to view event classes.'
+            : 'Event classes are unavailable.',
+        );
       });
     return () => {
-      active = false;
+      controller.abort();
+      if (gate.controller === controller) gate.controller = null;
     };
   }, [eventId]);
 
   const loadEntries = useCallback(async () => {
     if (!eventId) return;
-    setApiState('loading');
     const params = new URLSearchParams({
       page: String(page),
       pageSize: String(pageSize),
       eventId,
-      sort,
-      direction,
+      sort: applied.sort,
+      direction: applied.direction,
     });
-    if (classId) params.set('classId', classId);
-    if (acceptanceStatus) params.set('acceptanceStatus', acceptanceStatus);
-    if (verificationStatus)
-      params.set('verificationStatus', verificationStatus);
-    if (search.trim()) params.set('search', search.trim());
+    if (applied.classId) params.set('classId', applied.classId);
+    if (applied.acceptanceStatus)
+      params.set('acceptanceStatus', applied.acceptanceStatus);
+    if (applied.verificationStatus)
+      params.set('verificationStatus', applied.verificationStatus);
+    if (applied.search.trim()) params.set('search', applied.search.trim());
+
+    const requestedEventId = eventId;
+    const { generation, controller } = begin(listGate.current);
+    setApiState('loading');
     try {
-      const response = await request(`/admin/entries?${params}`);
+      const response = await request(`/admin/entries?${params}`, {
+        signal: controller.signal,
+      });
+      if (!isCurrent(listGate.current, generation, controller)) return;
       if (!response.ok) {
         setApiState(messageFor(response.status));
         return;
       }
       const result = AdminEntryListResponse.parse(await response.json());
+      if (
+        !isCurrent(listGate.current, generation, controller) ||
+        requestedEventId !== eventId
+      )
+        return;
       setItems(result.items);
       setTotal(result.total);
       setTotalPages(result.totalPages);
       setApiState('ready');
     } catch {
-      setApiState('unavailable');
+      if (isCurrent(listGate.current, generation, controller))
+        setApiState('unavailable');
+    } finally {
+      if (listGate.current.controller === controller)
+        listGate.current.controller = null;
     }
-  }, [
-    eventId,
-    page,
-    pageSize,
-    classId,
-    acceptanceStatus,
-    verificationStatus,
-    search,
-    sort,
-    direction,
-  ]);
+  }, [eventId, page, pageSize, applied]);
 
   useEffect(() => {
+    const gate = listGate.current;
     // This effect intentionally synchronizes the selected query with the remote list API.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadEntries();
+    return () => invalidate(gate);
   }, [loadEntries]);
 
+  useEffect(
+    () => () => invalidateContextRequests(),
+    [invalidateContextRequests],
+  );
+
   async function openEntry(id: string) {
+    invalidate(transitionGate.current);
+    setBusy(false);
+    const requestedEventId = eventId;
+    const { generation, controller } = begin(detailGate.current);
     setSelected(null);
+    setReason('');
     setActionError('');
     try {
       const response = await request(
         `/admin/entries/${encodeURIComponent(id)}`,
+        { signal: controller.signal },
       );
+      if (!isCurrent(detailGate.current, generation, controller)) return;
       if (!response.ok) {
         setActionError(
           response.status === 401
@@ -165,9 +236,19 @@ export function AdminEntries() {
         );
         return;
       }
-      setSelected(EntryResponse.parse(await response.json()));
+      const entry = EntryResponse.parse(await response.json());
+      if (
+        isCurrent(detailGate.current, generation, controller) &&
+        eventId === requestedEventId &&
+        entry.eventId === requestedEventId
+      )
+        setSelected(entry);
     } catch {
-      setActionError('Entry details are unavailable.');
+      if (isCurrent(detailGate.current, generation, controller))
+        setActionError('Entry details are unavailable.');
+    } finally {
+      if (detailGate.current.controller === controller)
+        detailGate.current.controller = null;
     }
   }
 
@@ -175,21 +256,27 @@ export function AdminEntries() {
     transitionType: 'acceptance' | 'verification',
     status: string,
   ) {
-    if (!selected || !reason.trim()) return;
+    const current = selected;
+    if (!current || !reason.trim()) return;
+    const requestedEventId = eventId;
+    const requestedReason = reason.trim();
+    const { generation, controller } = begin(transitionGate.current);
     setBusy(true);
     setActionError('');
     try {
       const response = await request(
-        `/admin/entries/${encodeURIComponent(selected.id)}/transitions`,
+        `/admin/entries/${encodeURIComponent(current.id)}/transitions`,
         {
           method: 'POST',
+          signal: controller.signal,
           body: JSON.stringify({
             transition: transitionType,
             status,
-            reason: reason.trim(),
+            reason: requestedReason,
           }),
         },
       );
+      if (!isCurrent(transitionGate.current, generation, controller)) return;
       if (!response.ok) {
         setActionError(
           response.status === 401
@@ -200,19 +287,60 @@ export function AdminEntries() {
         );
         return;
       }
-      setSelected(EntryResponse.parse(await response.json()));
+      const updated = EntryResponse.parse(await response.json());
+      if (
+        !isCurrent(transitionGate.current, generation, controller) ||
+        eventId !== requestedEventId ||
+        selected?.id !== current.id ||
+        updated.id !== current.id ||
+        updated.eventId !== requestedEventId
+      )
+        return;
+      setSelected(updated);
       setReason('');
       await loadEntries();
     } catch {
-      setActionError('The status change could not be completed.');
+      if (isCurrent(transitionGate.current, generation, controller))
+        setActionError('The status change could not be completed.');
     } finally {
-      setBusy(false);
+      if (
+        isCurrent(transitionGate.current, generation, controller) &&
+        selected?.id === current.id &&
+        eventId === requestedEventId
+      )
+        setBusy(false);
+      if (transitionGate.current.controller === controller)
+        transitionGate.current.controller = null;
     }
   }
 
-  function applySearch(event: FormEvent) {
+  function applyFilters(event: FormEvent) {
     event.preventDefault();
     setPage(1);
+    setApplied({ ...draft });
+  }
+
+  function changeEvent(nextEventId: string) {
+    invalidateContextRequests();
+    setEventId(nextEventId);
+    setPage(1);
+    setDraft({ ...initialQuery });
+    setApplied({ ...initialQuery });
+    setClasses([]);
+    setItems([]);
+    setTotal(0);
+    setTotalPages(0);
+    setSelected(null);
+    setReason('');
+    setActionError('');
+    setBusy(false);
+  }
+
+  function changeSort(nextSort: string, nextDirection = draft.direction) {
+    const next = { ...draft, sort: nextSort, direction: nextDirection };
+    setDraft(next);
+    setPage(1);
+    setApplied(next);
   }
 
   if (apiState === 'loading' && events.length === 0)
@@ -255,13 +383,7 @@ export function AdminEntries() {
         <select
           aria-label="Event"
           value={eventId}
-          onChange={(e) => {
-            setEventId(e.target.value);
-            setPage(1);
-            setClasses([]);
-            setItems([]);
-            setSelected(null);
-          }}
+          onChange={(e) => changeEvent(e.target.value)}
         >
           <option value="">Select an event</option>
           {events.map((event) => (
@@ -273,15 +395,14 @@ export function AdminEntries() {
       </label>
       {eventId && (
         <>
-          <form className="admin-filters" onSubmit={applySearch}>
+          <form className="admin-filters" onSubmit={applyFilters}>
             <label>
               Class
               <select
-                value={classId}
-                onChange={(e) => {
-                  setClassId(e.target.value);
-                  setPage(1);
-                }}
+                value={draft.classId}
+                onChange={(e) =>
+                  setDraft((value) => ({ ...value, classId: e.target.value }))
+                }
               >
                 <option value="">All classes</option>
                 {classes.map((item) => (
@@ -294,11 +415,13 @@ export function AdminEntries() {
             <label>
               Acceptance
               <select
-                value={acceptanceStatus}
-                onChange={(e) => {
-                  setAcceptanceStatus(e.target.value);
-                  setPage(1);
-                }}
+                value={draft.acceptanceStatus}
+                onChange={(e) =>
+                  setDraft((value) => ({
+                    ...value,
+                    acceptanceStatus: e.target.value,
+                  }))
+                }
               >
                 <option value="">All</option>
                 {[
@@ -315,11 +438,13 @@ export function AdminEntries() {
             <label>
               Verification
               <select
-                value={verificationStatus}
-                onChange={(e) => {
-                  setVerificationStatus(e.target.value);
-                  setPage(1);
-                }}
+                value={draft.verificationStatus}
+                onChange={(e) =>
+                  setDraft((value) => ({
+                    ...value,
+                    verificationStatus: e.target.value,
+                  }))
+                }
               >
                 <option value="">All</option>
                 <option value="unverified">Unverified</option>
@@ -329,15 +454,20 @@ export function AdminEntries() {
             <label>
               Search
               <input
-                value={search}
+                value={draft.search}
                 maxLength={120}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) =>
+                  setDraft((value) => ({ ...value, search: e.target.value }))
+                }
                 placeholder="Name or entry ID"
               />
             </label>
             <label>
               Sort
-              <select value={sort} onChange={(e) => setSort(e.target.value)}>
+              <select
+                value={draft.sort}
+                onChange={(e) => changeSort(e.target.value)}
+              >
                 <option value="createdAt">Created</option>
                 <option value="requestedStartNumber">Start number</option>
                 <option value="acceptanceStatus">Acceptance</option>
@@ -347,8 +477,8 @@ export function AdminEntries() {
             <label>
               Order
               <select
-                value={direction}
-                onChange={(e) => setDirection(e.target.value)}
+                value={draft.direction}
+                onChange={(e) => changeSort(draft.sort, e.target.value)}
               >
                 <option value="desc">Descending</option>
                 <option value="asc">Ascending</option>
