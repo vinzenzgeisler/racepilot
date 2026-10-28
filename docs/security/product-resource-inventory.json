@@ -372,6 +372,150 @@
           "name": "fails closed when mail lacks a canonical base URL"
         }
       ]
+    },
+    {
+      "id": "public_entry_submission",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + submission_id",
+      "isolation": "Composite key namespaces idempotency per organization and event; reservation and result are committed with registration mutations.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "registration_group_email_verification",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + registration_group_id",
+      "isolation": "Random bearer token is SHA-256 hashed; lookup, expiry check, one-time consume, status transitions and audit are tenant-scoped and transactional.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "consent_evidence",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + registration_group_id",
+      "isolation": "Submission evidence references configured text key/version/language/hash and is inserted atomically with the group.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "registration_settings_audit",
+      "kind": "table",
+      "tenantKey": "organization_id",
+      "isolation": "Actor and before/after settings are appended atomically with an organization-scoped update.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "event_consent_terms_audit",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id",
+      "isolation": "Actor and versioned before/after consent configuration are appended in the tenant-scoped event update transaction.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-form",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + event slug",
+      "isolation": "Only open events and non-closed classes for the configured organization are returned; declarative form contract is strictly versioned.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "uses generic public verification responses and rate-limits by IP and event"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-submit",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + event slug",
+      "isolation": "Strict contracts, event/class availability checks, tenant-scoped transaction and org/event submission ID; foreign IDs are rejected before writes.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-verify",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + hashed token",
+      "isolation": "Invalid, expired, used and foreign tokens return a neutral result and cannot mutate another tenant.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "admin-registration-settings",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Requires organization:read/update; strict settings schema and actor-attributed audit writes.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "reads defaults and records actor-scoped audited setting updates"
+        }
+      ]
+    },
+    {
+      "id": "admin-event-consents",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId",
+      "isolation": "Requires event:read/write; verifies text hashes and writes actor-attributed configuration audit; foreign event IDs are not found.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "requires event:write to change versioned event consent text and rejects wrong hashes"
+        }
+      ]
+    },
+    {
+      "id": "registration-settings",
+      "kind": "config",
+      "tenantKey": "organization_id",
+      "isolation": "Typed JSON policy defaults to shared email allowed, no minimum age, guardian under 18, and eight distinct classes; server validates every submission.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "registration-rate-limiter",
+      "kind": "config",
+      "tenantKey": "client IP + server-resolved organizationId + event",
+      "isolation": "Replaceable API port with per-window in-memory implementation; tenant/event keying is server-derived.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "uses generic public verification responses and rate-limits by IP and event"
+        }
+      ]
     }
   ]
 }

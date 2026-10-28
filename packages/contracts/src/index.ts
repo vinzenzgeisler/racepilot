@@ -185,7 +185,14 @@ export const StandardRegistrationFormSchema = z
             z
               .object({
                 key: z.string().min(1),
-                type: z.enum(['text', 'email', 'date', 'checkbox', 'select']),
+                type: z.enum([
+                  'text',
+                  'email',
+                  'date',
+                  'checkbox',
+                  'select',
+                  'entries',
+                ]),
                 required: z.boolean(),
                 label: z.object({ de: z.string(), en: z.string() }).strict(),
                 options: z
@@ -225,15 +232,15 @@ export const PublicRegistrationRequestSchema = z
     submissionId: z.string().uuid(),
     formVersion: z.literal('1.0'),
     language: z.enum(['de', 'en']),
-    eventSlug: z.string().min(1),
+    eventSlug: z.string().trim().min(1).max(100),
     person: z
       .object({
-        firstName: z.string().trim().min(1),
-        lastName: z.string().trim().min(1),
-        email: z.string().email(),
+        firstName: z.string().trim().min(1).max(100),
+        lastName: z.string().trim().min(1).max(100),
+        email: z.string().email().max(254),
         dateOfBirth: z.string().date(),
-        guardianName: z.string().optional(),
-        guardianEmail: z.string().email().optional(),
+        guardianName: z.string().trim().min(1).max(200).optional(),
+        guardianEmail: z.string().email().max(254).optional(),
       })
       .strict(),
     entries: z
@@ -243,28 +250,30 @@ export const PublicRegistrationRequestSchema = z
             classId: z.string().uuid(),
             vehicle: z
               .object({
-                make: z.string().trim().min(1),
-                model: z.string().trim().min(1),
-                year: z.number().int().nullable(),
-                registration: z.string().nullable(),
+                make: z.string().trim().min(1).max(100),
+                model: z.string().trim().min(1).max(100),
+                year: z.number().int().min(1886).max(2200).nullable(),
+                registration: z.string().trim().max(64).nullable(),
               })
               .strict(),
           })
           .strict(),
       )
-      .min(1),
+      .min(1)
+      .max(100),
     consents: z
       .array(
         z
           .object({
-            key: z.string(),
-            version: z.string(),
+            key: z.string().min(1).max(80),
+            version: z.string().min(1).max(40),
             hash: z.string().regex(/^[a-f0-9]{64}$/),
             accepted: z.literal(true),
           })
           .strict(),
       )
-      .min(1),
+      .min(1)
+      .max(30),
   })
   .strict();
 export type PublicRegistrationRequest = z.infer<
@@ -300,6 +309,18 @@ export const standardRegistrationForm: StandardRegistrationForm = {
           type: 'date',
           required: true,
           label: { de: 'Geburtsdatum', en: 'Date of birth' },
+        },
+      ],
+    },
+    {
+      id: 'vehicles',
+      title: { de: 'Fahrzeuge und Klassen', en: 'Vehicles and classes' },
+      fields: [
+        {
+          key: 'entries',
+          type: 'entries',
+          required: true,
+          label: { de: 'Fahrzeug und Klasse', en: 'Vehicle and class' },
         },
       ],
     },

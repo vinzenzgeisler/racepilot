@@ -85,5 +85,43 @@ describe('public registration contracts', () => {
     expect(
       PublicRegistrationRequestSchema.safeParse({ extra: true }).success,
     ).toBe(false);
+    const validRequest = {
+      submissionId: '10000000-0000-4000-8000-000000000001',
+      formVersion: '1.0',
+      language: 'en',
+      eventSlug: 'club-event',
+      person: {
+        firstName: 'Alex',
+        lastName: 'Driver',
+        email: 'alex@example.test',
+        dateOfBirth: '2000-01-01',
+      },
+      entries: [
+        {
+          classId: '20000000-0000-4000-8000-000000000001',
+          vehicle: {
+            make: 'Maker',
+            model: 'Car',
+            year: 2020,
+            registration: null,
+          },
+        },
+      ],
+      consents: [
+        { key: 'terms', version: 'v1', hash: 'a'.repeat(64), accepted: true },
+      ],
+    };
+    expect(
+      PublicRegistrationRequestSchema.safeParse({
+        ...validRequest,
+        unknownField: true,
+      }).success,
+    ).toBe(false);
+    expect(
+      PublicRegistrationRequestSchema.safeParse({
+        ...validRequest,
+        person: { ...validRequest.person, email: 'not-email' },
+      }).success,
+    ).toBe(false);
   });
 });

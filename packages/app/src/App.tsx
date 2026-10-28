@@ -4,6 +4,7 @@ import {
   type RuntimeBootstrapResponse as RuntimeConfig,
 } from '@racepilot/contracts';
 import './styles.css';
+import { Registration, RegistrationVerification } from './Registration.js';
 
 type State =
   | { kind: 'loading' }
@@ -49,6 +50,25 @@ export function App() {
     );
 
   const { config } = state;
+  if (window.location.pathname === '/registration/verify')
+    return (
+      <main className="shell">
+        <RegistrationVerification locale={config.locale} />
+      </main>
+    );
+  const registrationMatch = window.location.pathname.match(
+    /^\/events\/([^/]+)\/register\/?$/,
+  );
+  if (registrationMatch)
+    return (
+      <main className="shell">
+        <Registration
+          organizationId={config.organization.id}
+          eventSlug={decodeURIComponent(registrationMatch[1]!)}
+          defaultLocale={config.locale}
+        />
+      </main>
+    );
   return (
     <main
       className="shell"

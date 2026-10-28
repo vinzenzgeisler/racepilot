@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { mailConfigSchema, validateMailConfig } from '@racepilot/contracts';
@@ -42,6 +43,10 @@ import {
   EventResponse,
   CreateEventClassRequest,
   UpdateEventClassRequest,
+  RegistrationSettingsSchema,
+  type RegistrationSettings,
+  standardRegistrationForm,
+  PublicRegistrationRequestSchema,
 } from '@racepilot/contracts';
 export function health(version: string) {
   return healthResponseSchema.parse({ status: 'ok', version });
@@ -144,6 +149,65 @@ export interface ApiDeps {
   payments?: InvoicePaymentRepository;
   paymentRecipients?: PaymentRecipientRepository;
   pricing?: EventClassPricingRepository;
+  registrationSettings?: {
+    get(
+      context: import('@racepilot/core').RequestContext,
+    ): Promise<RegistrationSettings>;
+    update(
+      context: import('@racepilot/core').RequestContext,
+      settings: RegistrationSettings,
+      actor: string,
+    ): Promise<RegistrationSettings>;
+  };
+  publicRegistration?: {
+    getForm(
+      context: import('@racepilot/core').RequestContext,
+      eventSlug: string,
+    ): Promise<unknown | null>;
+    submit(
+      context: import('@racepilot/core').RequestContext,
+      eventSlug: string,
+      payload: import('@racepilot/contracts').PublicRegistrationRequest,
+    ): Promise<unknown>;
+    verify(
+      context: import('@racepilot/core').RequestContext,
+      token: string,
+    ): Promise<boolean>;
+  };
+  registrationRateLimiter?: {
+    consume(ip: string, eventKey: string): Promise<boolean>;
+  };
+  canonicalBaseUrl?: string;
+  eventConsents?: {
+    get(
+      context: import('@racepilot/core').RequestContext,
+      eventId: string,
+    ): Promise<Array<{
+      key: string;
+      version: string;
+      language: 'de' | 'en';
+      text: string;
+      hash: string;
+    }> | null>;
+    update(
+      context: import('@racepilot/core').RequestContext,
+      eventId: string,
+      terms: Array<{
+        key: string;
+        version: string;
+        language: 'de' | 'en';
+        text: string;
+        hash: string;
+      }>,
+      actor: string,
+    ): Promise<Array<{
+      key: string;
+      version: string;
+      language: 'de' | 'en';
+      text: string;
+      hash: string;
+    }> | null>;
+  };
   authenticator?: Authenticator;
   memberships?: MembershipRepository;
   bootstrap?: MembershipBootstrap;
@@ -158,6 +222,37 @@ export interface ApiDeps {
     };
     legalLinks?: { label: string; href: string }[];
     capabilities?: string[];
+  };
+}
+export function createInMemoryRegistrationRateLimiter(
+  options: { limit?: number; windowMs?: number; now?: () => number } = {},
+) {
+  const limit = options.limit ?? 8;
+  const windowMs = options.windowMs ?? 60_000;
+  const now = options.now ?? Date.now;
+  const hits = new Map<string, number[]>();
+  let calls = 0;
+  return {
+    consume: async (ip: string, eventKey: string) => {
+      const key = `${eventKey.slice(0, 180)}:${ip.slice(0, 120)}`;
+      const cutoff = now() - windowMs;
+      if (++calls % 128 === 0) {
+        for (const [storedKey, times] of hits) {
+          const fresh = times.filter((time) => time > cutoff);
+          if (fresh.length) hits.set(storedKey, fresh);
+          else hits.delete(storedKey);
+        }
+      }
+      const recent = (hits.get(key) ?? []).filter((time) => time > cutoff);
+      if (recent.length >= limit) {
+        hits.set(key, recent);
+        return false;
+      }
+      recent.push(now());
+      hits.set(key, recent);
+      if (hits.size > 20_000) hits.delete(hits.keys().next().value!);
+      return true;
+    },
   };
 }
 export function createApp(deps: ApiDeps) {
@@ -396,7 +491,9 @@ export function createApp(deps: ApiDeps) {
         parsed.data.reason,
         { entries: deps.entries },
       );
-      return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
+      return result
+        ? c.json({ form: standardRegistrationForm, ...(result as object) })
+        : c.json({ error: 'Not found' }, 404);
     } catch {
       return c.json({ error: 'Forbidden or invalid transition' }, 403);
     }
@@ -608,6 +705,197 @@ export function createApp(deps: ApiDeps) {
     } catch {
       return c.json({ error: 'Forbidden or invalid request' }, 403);
     }
+  });
+  app.get(
+    '/public/organizations/:organizationId/events/:slug/registration/form',
+    async (c) => {
+      const orgId = c.req.param('organizationId');
+      if (
+        orgId !== deps.config.organizationId ||
+        !z.string().uuid().safeParse(orgId).success
+      )
+        return c.json({ error: 'Not found' }, 404);
+      const context = createRequestContext({
+        deploymentMode: 'community',
+        organizationId: organizationId(deps.config.organizationId),
+        permissions: new Set(),
+        capabilities: new Set(),
+        correlationId: crypto.randomUUID(),
+      });
+      if (deps.publicRegistration) {
+        const result = await deps.publicRegistration.getForm(
+          context,
+          c.req.param('slug'),
+        );
+        return result
+          ? c.json({ form: standardRegistrationForm, ...(result as object) })
+          : c.json({ error: 'Not found' }, 404);
+      }
+      const event = await getPublicEvent(
+        context,
+        c.req.param('slug'),
+        new Date(),
+        { events: deps.events },
+      );
+      return event
+        ? c.json({ form: standardRegistrationForm, event, consents: [] })
+        : c.json({ error: 'Not found' }, 404);
+    },
+  );
+  app.post(
+    '/public/organizations/:organizationId/events/:slug/registration/submissions',
+    async (c) => {
+      const orgId = c.req.param('organizationId');
+      if (
+        orgId !== deps.config.organizationId ||
+        !z.string().uuid().safeParse(orgId).success
+      )
+        return c.json({ error: 'Registration unavailable' }, 404);
+      const eventSlug = c.req.param('slug');
+      const ip =
+        c.req.header('cf-connecting-ip') ??
+        c.req.header('x-real-ip') ??
+        c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ??
+        'unknown';
+      if (
+        deps.registrationRateLimiter &&
+        !(await deps.registrationRateLimiter.consume(
+          ip,
+          `${orgId}:${eventSlug}`,
+        ))
+      )
+        return c.json({ error: 'Registration unavailable' }, 429);
+      const payload = PublicRegistrationRequestSchema.safeParse(
+        await c.req.json().catch(() => null),
+      );
+      if (!payload.success || payload.data.eventSlug !== eventSlug)
+        return c.json({ error: 'Invalid registration' }, 400);
+      if (!deps.publicRegistration)
+        return c.json({ error: 'Registration unavailable' }, 503);
+      const context = createRequestContext({
+        deploymentMode: 'community',
+        organizationId: organizationId(deps.config.organizationId),
+        permissions: new Set(),
+        capabilities: new Set(),
+        correlationId: payload.data.submissionId,
+      });
+      try {
+        return c.json(
+          await deps.publicRegistration.submit(
+            context,
+            c.req.param('slug'),
+            payload.data,
+          ),
+          202,
+        );
+      } catch {
+        return c.json({ error: 'Registration unavailable' }, 400);
+      }
+    },
+  );
+  app.post('/public/registration/verify', async (c) => {
+    const body = await c.req.json().catch(() => null);
+    const token = z.string().min(1).max(512).safeParse(body?.token);
+    if (!token.success || !deps.publicRegistration)
+      return c.json({ verified: false }, 200);
+    const context = createRequestContext({
+      deploymentMode: 'community',
+      organizationId: organizationId(deps.config.organizationId),
+      permissions: new Set(),
+      capabilities: new Set(),
+      correlationId: crypto.randomUUID(),
+    });
+    const verified = await deps.publicRegistration
+      .verify(context, token.data)
+      .catch(() => false);
+    return c.json({ verified }, 200);
+  });
+  const consentTerm = z
+    .object({
+      key: z.string().trim().min(1).max(80),
+      version: z.string().trim().min(1).max(40),
+      language: z.enum(['de', 'en']),
+      text: z.string().min(1).max(20000),
+      hash: z.string().regex(/^[a-f0-9]{64}$/),
+    })
+    .strict();
+  app.get('/admin/events/:eventId/consents', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.eventConsents) return c.json({ error: 'Not found' }, 404);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success)
+      return c.json({ error: 'Not found' }, 404);
+    const terms = await deps.eventConsents.get(context, eventId);
+    return terms ? c.json({ terms }) : c.json({ error: 'Not found' }, 404);
+  });
+  app.put('/admin/events/:eventId/consents', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.eventConsents) return c.json({ error: 'Not found' }, 404);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success)
+      return c.json({ error: 'Not found' }, 404);
+    const parsed = z
+      .object({ terms: z.array(consentTerm).max(30) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (
+      !parsed.success ||
+      parsed.data.terms.some(
+        (term) =>
+          createHash('sha256').update(term.text).digest('hex') !== term.hash,
+      )
+    )
+      return c.json({ error: 'Invalid request' }, 400);
+    if (
+      new Set(parsed.data.terms.map((term) => `${term.key}:${term.language}`))
+        .size !== parsed.data.terms.length
+    )
+      return c.json({ error: 'Invalid request' }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : context.correlationId;
+    const terms = await deps.eventConsents.update(
+      context,
+      eventId,
+      parsed.data.terms,
+      actor,
+    );
+    return terms ? c.json({ terms }) : c.json({ error: 'Not found' }, 404);
+  });
+  app.get('/admin/organization/registration-settings', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationSettings) return c.json({ error: 'Not found' }, 404);
+    return c.json(
+      RegistrationSettingsSchema.parse(
+        await deps.registrationSettings.get(context),
+      ),
+    );
+  });
+  app.patch('/admin/organization/registration-settings', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:update'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationSettings) return c.json({ error: 'Not found' }, 404);
+    const parsed = RegistrationSettingsSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : 'unknown';
+    return c.json(
+      await deps.registrationSettings.update(context, parsed.data, actor),
+    );
   });
   return app;
 }

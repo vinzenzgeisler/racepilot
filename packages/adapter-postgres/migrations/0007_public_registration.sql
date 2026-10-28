@@ -1,5 +1,6 @@
 ALTER TABLE organization
   ADD COLUMN registration_settings jsonb NOT NULL DEFAULT '{"sharedContactEmail":"allowed","minimumAge":null,"guardianRequiredBelowAge":18,"maximumClassesPerGroup":8}'::jsonb;
+ALTER TABLE organization ADD CONSTRAINT organization_registration_settings_check CHECK (jsonb_typeof(registration_settings) = 'object' AND registration_settings ?& ARRAY['sharedContactEmail','minimumAge','guardianRequiredBelowAge','maximumClassesPerGroup'] AND (registration_settings - 'sharedContactEmail' - 'minimumAge' - 'guardianRequiredBelowAge' - 'maximumClassesPerGroup') = '{}'::jsonb AND registration_settings->>'sharedContactEmail' IN ('allowed','disallowed') AND (registration_settings->>'guardianRequiredBelowAge')::integer BETWEEN 0 AND 100 AND (registration_settings->>'maximumClassesPerGroup')::integer BETWEEN 1 AND 100 AND (jsonb_typeof(registration_settings->'minimumAge') = 'null' OR (registration_settings->>'minimumAge')::integer BETWEEN 0 AND 100));
 ALTER TABLE event ADD COLUMN consent_terms jsonb NOT NULL DEFAULT '[]'::jsonb;
 DROP INDEX IF EXISTS person_org_email_unique;
 ALTER TABLE registration_group
@@ -54,4 +55,15 @@ CREATE TABLE registration_settings_audit (
   before_settings jsonb NOT NULL,
   after_settings jsonb NOT NULL,
   occurred_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE event_consent_terms_audit (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id uuid NOT NULL,
+  event_id uuid NOT NULL,
+  actor text NOT NULL,
+  before_terms jsonb NOT NULL,
+  after_terms jsonb NOT NULL,
+  occurred_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT event_consent_terms_audit_event_fk FOREIGN KEY (organization_id,event_id)
+    REFERENCES event(organization_id,id) ON DELETE CASCADE
 );
