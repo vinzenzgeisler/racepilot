@@ -149,6 +149,10 @@ try {
       2,
     )}\n`,
   );
+  execFileSync(process.execPath, [
+    path.join(root, 'scripts/check-packed-ui-types.mjs'),
+    output,
+  ], { stdio: 'inherit' });
   console.log(
     `Packed ${packages.length} packages at ${release.version} from ${commit} into ${output}`,
   );
