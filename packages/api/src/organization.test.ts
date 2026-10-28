@@ -19,6 +19,7 @@ const org = {
   websiteUrl: null,
   timezone: 'UTC',
   locale: 'en',
+  currency: 'EUR',
 };
 const foreignEventId = '20000000-0000-4000-8000-000000000022';
 function deps(): ApiDeps {
@@ -60,6 +61,33 @@ describe('admin organization routes', () => {
     expect(payload.organization.id).toBe(config.organizationId);
     expect(payload.deploymentMode).toBe('community');
     expect(payload.activeEvent).toBeNull();
+  });
+  it('derives bank transfer capability only from a valid configured recipient', async () => {
+    const api = deps();
+    api.runtimeBootstrap = {
+      configurationVersion: '1',
+      capabilities: ['mail.delivery'],
+    };
+    api.paymentRecipients = {
+      get: async () => null,
+      set: async (_ctx, value) => value,
+    };
+    let response = await createApp(api).request('/runtime/bootstrap');
+    expect((await response.json()).capabilities).not.toContain(
+      'payment.bank_transfer',
+    );
+    api.paymentRecipients = {
+      get: async () => ({
+        accountName: 'Race Club',
+        iban: 'DE89370400440532013000',
+        bic: null,
+      }),
+      set: async (_ctx, value) => value,
+    };
+    response = await createApp(api).request('/runtime/bootstrap');
+    expect((await response.json()).capabilities).toEqual(
+      expect.arrayContaining(['payment.bank_transfer', 'mail.delivery']),
+    );
   });
   it('returns the neutral unavailable response for unknown or disabled installations', async () => {
     const api = deps();

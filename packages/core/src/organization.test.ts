@@ -22,6 +22,7 @@ const org = {
   websiteUrl: null,
   timezone: 'UTC',
   locale: 'en',
+  currency: 'EUR',
 };
 describe('organization use cases', () => {
   it('requires read permission', async () => {

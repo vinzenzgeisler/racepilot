@@ -31,6 +31,9 @@ export function createSmtpMailProvider(config: SmtpConfig): MailProvider {
     host: config.host,
     port: config.port,
     secure: config.secure,
+    connectionTimeout: 30_000,
+    greetingTimeout: 30_000,
+    socketTimeout: 30_000,
     ...(auth ? { auth } : {}),
   });
   return {

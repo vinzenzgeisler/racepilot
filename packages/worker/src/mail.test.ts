@@ -120,7 +120,7 @@ describe('mail outbox worker', () => {
     await processMailOutboxJob({ ctx, outboxId: 'mail-1', deps: h });
     expect(h.mail.send).toHaveBeenCalledTimes(1);
   });
-  it('reconstructs JobContext only for a present, tenant-matching envelope', async () => {
+  it('ends malformed and foreign community envelopes without Graphile retries', async () => {
     const organizationA = '11111111-1111-4111-8111-111111111111';
     const organizationB = '22222222-2222-4222-8222-222222222222';
     const h = setup();
@@ -142,7 +142,7 @@ describe('mail outbox worker', () => {
         },
         { job: { id: 'j' } },
       ),
-    ).rejects.toThrow();
+    ).resolves.toBeUndefined();
     await expect(
       task(
         {
@@ -154,32 +154,56 @@ describe('mail outbox worker', () => {
         },
         { job: { id: 'j' } },
       ),
-    ).rejects.toThrow('Organization unavailable');
+    ).resolves.toBeUndefined();
+    expect(h.mail.send).not.toHaveBeenCalled();
+    expect(h.state()).toMatchObject({
+      status: 'pending',
+      attempts: 0,
+      claims: 0,
+    });
   });
-  it('rejects absent and foreign organization jobs', async () => {
+  it('ends missing and foreign tenant jobs without sending or mutating state', async () => {
     const h = setup();
-    await expect(
-      processMailOutboxJob({
-        ctx,
-        outboxId: 'missing',
-        deps: { ...h, repository: { ...h.repo, get: async () => null } },
+    const task = (repository: MailOutboxRepository) =>
+      createMailOutboxTask({
+        deploymentMode: 'cloud',
+        getOrganization: async () => ({ status: 'active' }),
+        repository,
+        mail: h.mail,
+        canonicalBaseUrl: 'https://race.example.test',
+      });
+    await task({ ...h.repo, get: async () => null })(
+      {
+        type: 'mail.outbox',
+        schemaVersion: 1,
+        organizationId: '11111111-1111-4111-8111-111111111111',
+        correlationId: 'c',
+        payload: { outboxId: 'missing' },
+      },
+      { job: { id: 'job' } },
+    );
+    await task({
+      ...h.repo,
+      get: async () => ({
+        ...(await h.repo.get(ctx, 'mail-1'))!,
+        organizationId: 'org-b',
       }),
-    ).rejects.toThrow();
-    await expect(
-      processMailOutboxJob({
-        ctx,
-        outboxId: 'mail-1',
-        deps: {
-          ...h,
-          repository: {
-            ...h.repo,
-            get: async () => ({
-              ...(await h.repo.get(ctx, 'mail-1'))!,
-              organizationId: 'org-b',
-            }),
-          },
-        },
-      }),
-    ).rejects.toThrow();
+    })(
+      {
+        type: 'mail.outbox',
+        schemaVersion: 1,
+        organizationId: '11111111-1111-4111-8111-111111111111',
+        correlationId: 'c',
+        payload: { outboxId: 'mail-1' },
+      },
+      { job: { id: 'job' } },
+    );
+    expect(h.mail.send).not.toHaveBeenCalled();
+    expect(h.state()).toMatchObject({
+      status: 'pending',
+      attempts: 0,
+      claims: 0,
+      deliveries: [],
+    });
   });
 });

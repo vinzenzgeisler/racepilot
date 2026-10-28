@@ -40,11 +40,12 @@ export interface Organization {
   websiteUrl: string | null;
   timezone: string;
   locale: string;
+  currency: string;
 }
 export type OrganizationPatch = Partial<
   Pick<
     Organization,
-    'name' | 'contactEmail' | 'websiteUrl' | 'timezone' | 'locale'
+    'name' | 'contactEmail' | 'websiteUrl' | 'timezone' | 'locale' | 'currency'
   >
 >;
 export interface OrganizationRepository {
@@ -343,6 +344,11 @@ function validatePatch(patch: OrganizationPatch): void {
       throw new Error('Invalid timezone');
     }
   }
+  if (
+    'currency' in patch &&
+    (typeof patch.currency !== 'string' || !/^[A-Z]{3}$/.test(patch.currency))
+  )
+    throw new Error('Invalid currency');
   if ('locale' in patch && typeof patch.locale === 'string') {
     try {
       Intl.getCanonicalLocales(patch.locale);
@@ -422,6 +428,8 @@ export function permissionsForRole(role: MembershipRole): ReadonlySet<string> {
         'class:write',
         'entry:read',
         'entry:write',
+        'payment:read',
+        'payment:write',
       ])
     : new Set();
 }
@@ -509,6 +517,7 @@ export interface Entry {
   requestedStartNumber: string | null;
   priceSnapshotVersion: string | null;
   formSnapshotVersion: string | null;
+  priceSnapshot?: PriceSnapshot | null;
   createdAt: string;
   deletedAt: string | null;
   deletionReason: string | null;
@@ -545,6 +554,7 @@ export type EntryInput = Pick<
   | 'vehicleId'
   | 'requestedStartNumber'
   | 'priceSnapshotVersion'
+  | 'priceSnapshot'
   | 'formSnapshotVersion'
 >;
 export interface PersonRepository {
@@ -579,7 +589,11 @@ export interface RegistrationGroupRepository {
   ): Promise<RegistrationGroup>;
 }
 export interface EntryRepository {
-  create?(ctx: RequestContext, input: EntryInput): Promise<Entry>;
+  create?(
+    ctx: RequestContext,
+    input: EntryInput,
+    executor?: unknown,
+  ): Promise<Entry>;
   getById(ctx: RequestContext, id: string): Promise<Entry | null>;
   transition(
     ctx: RequestContext,
@@ -666,4 +680,332 @@ export async function transitionEntry(
     actor.trim(),
     reason.trim(),
   );
+}
+
+export interface ClassPriceRule {
+  readonly classId: string;
+  readonly baseCents: number;
+  /** Signed adjustment applied to every entry after the first in this group. */
+  readonly additionalEntryAdjustmentCents: number;
+  readonly earlyBirdDeadline: string | null;
+  readonly earlyBirdDiscountCents: number;
+}
+export interface PriceLineInput {
+  readonly classId: string;
+  readonly quantity: number;
+  readonly rule: ClassPriceRule;
+}
+export interface PriceSnapshotLine {
+  readonly classId: string;
+  readonly quantity: number;
+  readonly baseCents: number;
+  readonly additionalEntryAdjustmentCents: number;
+  readonly earlyBirdDiscountCents: number;
+  readonly totalCents: number;
+}
+export interface PriceSnapshot {
+  readonly version: '1';
+  readonly currency: string;
+  readonly calculatedAt: string;
+  readonly totalCents: number;
+  readonly lines: readonly PriceSnapshotLine[];
+}
+export function calculatePrice(input: {
+  currency: string;
+  lines: readonly PriceLineInput[];
+  submittedAt: string;
+}): PriceSnapshot {
+  if (!/^[A-Z]{3}$/.test(input.currency)) throw new Error('Invalid currency');
+  const submitted = Date.parse(input.submittedAt);
+  if (!Number.isFinite(submitted)) throw new Error('Invalid submission time');
+  const classIds = new Set<string>();
+  const lines = input.lines.map(({ classId, quantity, rule }) => {
+    if (classIds.has(classId) || classId !== rule.classId)
+      throw new Error('Invalid or duplicate class price rule');
+    classIds.add(classId);
+    for (const amount of [
+      rule.baseCents,
+      rule.additionalEntryAdjustmentCents,
+      rule.earlyBirdDiscountCents,
+    ])
+      if (!Number.isSafeInteger(amount))
+        throw new Error('Price amounts must be integer cents');
+    if (
+      rule.baseCents < 0 ||
+      rule.earlyBirdDiscountCents < 0 ||
+      !Number.isInteger(quantity) ||
+      quantity < 1
+    )
+      throw new Error('Invalid quantity or price');
+    if (
+      rule.earlyBirdDeadline !== null &&
+      !Number.isFinite(Date.parse(rule.earlyBirdDeadline))
+    )
+      throw new Error('Invalid early-bird deadline');
+    const early =
+      rule.earlyBirdDeadline !== null &&
+      submitted <= Date.parse(rule.earlyBirdDeadline)
+        ? rule.earlyBirdDiscountCents
+        : 0;
+    const gross =
+      rule.baseCents * quantity +
+      rule.additionalEntryAdjustmentCents * (quantity - 1) -
+      early * quantity;
+    const totalCents = Math.max(0, gross);
+    if (!Number.isSafeInteger(totalCents))
+      throw new Error('Price total exceeds safe integer range');
+    return Object.freeze({
+      classId,
+      quantity,
+      baseCents: rule.baseCents,
+      additionalEntryAdjustmentCents: rule.additionalEntryAdjustmentCents,
+      earlyBirdDiscountCents: early,
+      totalCents,
+    });
+  });
+  return Object.freeze({
+    version: '1',
+    currency: input.currency,
+    calculatedAt: new Date(submitted).toISOString(),
+    totalCents: lines.reduce((sum, line) => sum + line.totalCents, 0),
+    lines: Object.freeze(lines),
+  });
+}
+export function createPaymentReference(seed: string): string {
+  const compact = seed
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(-20);
+  if (!compact) throw new Error('Reference seed is required');
+  const rearranged = `${compact}RF00`;
+  let remainder = 0;
+  for (const char of rearranged) {
+    const digits = /[A-Z]/.test(char) ? String(char.charCodeAt(0) - 55) : char;
+    for (const digit of digits)
+      remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+  const check = String(98 - remainder).padStart(2, '0');
+  return `RF${check}${compact}`;
+}
+export function isValidPaymentReference(value: string): boolean {
+  const compact = value.replace(/\s+/g, '').toUpperCase();
+  if (!/^RF\d{2}[A-Z0-9]{1,21}$/.test(compact)) return false;
+  const rearranged = `${compact.slice(4)}${compact.slice(0, 4)}`;
+  let remainder = 0;
+  for (const char of rearranged) {
+    const digits = /[A-Z]/.test(char) ? String(char.charCodeAt(0) - 55) : char;
+    for (const digit of digits)
+      remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+  return remainder === 1;
+}
+export function validateIban(value: string): boolean {
+  const iban = value.replace(/\s+/g, '').toUpperCase();
+  if (!/^[A-Z]{2}\d{2}[A-Z0-9]{11,30}$/.test(iban)) return false;
+  let remainder = 0;
+  for (const char of `${iban.slice(4)}${iban.slice(0, 4)}`) {
+    const digits = /[A-Z]/.test(char) ? String(char.charCodeAt(0) - 55) : char;
+    for (const digit of digits)
+      remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+  return remainder === 1;
+}
+export interface PaymentRecipient {
+  readonly accountName: string;
+  readonly iban: string;
+  readonly bic?: string | null;
+}
+export function validatePaymentRecipient(
+  input: PaymentRecipient,
+): PaymentRecipient {
+  if (
+    !input.accountName.trim() ||
+    input.accountName.length > 70 ||
+    !validateIban(input.iban) ||
+    (input.bic != null &&
+      !/^[A-Z0-9]{8}(?:[A-Z0-9]{3})?$/.test(input.bic.toUpperCase()))
+  )
+    throw new Error('Invalid bank recipient');
+  return Object.freeze({
+    accountName: input.accountName.trim(),
+    iban: input.iban.replace(/\s+/g, '').toUpperCase(),
+    bic: input.bic?.toUpperCase() ?? null,
+  });
+}
+export function createTransferInstruction(input: {
+  recipient: PaymentRecipient | null;
+  amountCents: number;
+  currency: string;
+  reference: string;
+  remittanceText?: string;
+}): string | null {
+  if (!input.recipient) return null;
+  const recipient = validatePaymentRecipient(input.recipient);
+  if (
+    !Number.isSafeInteger(input.amountCents) ||
+    input.amountCents < 0 ||
+    !/^[A-Z]{3}$/.test(input.currency) ||
+    !isValidPaymentReference(input.reference)
+  )
+    throw new Error('Invalid transfer instruction');
+  const lines = [
+    'BCD',
+    '001',
+    '1',
+    'SCT',
+    recipient.bic ?? '',
+    recipient.accountName,
+    recipient.iban,
+    `${input.currency}${(input.amountCents / 100).toFixed(2)}`,
+    '',
+    input.reference,
+    (input.remittanceText ?? '').slice(0, 140),
+  ];
+  // EPC069-12 payload fields are newline separated. Keep amount currency independent of locale.
+  return lines.join('\n');
+}
+export interface EventClassPricingRepository {
+  listByEvent(ctx: RequestContext, eventId: string): Promise<ClassPriceRule[]>;
+  upsert(
+    ctx: RequestContext,
+    eventId: string,
+    rule: ClassPriceRule,
+  ): Promise<ClassPriceRule>;
+}
+export async function setClassPriceRule(
+  ctx: RequestContext,
+  eventId: string,
+  rule: ClassPriceRule,
+  deps: { pricing: EventClassPricingRepository },
+): Promise<ClassPriceRule> {
+  if (!ctx.permissions.has('event:write')) throw new Error('Forbidden');
+  if (
+    !rule.classId.trim() ||
+    !Number.isSafeInteger(rule.baseCents) ||
+    rule.baseCents < 0 ||
+    !Number.isSafeInteger(rule.additionalEntryAdjustmentCents) ||
+    !Number.isSafeInteger(rule.earlyBirdDiscountCents) ||
+    rule.earlyBirdDiscountCents < 0 ||
+    (rule.earlyBirdDeadline !== null &&
+      !Number.isFinite(Date.parse(rule.earlyBirdDeadline)))
+  )
+    throw new Error('Invalid price rule');
+  return deps.pricing.upsert(ctx, eventId, rule);
+}
+export interface InvoiceRecord {
+  readonly id: string;
+  readonly organizationId: OrganizationId;
+  readonly eventId: string;
+  readonly registrationGroupId: string;
+  readonly totalCents: number;
+  readonly currency: string;
+  readonly paymentReference: string;
+  readonly status: InvoiceStatus;
+}
+export interface InvoiceRepository {
+  issue(
+    ctx: RequestContext,
+    eventId: string,
+    registrationGroupId: string,
+    snapshot: PriceSnapshot,
+    executor?: unknown,
+  ): Promise<InvoiceRecord>;
+}
+export async function issueInvoice(
+  ctx: RequestContext,
+  eventId: string,
+  registrationGroupId: string,
+  snapshot: PriceSnapshot,
+  deps: { invoices: InvoiceRepository },
+  executor?: unknown,
+): Promise<InvoiceRecord> {
+  if (
+    snapshot.version !== '1' ||
+    !Number.isSafeInteger(snapshot.totalCents) ||
+    snapshot.totalCents < 0
+  )
+    throw new Error('Invalid price snapshot');
+  return deps.invoices.issue(
+    ctx,
+    eventId,
+    registrationGroupId,
+    snapshot,
+    executor,
+  );
+}
+export interface PaymentRecipientRepository {
+  get(ctx: RequestContext): Promise<PaymentRecipient | null>;
+  set(
+    ctx: RequestContext,
+    recipient: PaymentRecipient,
+  ): Promise<PaymentRecipient>;
+}
+export async function updatePaymentRecipient(
+  ctx: RequestContext,
+  recipient: PaymentRecipient,
+  deps: { recipients: PaymentRecipientRepository },
+): Promise<PaymentRecipient> {
+  if (!ctx.permissions.has('organization:update')) throw new Error('Forbidden');
+  return deps.recipients.set(ctx, validatePaymentRecipient(recipient));
+}
+export type InvoiceStatus = 'open' | 'partially_paid' | 'paid' | 'cancelled';
+export function deriveInvoiceStatus(
+  totalCents: number,
+  receivedCents: number,
+  cancelled = false,
+): InvoiceStatus {
+  if (cancelled) return 'cancelled';
+  if (receivedCents <= 0) return 'open';
+  return receivedCents >= totalCents ? 'paid' : 'partially_paid';
+}
+export interface InvoicePaymentRepository {
+  record(
+    ctx: RequestContext,
+    invoiceId: string,
+    amountCents: number,
+    actor: string,
+    reason: string,
+  ): Promise<unknown | null>;
+  correct(
+    ctx: RequestContext,
+    paymentId: string,
+    actor: string,
+    reason: string,
+  ): Promise<unknown | null>;
+}
+export async function recordInvoicePayment(
+  ctx: RequestContext,
+  invoiceId: string,
+  amountCents: number,
+  actor: string,
+  reason: string,
+  deps: { payments: InvoicePaymentRepository },
+): Promise<unknown | null> {
+  if (!ctx.permissions.has('payment:write')) throw new Error('Forbidden');
+  if (
+    !Number.isSafeInteger(amountCents) ||
+    amountCents <= 0 ||
+    !actor.trim() ||
+    !reason.trim()
+  )
+    throw new Error('Invalid payment');
+  return deps.payments.record(
+    ctx,
+    invoiceId,
+    amountCents,
+    actor.trim(),
+    reason.trim(),
+  );
+}
+export async function correctInvoicePayment(
+  ctx: RequestContext,
+  paymentId: string,
+  actor: string,
+  reason: string,
+  deps: { payments: InvoicePaymentRepository },
+): Promise<unknown | null> {
+  if (!ctx.permissions.has('payment:write')) throw new Error('Forbidden');
+  if (!actor.trim() || !reason.trim())
+    throw new Error('Correction actor and reason are required');
+  return deps.payments.correct(ctx, paymentId, actor.trim(), reason.trim());
 }

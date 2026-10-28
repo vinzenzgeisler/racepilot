@@ -12,9 +12,9 @@ import {
   check,
   index,
   integer,
-  jsonb,
   foreignKey,
   uniqueIndex,
+  jsonb,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type {
@@ -31,6 +31,12 @@ import type {
   EventPatch,
   EventClassInput,
   MembershipRepository,
+  InvoicePaymentRepository,
+  PaymentRecipientRepository,
+  PaymentRecipient,
+  EventClassPricingRepository,
+  InvoiceRepository,
+  InvoiceRecord,
   MembershipBootstrap,
   ExternalIdentity,
 } from '@racepilot/core';
@@ -39,6 +45,8 @@ import {
   permissionsForRole,
   normalizeEmail,
   normalizeRequestedStartNumber,
+  deriveInvoiceStatus,
+  createPaymentReference,
 } from '@racepilot/core';
 import type { Pool } from 'pg';
 export const organizations = pgTable(
@@ -54,6 +62,7 @@ export const organizations = pgTable(
     websiteUrl: text('website_url'),
     timezone: text('timezone').notNull(),
     locale: text('locale').notNull(),
+    currency: text('currency').notNull().default('EUR'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -327,6 +336,9 @@ export const entries = pgTable(
     acceptanceStatus: text('acceptance_status').notNull().default('pending'),
     requestedStartNumber: text('requested_start_number'),
     priceSnapshotVersion: text('price_snapshot_version'),
+    priceSnapshot: jsonb('price_snapshot').$type<
+      import('@racepilot/core').PriceSnapshot | null
+    >(),
     formSnapshotVersion: text('form_snapshot_version'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
@@ -429,6 +441,220 @@ export const entryAuditEvents = pgTable(
   ],
 );
 
+export const eventClassPricingRules = pgTable(
+  'event_class_pricing_rule',
+  {
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    classId: uuid('class_id').notNull(),
+    baseCents: integer('base_cents').notNull(),
+    additionalEntryAdjustmentCents: integer('additional_entry_adjustment_cents')
+      .notNull()
+      .default(0),
+    earlyBirdDeadline: timestamp('early_bird_deadline', { withTimezone: true }),
+    earlyBirdDiscountCents: integer('early_bird_discount_cents')
+      .notNull()
+      .default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('event_class_price_org_event_class_unique').on(
+      t.organizationId,
+      t.eventId,
+      t.classId,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.classId],
+      foreignColumns: [
+        eventClasses.organizationId,
+        eventClasses.eventId,
+        eventClasses.id,
+      ],
+      name: 'event_class_price_class_fk',
+    }).onDelete('cascade'),
+    check(
+      'event_class_price_nonnegative_check',
+      sql`${t.baseCents} >= 0 and ${t.earlyBirdDiscountCents} >= 0`,
+    ),
+  ],
+);
+export const organizationPaymentRecipients = pgTable(
+  'organization_payment_recipient',
+  {
+    organizationId: uuid('organization_id')
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    accountName: text('account_name').notNull(),
+    iban: text('iban').notNull(),
+    bic: text('bic'),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+export const invoiceReferenceCounters = pgTable('invoice_reference_counter', {
+  organizationId: uuid('organization_id')
+    .primaryKey()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  nextValue: integer('next_value').notNull(),
+});
+export const invoices = pgTable(
+  'invoice',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    registrationGroupId: uuid('registration_group_id').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    currency: text('currency').notNull(),
+    paymentReference: text('payment_reference').notNull(),
+    status: text('status').notNull().default('open'),
+    cancelledAt: timestamp('cancelled_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('invoice_org_group_unique').on(
+      t.organizationId,
+      t.registrationGroupId,
+    ),
+    unique('invoice_org_reference_unique').on(
+      t.organizationId,
+      t.paymentReference,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'invoice_org_group_fk',
+    }).onDelete('cascade'),
+    check('invoice_amount_check', sql`${t.totalCents} >= 0`),
+    check(
+      'invoice_status_check',
+      sql`${t.status} in ('open','partially_paid','paid','cancelled')`,
+    ),
+  ],
+);
+export const invoicePayments = pgTable(
+  'invoice_payment',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    invoiceId: uuid('invoice_id').notNull(),
+    amountCents: integer('amount_cents').notNull(),
+    reversesPaymentId: uuid('reverses_payment_id'),
+    actor: text('actor').notNull(),
+    reason: text('reason').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.invoiceId],
+      foreignColumns: [invoices.organizationId, invoices.id],
+      name: 'invoice_payment_invoice_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.reversesPaymentId],
+      foreignColumns: [t.organizationId, t.id],
+      name: 'invoice_payment_reversal_fk',
+    }),
+    check('invoice_payment_amount_nonzero_check', sql`${t.amountCents} <> 0`),
+    check('invoice_payment_actor_check', sql`length(trim(${t.actor})) > 0`),
+    check('invoice_payment_reason_check', sql`length(trim(${t.reason})) > 0`),
+  ],
+);
+export const invoicePaymentAuditEvents = pgTable(
+  'invoice_payment_audit_event',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    paymentId: uuid('payment_id').notNull(),
+    action: text('action').notNull(),
+    actor: text('actor').notNull(),
+    reason: text('reason').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.paymentId],
+      foreignColumns: [invoicePayments.organizationId, invoicePayments.id],
+      name: 'invoice_payment_audit_payment_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
+export type Database = ReturnType<typeof drizzle>;
+export async function migrate(databaseUrl: string): Promise<void> {
+  const { Pool } = await import('pg');
+  const pool = new Pool({ connectionString: databaseUrl });
+  try {
+    await drizzleMigrate(drizzle(pool), {
+      migrationsFolder: new URL('../migrations', import.meta.url).pathname,
+    });
+  } finally {
+    await pool.end();
+  }
+}
+export async function withOrganizationTransaction<T>(
+  db: Database,
+  ctx: RequestContext,
+  fn: (tx: Database) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select set_config('app.organization_id', ${ctx.organizationId}, true)`,
+    );
+    return fn(tx as unknown as Database);
+  });
+}
+export async function ensureCommunityOrganization(
+  db: Database,
+  config: { slug: string; name: string; timezone: string; locale: string },
+): Promise<Organization> {
+  return db.transaction(async (tx) => {
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtext('racepilot.community.bootstrap'))`,
+    );
+    const rows = await tx.select().from(organizations);
+    if (rows.length > 1)
+      throw new Error('Community deployment requires exactly one organization');
+    if (rows.length === 1) {
+      if (rows[0]!.slug !== config.slug)
+        throw new Error(
+          'Community organization slug does not match configuration',
+        );
+      return mapOrg(rows[0]!);
+    }
+    const [row] = await tx
+      .insert(organizations)
+      .values({ ...config })
+      .returning();
+    return mapOrg(row!);
+  });
+}
+function mapOrg(r: typeof organizations.$inferSelect): Organization {
+  return {
+    id: organizationId(r.id),
+    slug: r.slug,
+    name: r.name,
+    status: r.status as 'active' | 'disabled',
+    contactEmail: r.contactEmail,
+    websiteUrl: r.websiteUrl,
+    timezone: r.timezone,
+    locale: r.locale,
+    currency: r.currency,
+  };
+}
 export const emailTemplateVersions = pgTable(
   'email_template_version',
   {
@@ -583,67 +809,6 @@ export const emailDeliveries = pgTable(
   ],
 );
 
-export type Database = ReturnType<typeof drizzle>;
-export async function migrate(databaseUrl: string): Promise<void> {
-  const { Pool } = await import('pg');
-  const pool = new Pool({ connectionString: databaseUrl });
-  try {
-    await drizzleMigrate(drizzle(pool), {
-      migrationsFolder: new URL('../migrations', import.meta.url).pathname,
-    });
-  } finally {
-    await pool.end();
-  }
-}
-export async function withOrganizationTransaction<T>(
-  db: Database,
-  ctx: RequestContext,
-  fn: (tx: Database) => Promise<T>,
-): Promise<T> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select set_config('app.organization_id', ${ctx.organizationId}, true)`,
-    );
-    return fn(tx as unknown as Database);
-  });
-}
-export async function ensureCommunityOrganization(
-  db: Database,
-  config: { slug: string; name: string; timezone: string; locale: string },
-): Promise<Organization> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext('racepilot.community.bootstrap'))`,
-    );
-    const rows = await tx.select().from(organizations);
-    if (rows.length > 1)
-      throw new Error('Community deployment requires exactly one organization');
-    if (rows.length === 1) {
-      if (rows[0]!.slug !== config.slug)
-        throw new Error(
-          'Community organization slug does not match configuration',
-        );
-      return mapOrg(rows[0]!);
-    }
-    const [row] = await tx
-      .insert(organizations)
-      .values({ ...config })
-      .returning();
-    return mapOrg(row!);
-  });
-}
-function mapOrg(r: typeof organizations.$inferSelect): Organization {
-  return {
-    id: organizationId(r.id),
-    slug: r.slug,
-    name: r.name,
-    status: r.status as 'active' | 'disabled',
-    contactEmail: r.contactEmail,
-    websiteUrl: r.websiteUrl,
-    timezone: r.timezone,
-    locale: r.locale,
-  };
-}
 export function createOrganizationRepository(
   db: Database,
 ): OrganizationRepository {
@@ -666,6 +831,7 @@ export function createOrganizationRepository(
           ...('name' in patch ? { name: patch.name } : {}),
           ...('timezone' in patch ? { timezone: patch.timezone } : {}),
           ...('locale' in patch ? { locale: patch.locale } : {}),
+          ...('currency' in patch ? { currency: patch.currency } : {}),
           updatedAt: new Date(),
         })
         .where(eq(organizations.id, ctx.organizationId))
@@ -1096,8 +1262,9 @@ export function createEntryRepository(
   db: Database,
 ): import('@racepilot/core').EntryRepository {
   return {
-    create: async (ctx, input) => {
-      const [row] = await db
+    create: async (ctx, input, executor) => {
+      const executorDb = (executor as Database | undefined) ?? db;
+      const [row] = await executorDb
         .insert(entries)
         .values({
           organizationId: ctx.organizationId,
@@ -1111,6 +1278,7 @@ export function createEntryRepository(
           ),
           priceSnapshotVersion: input.priceSnapshotVersion,
           formSnapshotVersion: input.formSnapshotVersion,
+          priceSnapshot: input.priceSnapshot ?? null,
         })
         .returning();
       return mapEntry(row!);
@@ -1187,8 +1355,312 @@ export function createEntryRepository(
   };
 }
 
+export function createInvoicePaymentRepository(
+  db: Database,
+): InvoicePaymentRepository {
+  return {
+    record: async (ctx, invoiceId, amountCents, actor, reason) =>
+      db.transaction(async (tx) => {
+        const [invoice] = await tx
+          .select()
+          .from(invoices)
+          .where(
+            and(
+              eq(invoices.organizationId, ctx.organizationId),
+              eq(invoices.id, invoiceId),
+            ),
+          )
+          .for('update');
+        if (!invoice || invoice.status === 'cancelled') return null;
+        const [payment] = await tx
+          .insert(invoicePayments)
+          .values({
+            organizationId: ctx.organizationId,
+            invoiceId,
+            amountCents,
+            actor,
+            reason,
+          })
+          .returning();
+        await tx.insert(invoicePaymentAuditEvents).values({
+          organizationId: ctx.organizationId,
+          paymentId: payment!.id,
+          action: 'recorded',
+          actor,
+          reason,
+        });
+        const sums = await tx
+          .select({
+            total: sql<number>`coalesce(sum(${invoicePayments.amountCents}),0)`,
+          })
+          .from(invoicePayments)
+          .where(
+            and(
+              eq(invoicePayments.organizationId, ctx.organizationId),
+              eq(invoicePayments.invoiceId, invoiceId),
+            ),
+          );
+        const status = deriveInvoiceStatus(
+          invoice.totalCents,
+          Number(sums[0]?.total ?? 0),
+        );
+        await tx
+          .update(invoices)
+          .set({ status })
+          .where(
+            and(
+              eq(invoices.organizationId, ctx.organizationId),
+              eq(invoices.id, invoiceId),
+            ),
+          );
+        return payment;
+      }),
+    correct: async (ctx, paymentId, actor, reason) =>
+      db.transaction(async (tx) => {
+        const [original] = await tx
+          .select()
+          .from(invoicePayments)
+          .where(
+            and(
+              eq(invoicePayments.organizationId, ctx.organizationId),
+              eq(invoicePayments.id, paymentId),
+            ),
+          )
+          .for('update');
+        if (!original || original.reversesPaymentId !== null) return null;
+        const [alreadyReversed] = await tx
+          .select({ id: invoicePayments.id })
+          .from(invoicePayments)
+          .where(
+            and(
+              eq(invoicePayments.organizationId, ctx.organizationId),
+              eq(invoicePayments.reversesPaymentId, paymentId),
+            ),
+          )
+          .limit(1);
+        if (alreadyReversed) return null;
+        const [reversal] = await tx
+          .insert(invoicePayments)
+          .values({
+            organizationId: ctx.organizationId,
+            invoiceId: original.invoiceId,
+            amountCents: -original.amountCents,
+            reversesPaymentId: original.id,
+            actor,
+            reason,
+          })
+          .returning();
+        await tx.insert(invoicePaymentAuditEvents).values({
+          organizationId: ctx.organizationId,
+          paymentId: reversal!.id,
+          action: 'reversal',
+          actor,
+          reason,
+        });
+        const [invoice] = await tx
+          .select()
+          .from(invoices)
+          .where(
+            and(
+              eq(invoices.organizationId, ctx.organizationId),
+              eq(invoices.id, original.invoiceId),
+            ),
+          );
+        const sums = await tx
+          .select({
+            total: sql<number>`coalesce(sum(${invoicePayments.amountCents}),0)`,
+          })
+          .from(invoicePayments)
+          .where(
+            and(
+              eq(invoicePayments.organizationId, ctx.organizationId),
+              eq(invoicePayments.invoiceId, original.invoiceId),
+            ),
+          );
+        if (invoice)
+          await tx
+            .update(invoices)
+            .set({
+              status: deriveInvoiceStatus(
+                invoice.totalCents,
+                Number(sums[0]?.total ?? 0),
+              ),
+            })
+            .where(
+              and(
+                eq(invoices.organizationId, ctx.organizationId),
+                eq(invoices.id, original.invoiceId),
+              ),
+            );
+        return reversal;
+      }),
+  };
+}
+
+export function createPaymentRecipientRepository(
+  db: Database,
+): PaymentRecipientRepository {
+  return {
+    get: async (ctx) => {
+      const [row] = await db
+        .select()
+        .from(organizationPaymentRecipients)
+        .where(
+          eq(organizationPaymentRecipients.organizationId, ctx.organizationId),
+        );
+      return row
+        ? { accountName: row.accountName, iban: row.iban, bic: row.bic }
+        : null;
+    },
+    set: async (ctx, recipient: PaymentRecipient) => {
+      const [row] = await db
+        .insert(organizationPaymentRecipients)
+        .values({
+          organizationId: ctx.organizationId,
+          accountName: recipient.accountName,
+          iban: recipient.iban,
+          bic: recipient.bic ?? null,
+        })
+        .onConflictDoUpdate({
+          target: organizationPaymentRecipients.organizationId,
+          set: {
+            accountName: recipient.accountName,
+            iban: recipient.iban,
+            bic: recipient.bic ?? null,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      return { accountName: row!.accountName, iban: row!.iban, bic: row!.bic };
+    },
+  };
+}
+
+export function createEventClassPricingRepository(
+  db: Database,
+): EventClassPricingRepository {
+  return {
+    listByEvent: async (ctx, eventId) =>
+      (
+        await db
+          .select()
+          .from(eventClassPricingRules)
+          .where(
+            and(
+              eq(eventClassPricingRules.organizationId, ctx.organizationId),
+              eq(eventClassPricingRules.eventId, eventId),
+            ),
+          )
+      ).map((r) => ({
+        classId: r.classId,
+        baseCents: r.baseCents,
+        additionalEntryAdjustmentCents: r.additionalEntryAdjustmentCents,
+        earlyBirdDeadline: r.earlyBirdDeadline?.toISOString() ?? null,
+        earlyBirdDiscountCents: r.earlyBirdDiscountCents,
+      })),
+    upsert: async (ctx, eventId, rule) => {
+      const [r] = await db
+        .insert(eventClassPricingRules)
+        .values({
+          organizationId: ctx.organizationId,
+          eventId,
+          classId: rule.classId,
+          baseCents: rule.baseCents,
+          additionalEntryAdjustmentCents: rule.additionalEntryAdjustmentCents,
+          earlyBirdDeadline: rule.earlyBirdDeadline
+            ? new Date(rule.earlyBirdDeadline)
+            : null,
+          earlyBirdDiscountCents: rule.earlyBirdDiscountCents,
+        })
+        .onConflictDoUpdate({
+          target: [
+            eventClassPricingRules.organizationId,
+            eventClassPricingRules.eventId,
+            eventClassPricingRules.classId,
+          ],
+          set: {
+            baseCents: rule.baseCents,
+            additionalEntryAdjustmentCents: rule.additionalEntryAdjustmentCents,
+            earlyBirdDeadline: rule.earlyBirdDeadline
+              ? new Date(rule.earlyBirdDeadline)
+              : null,
+            earlyBirdDiscountCents: rule.earlyBirdDiscountCents,
+            updatedAt: new Date(),
+          },
+        })
+        .returning();
+      return {
+        classId: r!.classId,
+        baseCents: r!.baseCents,
+        additionalEntryAdjustmentCents: r!.additionalEntryAdjustmentCents,
+        earlyBirdDeadline: r!.earlyBirdDeadline?.toISOString() ?? null,
+        earlyBirdDiscountCents: r!.earlyBirdDiscountCents,
+      };
+    },
+  };
+}
+export function createInvoiceRepository(db: Database): InvoiceRepository {
+  return {
+    issue: async (ctx, eventId, registrationGroupId, snapshot, executor) => {
+      const executorDb = (executor as Database | undefined) ?? db;
+      const [counter] = await executorDb
+        .insert(invoiceReferenceCounters)
+        .values({ organizationId: ctx.organizationId, nextValue: 1 })
+        .onConflictDoUpdate({
+          target: invoiceReferenceCounters.organizationId,
+          set: { nextValue: sql`${invoiceReferenceCounters.nextValue} + 1` },
+        })
+        .returning({ nextValue: invoiceReferenceCounters.nextValue });
+      const paymentReference = createPaymentReference(
+        String(counter!.nextValue).padStart(8, '0'),
+      );
+      const [row] = await executorDb
+        .insert(invoices)
+        .values({
+          organizationId: ctx.organizationId,
+          eventId,
+          registrationGroupId,
+          totalCents: snapshot.totalCents,
+          currency: snapshot.currency,
+          paymentReference,
+        })
+        .onConflictDoNothing({
+          target: [invoices.organizationId, invoices.registrationGroupId],
+        })
+        .returning();
+      const invoice =
+        row ??
+        (
+          await executorDb
+            .select()
+            .from(invoices)
+            .where(
+              and(
+                eq(invoices.organizationId, ctx.organizationId),
+                eq(invoices.registrationGroupId, registrationGroupId),
+              ),
+            )
+        )[0];
+      if (!invoice) throw new Error('Invoice creation failed');
+      if (
+        invoice.totalCents !== snapshot.totalCents ||
+        invoice.currency !== snapshot.currency
+      )
+        throw new Error('Existing invoice does not match price snapshot');
+      return {
+        ...invoice,
+        organizationId: organizationId(invoice.organizationId),
+        status: invoice.status as InvoiceRecord['status'],
+      };
+    },
+  };
+}
+
 /** Drizzle's database and transaction objects both satisfy this executor. */
-export type MailOutboxExecutor = Pick<Database, 'execute'>;
+export type MailOutboxExecutor = Pick<
+  Database,
+  'execute' | 'insert' | 'select'
+>;
 export interface NewMailOutboxMessage {
   eventId?: string | null;
   templateKey: string;
@@ -1202,35 +1674,53 @@ export interface NewMailOutboxMessage {
 }
 /** Call with the caller's Drizzle transaction to atomically enqueue with domain writes. */
 export async function enqueueMailOutbox(
-  executor: MailOutboxExecutor,
+  db: Database,
   organization: string,
   input: NewMailOutboxMessage,
+  executor: MailOutboxExecutor = db,
 ): Promise<string> {
-  const result = await executor.execute(sql`insert into email_outbox
-    (organization_id,event_id,template_key,template_version,template_version_id,locale,recipient,idempotency_key,variables)
-    values (${organization},${input.eventId ?? null},${input.templateKey},${input.templateVersion},${input.templateVersionId ?? null},${input.locale},${input.recipient},${input.idempotencyKey},${JSON.stringify(input.variables)}::jsonb)
-    on conflict (organization_id,idempotency_key) do nothing returning id`);
-  const rows = (result as unknown as { rows: Array<{ id: string }> }).rows;
-  if (rows[0]) {
+  const [inserted] = await executor
+    .insert(emailOutbox)
+    .values({
+      organizationId: organization,
+      eventId: input.eventId ?? null,
+      templateKey: input.templateKey,
+      templateVersion: input.templateVersion,
+      templateVersionId: input.templateVersionId ?? null,
+      locale: input.locale,
+      recipient: input.recipient,
+      idempotencyKey: input.idempotencyKey,
+      variables: input.variables,
+    })
+    .onConflictDoNothing({
+      target: [emailOutbox.organizationId, emailOutbox.idempotencyKey],
+    })
+    .returning({ id: emailOutbox.id });
+  if (inserted) {
     const envelope = {
       type: 'mail.outbox',
       schemaVersion: 1,
       organizationId: organization,
       correlationId: input.correlationId ?? input.idempotencyKey,
-      payload: { outboxId: rows[0].id },
+      payload: { outboxId: inserted.id },
     };
     await executor.execute(
-      sql`select graphile_worker.add_job('mail_outbox', ${JSON.stringify(envelope)}::json, null, now(), 25, ${`mail-outbox:${rows[0].id}`})`,
+      sql`select graphile_worker.add_job('mail_outbox', ${JSON.stringify(envelope)}::json, null, now(), 25, ${`mail-outbox:${inserted.id}`})`,
     );
-    return rows[0].id;
+    return inserted.id;
   }
-  const existing = await executor.execute(
-    sql`select id from email_outbox where organization_id=${organization} and idempotency_key=${input.idempotencyKey}`,
-  );
-  const existingRows = (existing as unknown as { rows: Array<{ id: string }> })
-    .rows;
-  if (!existingRows[0]) throw new Error('Mail outbox enqueue failed');
-  return existingRows[0].id;
+  const [existing] = await executor
+    .select({ id: emailOutbox.id })
+    .from(emailOutbox)
+    .where(
+      and(
+        eq(emailOutbox.organizationId, organization),
+        eq(emailOutbox.idempotencyKey, input.idempotencyKey),
+      ),
+    )
+    .limit(1);
+  if (!existing) throw new Error('Mail outbox enqueue failed');
+  return existing.id;
 }
 
 export async function setOrganizationMailConfiguration(
@@ -1254,19 +1744,24 @@ export async function getOrganizationMailConfiguration(
   db: Database,
   organization: string,
 ) {
-  const result = await db.execute(
-    sql`select mail_from as "from",mail_reply_to as "replyTo" from organization where id=${organization} and status='active'`,
-  );
-  const row = (
-    result as unknown as {
-      rows: Array<{ from: string | null; replyTo: string | null }>;
-    }
-  ).rows[0];
+  const [row] = await db
+    .select({
+      from: organizations.mailFrom,
+      replyTo: organizations.mailReplyTo,
+    })
+    .from(organizations)
+    .where(
+      and(
+        eq(organizations.id, organization),
+        eq(organizations.status, 'active'),
+      ),
+    )
+    .limit(1);
   const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return row?.from &&
     email.test(row.from) &&
     (row.replyTo === null || email.test(row.replyTo))
-    ? row
+    ? { from: row.from, replyTo: row.replyTo }
     : null;
 }
 
@@ -1282,33 +1777,68 @@ export async function saveMailTemplateVersion(
     html: string;
   },
 ): Promise<string> {
-  const result = await db.execute(
-    sql`insert into email_template_version(organization_id,template_key,version,locale,subject,text_body,html_body) values (${organization},${input.templateKey},${input.version},${input.locale},${input.subject},${input.text},${input.html}) returning id`,
-  );
-  const row = (result as unknown as { rows: Array<{ id: string }> }).rows[0];
+  const [row] = await db
+    .insert(emailTemplateVersions)
+    .values({
+      organizationId: organization,
+      templateKey: input.templateKey,
+      version: input.version,
+      locale: input.locale,
+      subject: input.subject,
+      textBody: input.text,
+      htmlBody: input.html,
+    })
+    .returning({ id: emailTemplateVersions.id });
   if (!row) throw new Error('Mail template version could not be stored');
   return row.id;
 }
 
-export function createMailOutboxRepository(db: Database) {
+export function createMailOutboxRepository(
+  db: Database,
+  options: { leaseMs?: number } = {},
+) {
+  const leaseMs = options.leaseMs ?? 5 * 60_000;
+  const mapOutbox = (row: typeof emailOutbox.$inferSelect) => ({
+    id: row.id,
+    organizationId: row.organizationId,
+    eventId: row.eventId,
+    templateKey: row.templateKey as
+      'verification' | 'entry-received' | 'accepted' | 'rejected',
+    templateVersion: row.templateVersion,
+    locale: row.locale as 'de' | 'en',
+    recipient: row.recipient,
+    idempotencyKey: row.idempotencyKey,
+    variables: row.variables,
+    status: row.status as 'pending' | 'sending' | 'sent' | 'failed',
+    attempts: row.attempts,
+  });
   return {
     get: async (ctx: { organizationId: string }, id: string) => {
-      const result = await db.execute(
-        sql`select id,organization_id as "organizationId",event_id as "eventId",template_key as "templateKey",template_version as "templateVersion",locale,recipient,idempotency_key as "idempotencyKey",variables,status,attempts from email_outbox where organization_id=${ctx.organizationId} and id=${id}`,
-      );
-      return (
-        (result as unknown as { rows: Array<Record<string, unknown>> })
-          .rows[0] ?? null
-      );
+      const [row] = await db
+        .select()
+        .from(emailOutbox)
+        .where(
+          and(
+            eq(emailOutbox.organizationId, ctx.organizationId),
+            eq(emailOutbox.id, id),
+          ),
+        )
+        .limit(1);
+      return row ? mapOutbox(row) : null;
     },
     claim: async (ctx: { organizationId: string }, id: string) => {
-      const result = await db.execute(
-        sql`update email_outbox set status='sending',claimed_at=now() where organization_id=${ctx.organizationId} and id=${id} and status='pending' and available_at<=now() returning id,organization_id as "organizationId",event_id as "eventId",template_key as "templateKey",template_version as "templateVersion",locale,recipient,idempotency_key as "idempotencyKey",variables,status,attempts`,
-      );
-      return (
-        (result as unknown as { rows: Array<Record<string, unknown>> })
-          .rows[0] ?? null
-      );
+      const [row] = await db
+        .update(emailOutbox)
+        .set({ status: 'sending', claimedAt: new Date() })
+        .where(
+          and(
+            eq(emailOutbox.organizationId, ctx.organizationId),
+            eq(emailOutbox.id, id),
+            sql`(${emailOutbox.status} = 'pending' and ${emailOutbox.availableAt} <= now()) or (${emailOutbox.status} = 'sending' and ${emailOutbox.claimedAt} < now() - (${leaseMs} * interval '1 millisecond'))`,
+          ),
+        )
+        .returning();
+      return row ? mapOutbox(row) : null;
     },
     template: async (
       ctx: { organizationId: string },
@@ -1316,28 +1846,47 @@ export function createMailOutboxRepository(db: Database) {
       version: number,
       locale: string,
     ) => {
-      const result = await db.execute(
-        sql`select subject,text_body as text,html_body as html from email_template_version where organization_id=${ctx.organizationId} and template_key=${key} and version=${version} and locale=${locale}`,
-      );
-      return (
-        (
-          result as unknown as {
-            rows: Array<{ subject: string; text: string; html: string }>;
-          }
-        ).rows[0] ?? null
-      );
+      const [row] = await db
+        .select({
+          subject: emailTemplateVersions.subject,
+          text: emailTemplateVersions.textBody,
+          html: emailTemplateVersions.htmlBody,
+        })
+        .from(emailTemplateVersions)
+        .where(
+          and(
+            eq(emailTemplateVersions.organizationId, ctx.organizationId),
+            eq(emailTemplateVersions.templateKey, key),
+            eq(emailTemplateVersions.version, version),
+            eq(emailTemplateVersions.locale, locale),
+          ),
+        )
+        .limit(1);
+      return row
+        ? { subject: row.subject, text: row.text, html: row.html }
+        : null;
     },
     organizationMailConfig: async (ctx: { organizationId: string }) => {
-      const result = await db.execute(
-        sql`select mail_from as "from",mail_reply_to as "replyTo" from organization where id=${ctx.organizationId} and status='active'`,
-      );
-      return (
-        (
-          result as unknown as {
-            rows: Array<{ from: string | null; replyTo: string | null }>;
-          }
-        ).rows[0] ?? null
-      );
+      const [row] = await db
+        .select({
+          from: organizations.mailFrom,
+          replyTo: organizations.mailReplyTo,
+        })
+        .from(organizations)
+        .where(
+          and(
+            eq(organizations.id, ctx.organizationId),
+            eq(organizations.status, 'active'),
+          ),
+        )
+        .limit(1);
+      const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      return row?.from &&
+        email.test(row.from) &&
+        (row.replyTo === null ||
+          (row.replyTo !== null && email.test(row.replyTo)))
+        ? { from: row.from, replyTo: row.replyTo }
+        : null;
     },
     finish: async (
       ctx: { organizationId: string },
@@ -1350,12 +1899,49 @@ export function createMailOutboxRepository(db: Database) {
       },
     ) => {
       await db.transaction(async (tx) => {
-        await tx.execute(
-          sql`update email_outbox set status=${outcome.outcome === 'retry' ? 'pending' : outcome.outcome},attempts=${outcome.attempts},available_at=${outcome.availableAt ?? new Date()},sent_at=${outcome.outcome === 'sent' ? new Date() : null},claimed_at=null,last_error=${outcome.error ?? null} where organization_id=${ctx.organizationId} and id=${id} and status='sending'`,
-        );
-        await tx.execute(
-          sql`insert into email_delivery(organization_id,outbox_id,attempt,outcome,error) values (${ctx.organizationId},${id},${outcome.attempts},${outcome.outcome},${outcome.error ?? null}) on conflict (organization_id,outbox_id,attempt) do nothing`,
-        );
+        await tx
+          .update(emailOutbox)
+          .set({
+            status: outcome.outcome === 'retry' ? 'pending' : outcome.outcome,
+            attempts: outcome.attempts,
+            availableAt: outcome.availableAt ?? new Date(),
+            sentAt: outcome.outcome === 'sent' ? new Date() : null,
+            claimedAt: null,
+            lastError: outcome.error ?? null,
+          })
+          .where(
+            and(
+              eq(emailOutbox.organizationId, ctx.organizationId),
+              eq(emailOutbox.id, id),
+              eq(emailOutbox.status, 'sending'),
+            ),
+          );
+        await tx
+          .insert(emailDeliveries)
+          .values({
+            organizationId: ctx.organizationId,
+            outboxId: id,
+            attempt: outcome.attempts,
+            outcome: outcome.outcome,
+            error: outcome.error ?? null,
+          })
+          .onConflictDoNothing();
+        if (outcome.outcome === 'retry' && outcome.availableAt) {
+          const envelope = {
+            type: 'mail.outbox',
+            schemaVersion: 1,
+            organizationId: ctx.organizationId,
+            correlationId: id,
+            payload: { outboxId: id },
+          };
+          await tx.execute(sql`select graphile_worker.add_job(
+            identifier := 'mail_outbox',
+            payload := ${JSON.stringify(envelope)}::json,
+            run_at := ${outcome.availableAt},
+            job_key := ${`mail-outbox:${id}`},
+            job_key_mode := 'replace'
+          )`);
+        }
       });
     },
   };

@@ -149,7 +149,7 @@
       "id": "entry",
       "kind": "table",
       "tenantKey": "organization_id + event_id",
-      "isolation": "Repository reads use trusted organization; composite FKs enforce event, class, group, driver and vehicle ownership; partial unique event requested-number index.",
+      "isolation": "Repository reads use trusted organization; composite FKs enforce event, class, group, driver and vehicle ownership; partial unique event requested-number index. price_snapshot is persisted as an immutable-at-creation JSONB snapshot with version.",
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
@@ -194,14 +194,146 @@
       ]
     },
     {
+      "id": "event_class_pricing_rule",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + class_id",
+      "isolation": "Composite class FK and every query/write scoped to RequestContext.organizationId; values are immutable historical source only for snapshots.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates identical payment references by organization and preserves payment corrections as audited reversals"
+        }
+      ]
+    },
+    {
+      "id": "organization_payment_recipient",
+      "kind": "table",
+      "tenantKey": "organization_id",
+      "isolation": "One validated recipient per organization; transfer instruction generation returns null without a configured recipient.",
+      "negativeTests": [
+        {
+          "file": "packages/core/src/index.test.ts",
+          "name": "validates RF references, IBAN recipient and fails closed for transfers without recipient"
+        }
+      ]
+    },
+    {
+      "id": "invoice",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + registration_group_id",
+      "isolation": "Composite registration-group FK; unique payment reference is organization-local; repository filters organization context.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates identical payment references by organization and preserves payment corrections as audited reversals"
+        }
+      ]
+    },
+    {
+      "id": "invoice_payment",
+      "kind": "table",
+      "tenantKey": "organization_id + invoice_id",
+      "isolation": "Append-only signed ledger entries with tenant-bound invoice and reversal FKs.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates identical payment references by organization and preserves payment corrections as audited reversals"
+        }
+      ]
+    },
+    {
+      "id": "invoice_payment_audit_event",
+      "kind": "table",
+      "tenantKey": "organization_id + payment_id",
+      "isolation": "Audit insert is atomic with payment/reversal and tenant-bound to ledger row.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates identical payment references by organization and preserves payment corrections as audited reversals"
+        }
+      ]
+    },
+    {
+      "id": "admin-invoice-payment-create",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Requires payment:write and invoice repository enforces tenant-bound invoice lookup.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "requires payment:write for admin payment intake"
+        }
+      ]
+    },
+    {
+      "id": "admin-payment-correction",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Requires payment:write; creates reversal instead of overwriting a payment.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "requires payment:write for admin payment intake"
+        }
+      ]
+    },
+    {
+      "id": "admin-event-pricing-list",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId",
+      "isolation": "Requires event:read; pricing repository scopes organization and event.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "requires event:write for price-rule administration"
+        }
+      ]
+    },
+    {
+      "id": "admin-event-pricing-update",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId + classId",
+      "isolation": "Requires event:write; composite FK binds rule to tenant-owned class.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "requires event:write for price-rule administration"
+        }
+      ]
+    },
+    {
+      "id": "admin-payment-recipient-read",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Requires organization:read; no bank account defaults; missing recipient remains unavailable.",
+      "negativeTests": [
+        {
+          "file": "packages/core/src/index.test.ts",
+          "name": "validates RF references, IBAN recipient and fails closed for transfers without recipient"
+        }
+      ]
+    },
+    {
+      "id": "admin-payment-recipient-update",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Requires organization:update and validates IBAN checksum before persistence.",
+      "negativeTests": [
+        {
+          "file": "packages/core/src/index.test.ts",
+          "name": "validates RF references, IBAN recipient and fails closed for transfers without recipient"
+        }
+      ]
+    },
+    {
       "id": "email_outbox",
       "kind": "table",
       "tenantKey": "organization_id + event_id + template_version_id",
       "isolation": "Tenant-bound event and template composite FKs; all repository accesses filter JobContext.organizationId; insert accepts the caller's transaction.",
       "negativeTests": [
         {
-          "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "keeps mail outbox and template references tenant-bound"
+          "file": "packages/worker/src/mail.integration.test.ts",
+          "name": "schedules a future retry job, then records terminal delivery failure"
         }
       ]
     },
@@ -212,8 +344,8 @@
       "isolation": "Composite FK binds delivery attempts to the same-tenant outbox; attempt uniqueness makes delivery audit idempotent.",
       "negativeTests": [
         {
-          "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "keeps mail outbox and template references tenant-bound"
+          "file": "packages/worker/src/mail.integration.test.ts",
+          "name": "schedules a future retry job, then records terminal delivery failure"
         }
       ]
     },
@@ -225,7 +357,7 @@
       "negativeTests": [
         {
           "file": "packages/worker/src/mail.test.ts",
-          "name": "rejects absent and foreign organization jobs"
+          "name": "ends missing and foreign tenant jobs without sending or mutating state"
         }
       ]
     },

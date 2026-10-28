@@ -174,4 +174,78 @@ describe('api entry', () => {
     ).toBe(404);
     // does not transition a foreign entry ID; the repository receives server-resolved organization context.
   });
+  it('requires payment:write for admin payment intake', async () => {
+    const org = '11111111-1111-4111-8111-111111111111';
+    let called = false;
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: org },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'member',
+        }),
+      },
+      memberships: {
+        resolvePermissions: async () => new Set(['payment:read']),
+      },
+      payments: {
+        record: async () => {
+          called = true;
+          return { id: 'p' };
+        },
+        correct: async () => null,
+      },
+    });
+    const response = await app.request(
+      '/admin/invoices/22222222-2222-4222-8222-222222222222/payments',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ amountCents: 100, reason: 'bank transfer' }),
+      },
+    );
+    expect(response.status).toBe(403);
+    expect(called).toBe(false);
+  });
+
+  it('requires event:write for price-rule administration', async () => {
+    const org = '11111111-1111-4111-8111-111111111111';
+    let called = false;
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: org },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'member',
+        }),
+      },
+      memberships: { resolvePermissions: async () => new Set(['event:read']) },
+      pricing: {
+        listByEvent: async () => [],
+        upsert: async (_ctx, _event, rule) => {
+          called = true;
+          return rule;
+        },
+      },
+    });
+    const response = await app.request(
+      '/admin/events/22222222-2222-4222-8222-222222222222/pricing/33333333-3333-4333-8333-333333333333',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          baseCents: 1000,
+          additionalEntryAdjustmentCents: 0,
+          earlyBirdDeadline: null,
+          earlyBirdDiscountCents: 0,
+        }),
+      },
+    );
+    expect(response.status).toBe(403);
+    expect(called).toBe(false);
+  });
 });
