@@ -24,9 +24,6 @@
     },
     {
       "path": "./packages/adapter-postgres"
-    },
-    {
-      "path": "./packages/site"
     }
   ]
 }
