@@ -61,3 +61,29 @@ describe('RuntimeBootstrapResponse', () => {
     ).toBe(false);
   });
 });
+
+describe('public registration contracts', () => {
+  it('publishes and validates the versioned standard form strictly', async () => {
+    const { standardRegistrationForm, StandardRegistrationFormSchema } =
+      await import('./index.js');
+    expect(
+      StandardRegistrationFormSchema.parse(standardRegistrationForm).version,
+    ).toBe('1.0');
+    expect(
+      StandardRegistrationFormSchema.safeParse({
+        ...standardRegistrationForm,
+        unexpected: true,
+      }).success,
+    ).toBe(false);
+  });
+  it('rejects unknown submission keys and defaults registration policy safely', async () => {
+    const { PublicRegistrationRequestSchema, RegistrationSettingsSchema } =
+      await import('./index.js');
+    expect(RegistrationSettingsSchema.parse({}).sharedContactEmail).toBe(
+      'allowed',
+    );
+    expect(
+      PublicRegistrationRequestSchema.safeParse({ extra: true }).success,
+    ).toBe(false);
+  });
+});

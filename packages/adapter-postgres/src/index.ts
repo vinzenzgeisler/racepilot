@@ -3,6 +3,7 @@ import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator';
 import { eq, and } from 'drizzle-orm';
 import {
   pgTable,
+  primaryKey,
   uuid,
   text,
   boolean,
@@ -63,6 +64,20 @@ export const organizations = pgTable(
     timezone: text('timezone').notNull(),
     locale: text('locale').notNull(),
     currency: text('currency').notNull().default('EUR'),
+    registrationSettings: jsonb('registration_settings')
+      .$type<{
+        sharedContactEmail: 'allowed' | 'disallowed';
+        minimumAge: number | null;
+        guardianRequiredBelowAge: number;
+        maximumClassesPerGroup: number;
+      }>()
+      .notNull()
+      .default({
+        sharedContactEmail: 'allowed',
+        minimumAge: null,
+        guardianRequiredBelowAge: 18,
+        maximumClassesPerGroup: 8,
+      }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -106,6 +121,18 @@ export const events = pgTable(
     openedAt: timestamp('opened_at', { withTimezone: true }),
     closedAt: timestamp('closed_at', { withTimezone: true }),
     archivedAt: timestamp('archived_at', { withTimezone: true }),
+    consentTerms: jsonb('consent_terms')
+      .$type<
+        Array<{
+          key: string;
+          version: string;
+          language: 'de' | 'en';
+          text: string;
+          hash: string;
+        }>
+      >()
+      .notNull()
+      .default([]),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -241,10 +268,6 @@ export const people = pgTable(
   },
   (t) => [
     unique('person_org_id_unique').on(t.organizationId, t.id),
-    // Soft-deleted people release their email for a new person record.
-    uniqueIndex('person_org_email_unique')
-      .on(t.organizationId, t.emailNormalized)
-      .where(sql`${t.deletedAt} is null`),
     foreignKey({
       columns: [t.organizationId],
       foreignColumns: [organizations.id],
@@ -291,6 +314,9 @@ export const registrationGroups = pgTable(
     organizationId: uuid('organization_id').notNull(),
     eventId: uuid('event_id').notNull(),
     personId: uuid('person_id').notNull(),
+    contactEmail: text('contact_email'),
+    guardianName: text('guardian_name'),
+    guardianEmail: text('guardian_email'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -593,6 +619,112 @@ export const invoicePaymentAuditEvents = pgTable(
   ],
 );
 
+export const publicEntrySubmissions = pgTable(
+  'public_entry_submission',
+  {
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    submissionId: uuid('submission_id').notNull(),
+    registrationGroupId: uuid('registration_group_id'),
+    response: jsonb('response').$type<{
+      groupId: string;
+      entryIds: string[];
+    } | null>(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.eventId, t.submissionId] }),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'public_entry_submission_event_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'public_entry_submission_group_fk',
+    }),
+  ],
+);
+export const groupEmailVerifications = pgTable(
+  'registration_group_email_verification',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    registrationGroupId: uuid('registration_group_id').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'group_email_verification_group_fk',
+    }).onDelete('cascade'),
+    index('group_email_verification_expiry_idx')
+      .on(t.expiresAt)
+      .where(sql`${t.consumedAt} is null`),
+  ],
+);
+export const consentEvidence = pgTable(
+  'consent_evidence',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    registrationGroupId: uuid('registration_group_id').notNull(),
+    textKey: text('text_key').notNull(),
+    textVersion: text('text_version').notNull(),
+    language: text('language').notNull(),
+    textHash: text('text_hash').notNull(),
+    acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'consent_evidence_group_fk',
+    }).onDelete('cascade'),
+    index('consent_evidence_group_idx').on(
+      t.organizationId,
+      t.registrationGroupId,
+    ),
+  ],
+);
+export const registrationSettingsAudit = pgTable(
+  'registration_settings_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    actor: text('actor').notNull(),
+    beforeSettings: jsonb('before_settings').notNull(),
+    afterSettings: jsonb('after_settings').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
 export type Database = ReturnType<typeof drizzle>;
 export async function migrate(databaseUrl: string): Promise<void> {
   const { Pool } = await import('pg');

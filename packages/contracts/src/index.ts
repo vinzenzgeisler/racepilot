@@ -172,3 +172,151 @@ export const JobEnvelope = z
 export type JobEnvelope = z.infer<typeof JobEnvelope>;
 
 export { mailConfigSchema, validateMailConfig } from './config.js';
+
+export const StandardRegistrationFormSchema = z
+  .object({
+    version: z.literal('1.0'),
+    steps: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          title: z.object({ de: z.string(), en: z.string() }).strict(),
+          fields: z.array(
+            z
+              .object({
+                key: z.string().min(1),
+                type: z.enum(['text', 'email', 'date', 'checkbox', 'select']),
+                required: z.boolean(),
+                label: z.object({ de: z.string(), en: z.string() }).strict(),
+                options: z
+                  .array(
+                    z
+                      .object({
+                        value: z.string(),
+                        label: z
+                          .object({ de: z.string(), en: z.string() })
+                          .strict(),
+                      })
+                      .strict(),
+                  )
+                  .optional(),
+              })
+              .strict(),
+          ),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type StandardRegistrationForm = z.infer<
+  typeof StandardRegistrationFormSchema
+>;
+export const RegistrationSettingsSchema = z
+  .object({
+    sharedContactEmail: z.enum(['allowed', 'disallowed']).default('allowed'),
+    minimumAge: z.number().int().min(0).max(100).nullable().default(null),
+    guardianRequiredBelowAge: z.number().int().min(0).max(100).default(18),
+    maximumClassesPerGroup: z.number().int().min(1).max(100).default(8),
+  })
+  .strict();
+export type RegistrationSettings = z.infer<typeof RegistrationSettingsSchema>;
+export const PublicRegistrationRequestSchema = z
+  .object({
+    submissionId: z.string().uuid(),
+    formVersion: z.literal('1.0'),
+    language: z.enum(['de', 'en']),
+    eventSlug: z.string().min(1),
+    person: z
+      .object({
+        firstName: z.string().trim().min(1),
+        lastName: z.string().trim().min(1),
+        email: z.string().email(),
+        dateOfBirth: z.string().date(),
+        guardianName: z.string().optional(),
+        guardianEmail: z.string().email().optional(),
+      })
+      .strict(),
+    entries: z
+      .array(
+        z
+          .object({
+            classId: z.string().uuid(),
+            vehicle: z
+              .object({
+                make: z.string().trim().min(1),
+                model: z.string().trim().min(1),
+                year: z.number().int().nullable(),
+                registration: z.string().nullable(),
+              })
+              .strict(),
+          })
+          .strict(),
+      )
+      .min(1),
+    consents: z
+      .array(
+        z
+          .object({
+            key: z.string(),
+            version: z.string(),
+            hash: z.string().regex(/^[a-f0-9]{64}$/),
+            accepted: z.literal(true),
+          })
+          .strict(),
+      )
+      .min(1),
+  })
+  .strict();
+export type PublicRegistrationRequest = z.infer<
+  typeof PublicRegistrationRequestSchema
+>;
+export const standardRegistrationForm: StandardRegistrationForm = {
+  version: '1.0',
+  steps: [
+    {
+      id: 'driver',
+      title: { de: 'Fahrerdaten', en: 'Driver details' },
+      fields: [
+        {
+          key: 'firstName',
+          type: 'text',
+          required: true,
+          label: { de: 'Vorname', en: 'First name' },
+        },
+        {
+          key: 'lastName',
+          type: 'text',
+          required: true,
+          label: { de: 'Nachname', en: 'Last name' },
+        },
+        {
+          key: 'email',
+          type: 'email',
+          required: true,
+          label: { de: 'Kontakt-E-Mail', en: 'Contact email' },
+        },
+        {
+          key: 'dateOfBirth',
+          type: 'date',
+          required: true,
+          label: { de: 'Geburtsdatum', en: 'Date of birth' },
+        },
+      ],
+    },
+    {
+      id: 'consent',
+      title: { de: 'Einwilligungen', en: 'Consents' },
+      fields: [
+        {
+          key: 'consent',
+          type: 'checkbox',
+          required: true,
+          label: {
+            de: 'Ich akzeptiere die bereitgestellten Teilnahmebedingungen.',
+            en: 'I accept the provided participation terms.',
+          },
+        },
+      ],
+    },
+  ],
+};
