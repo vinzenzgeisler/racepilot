@@ -16,6 +16,14 @@ import {
   type EventClassRepository,
   type EventClassInput,
   transitionEntry,
+  recordInvoicePayment,
+  correctInvoicePayment,
+  updatePaymentRecipient,
+  setClassPriceRule,
+  validatePaymentRecipient,
+  type EventClassPricingRepository,
+  type PaymentRecipientRepository,
+  type InvoicePaymentRepository,
   type EntryRepository,
   type OrganizationRepository,
   type EventRepository,
@@ -145,6 +153,9 @@ export interface ApiDeps {
   events: EventRepository;
   classes?: EventClassRepository;
   entries?: EntryRepository;
+  payments?: InvoicePaymentRepository;
+  paymentRecipients?: PaymentRecipientRepository;
+  pricing?: EventClassPricingRepository;
   authenticator?: Authenticator;
   memberships?: MembershipRepository;
   bootstrap?: MembershipBootstrap;
@@ -177,6 +188,20 @@ export function createApp(deps: ApiDeps) {
       const organization = await deps.organizations.getById(context);
       if (!organization || organization.status !== 'active')
         return c.json({ error: 'Runtime unavailable' }, 404);
+      const bankTransferAvailable = await (async () => {
+        if (!deps.paymentRecipients) return false;
+        try {
+          const recipient = await deps.paymentRecipients.get(context);
+          if (!recipient) return false;
+          validatePaymentRecipient(recipient);
+          return true;
+        } catch {
+          return false;
+        }
+      })();
+      const capabilities = new Set(deps.runtimeBootstrap?.capabilities ?? []);
+      if (bankTransferAvailable) capabilities.add('payment.bank_transfer');
+      else capabilities.delete('payment.bank_transfer');
       const result = RuntimeBootstrapResponse.parse({
         schemaVersion: 1,
         configurationVersion:
@@ -199,7 +224,7 @@ export function createApp(deps: ApiDeps) {
         locale: organization.locale,
         // The current event lifecycle contract has no authoritative "active" event selection.
         activeEvent: null,
-        capabilities: deps.runtimeBootstrap?.capabilities ?? [],
+        capabilities: [...capabilities],
         legalLinks: deps.runtimeBootstrap?.legalLinks ?? [],
       });
       c.header('Cache-Control', 'private, max-age=0, must-revalidate');
@@ -386,6 +411,141 @@ export function createApp(deps: ApiDeps) {
       return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
     } catch {
       return c.json({ error: 'Forbidden or invalid transition' }, 403);
+    }
+  });
+  app.get('/admin/events/:eventId/pricing', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.pricing) return c.json({ error: 'Not found' }, 404);
+    return c.json(
+      await deps.pricing.listByEvent(context, c.req.param('eventId')),
+    );
+  });
+  app.put('/admin/events/:eventId/pricing/:classId', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.pricing) return c.json({ error: 'Not found' }, 404);
+    const parsed = z
+      .object({
+        baseCents: z.number().int().nonnegative(),
+        additionalEntryAdjustmentCents: z.number().int(),
+        earlyBirdDeadline: z.string().datetime({ offset: true }).nullable(),
+        earlyBirdDiscountCents: z.number().int().nonnegative(),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      return c.json(
+        await setClassPriceRule(
+          context,
+          c.req.param('eventId'),
+          { ...parsed.data, classId: c.req.param('classId') },
+          { pricing: deps.pricing },
+        ),
+      );
+    } catch {
+      return c.json({ error: 'Forbidden or invalid price rule' }, 403);
+    }
+  });
+  app.get('/admin/organization/payment-recipient', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.paymentRecipients) return c.json({ error: 'Not found' }, 404);
+    const recipient = await deps.paymentRecipients.get(context);
+    return c.json({ recipient });
+  });
+  app.put('/admin/organization/payment-recipient', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:update'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.paymentRecipients) return c.json({ error: 'Not found' }, 404);
+    const parsed = z
+      .object({
+        accountName: z.string().trim().min(1).max(70),
+        iban: z.string().min(15).max(34),
+        bic: z.string().max(11).nullable().optional(),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      return c.json({
+        recipient: await updatePaymentRecipient(
+          context,
+          {
+            accountName: parsed.data.accountName,
+            iban: parsed.data.iban,
+            ...(parsed.data.bic !== undefined ? { bic: parsed.data.bic } : {}),
+          },
+          { recipients: deps.paymentRecipients },
+        ),
+      });
+    } catch {
+      return c.json({ error: 'Invalid payment recipient' }, 400);
+    }
+  });
+  app.post('/admin/invoices/:invoiceId/payments', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('payment:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.payments) return c.json({ error: 'Not found' }, 404);
+    const parsed = z
+      .object({
+        amountCents: z.number().int().positive(),
+        reason: z.string().trim().min(1).max(1000),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      const result = await recordInvoicePayment(
+        context,
+        c.req.param('invoiceId'),
+        parsed.data.amountCents,
+        context.subject
+          ? `${context.subject.issuer}#${context.subject.subject}`
+          : context.correlationId,
+        parsed.data.reason,
+        { payments: deps.payments },
+      );
+      return result ? c.json(result, 201) : c.json({ error: 'Not found' }, 404);
+    } catch {
+      return c.json({ error: 'Forbidden or invalid payment' }, 403);
+    }
+  });
+  app.post('/admin/payments/:paymentId/corrections', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('payment:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.payments) return c.json({ error: 'Not found' }, 404);
+    const parsed = z
+      .object({ reason: z.string().trim().min(1).max(1000) })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    try {
+      const result = await correctInvoicePayment(
+        context,
+        c.req.param('paymentId'),
+        context.subject
+          ? `${context.subject.issuer}#${context.subject.subject}`
+          : context.correlationId,
+        parsed.data.reason,
+        { payments: deps.payments },
+      );
+      return result ? c.json(result, 201) : c.json({ error: 'Not found' }, 404);
+    } catch {
+      return c.json({ error: 'Forbidden or invalid correction' }, 403);
     }
   });
   app.get('/public/events/:organizationId/:slug', async (c) => {

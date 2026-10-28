@@ -144,6 +144,7 @@ export const OrganizationResponse = z
     websiteUrl: z.string().url().nullable(),
     timezone: z.string(),
     locale: z.string(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
   })
   .strict();
 export const UpdateOrganizationRequest = z
@@ -153,6 +154,10 @@ export const UpdateOrganizationRequest = z
     websiteUrl: z.string().url().nullable().optional(),
     timezone: z.string().min(1).optional(),
     locale: z.string().min(1).optional(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .optional(),
   })
   .strict();
 export const JobEnvelope = z

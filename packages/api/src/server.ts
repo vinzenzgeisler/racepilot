@@ -8,6 +8,9 @@ import {
   createEventRepository,
   createEventClassRepository,
   createMembershipRepository,
+  createInvoicePaymentRepository,
+  createPaymentRecipientRepository,
+  createEventClassPricingRepository,
 } from '@racepilot/adapter-postgres';
 import { createApp } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
@@ -34,6 +37,9 @@ serve({
     events: createEventRepository(db),
     classes: createEventClassRepository(db),
     memberships: createMembershipRepository(db),
+    payments: createInvoicePaymentRepository(db),
+    paymentRecipients: createPaymentRecipientRepository(db),
+    pricing: createEventClassPricingRepository(db),
     ...(identityProvider
       ? {
           oidcClient: {
