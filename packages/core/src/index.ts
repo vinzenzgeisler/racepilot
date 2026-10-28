@@ -420,6 +420,8 @@ export function permissionsForRole(role: MembershipRole): ReadonlySet<string> {
         'event:read',
         'event:write',
         'class:write',
+        'entry:read',
+        'entry:write',
       ])
     : new Set();
 }
@@ -457,4 +459,208 @@ export interface ObjectStorageProvider {
     objectId: string,
   ): Promise<StoredObject | null>;
   delete(organizationId: OrganizationId, objectId: string): Promise<void>;
+}
+
+export type EntryVerificationStatus = 'unverified' | 'verified';
+export type EntryAcceptanceStatus =
+  'pending' | 'accepted' | 'rejected' | 'waitlisted' | 'withdrawn';
+export interface Person {
+  id: string;
+  organizationId: OrganizationId;
+  firstName: string;
+  lastName: string;
+  email: string | null;
+  emailNormalized: string | null;
+  dateOfBirth: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+  deletionReason: string | null;
+}
+export interface Vehicle {
+  id: string;
+  organizationId: OrganizationId;
+  make: string;
+  model: string;
+  year: number | null;
+  registration: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+  deletionReason: string | null;
+}
+export interface RegistrationGroup {
+  id: string;
+  organizationId: OrganizationId;
+  eventId: string;
+  personId: string;
+  createdAt: string;
+}
+export interface Entry {
+  id: string;
+  organizationId: OrganizationId;
+  eventId: string;
+  classId: string;
+  registrationGroupId: string;
+  driverPersonId: string;
+  vehicleId: string;
+  verificationStatus: EntryVerificationStatus;
+  acceptanceStatus: EntryAcceptanceStatus;
+  requestedStartNumber: string | null;
+  priceSnapshotVersion: string | null;
+  formSnapshotVersion: string | null;
+  createdAt: string;
+  deletedAt: string | null;
+  deletionReason: string | null;
+}
+export interface EntryAuditEvent {
+  id: string;
+  organizationId: OrganizationId;
+  entryId: string;
+  transition: 'verification' | 'acceptance';
+  fromStatus: string;
+  toStatus: string;
+  actor: string;
+  reason: string;
+  occurredAt: string;
+}
+export type PersonInput = Pick<
+  Person,
+  'firstName' | 'lastName' | 'email' | 'dateOfBirth'
+>;
+export type VehicleInput = Pick<
+  Vehicle,
+  'make' | 'model' | 'year' | 'registration'
+>;
+export type RegistrationGroupInput = Pick<
+  RegistrationGroup,
+  'eventId' | 'personId'
+>;
+export type EntryInput = Pick<
+  Entry,
+  | 'eventId'
+  | 'classId'
+  | 'registrationGroupId'
+  | 'driverPersonId'
+  | 'vehicleId'
+  | 'requestedStartNumber'
+  | 'priceSnapshotVersion'
+  | 'formSnapshotVersion'
+>;
+export interface PersonRepository {
+  create?(ctx: RequestContext, input: PersonInput): Promise<Person>;
+  getById(ctx: RequestContext, id: string): Promise<Person | null>;
+  softDelete(
+    ctx: RequestContext,
+    id: string,
+    reason: string,
+  ): Promise<Person | null>;
+  findDuplicate(
+    ctx: RequestContext,
+    email: string | null,
+    firstName: string,
+    lastName: string,
+    dateOfBirth: string | null,
+  ): Promise<{ person: Person | null; nameAndBirthdateMatch: boolean }>;
+}
+export interface VehicleRepository {
+  create?(ctx: RequestContext, input: VehicleInput): Promise<Vehicle>;
+  getById(ctx: RequestContext, id: string): Promise<Vehicle | null>;
+  softDelete(
+    ctx: RequestContext,
+    id: string,
+    reason: string,
+  ): Promise<Vehicle | null>;
+}
+export interface RegistrationGroupRepository {
+  create(
+    ctx: RequestContext,
+    input: RegistrationGroupInput,
+  ): Promise<RegistrationGroup>;
+}
+export interface EntryRepository {
+  create?(ctx: RequestContext, input: EntryInput): Promise<Entry>;
+  getById(ctx: RequestContext, id: string): Promise<Entry | null>;
+  transition(
+    ctx: RequestContext,
+    id: string,
+    transition: 'verification' | 'acceptance',
+    fromStatus: string,
+    toStatus: string,
+    actor: string,
+    reason: string,
+  ): Promise<Entry | null>;
+  softDelete(
+    ctx: RequestContext,
+    id: string,
+    reason: string,
+  ): Promise<Entry | null>;
+}
+export function normalizeEmail(value: string): string {
+  const normalized = value.trim().normalize('NFKC').toLocaleLowerCase('en-US');
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized))
+    throw new Error('Invalid email');
+  return normalized;
+}
+export function normalizeRequestedStartNumber(
+  value: string | null | undefined,
+): string | null {
+  if (value == null || value.trim() === '') return null;
+  const normalized = value.trim().normalize('NFKC').toUpperCase();
+  if (!/^[A-Z0-9][A-Z0-9-]{0,15}$/.test(normalized))
+    throw new Error('Invalid requested start number');
+  return normalized;
+}
+const verificationTransitions: Record<
+  EntryVerificationStatus,
+  readonly EntryVerificationStatus[]
+> = { unverified: ['verified'], verified: [] };
+const acceptanceTransitions: Record<
+  EntryAcceptanceStatus,
+  readonly EntryAcceptanceStatus[]
+> = {
+  pending: ['accepted', 'rejected', 'waitlisted', 'withdrawn'],
+  accepted: ['withdrawn'],
+  rejected: ['withdrawn'],
+  waitlisted: ['withdrawn'],
+  withdrawn: [],
+};
+export function assertEntryTransition(
+  kind: 'verification' | 'acceptance',
+  from: string,
+  to: string,
+): void {
+  const allowed =
+    kind === 'verification'
+      ? verificationTransitions[from as EntryVerificationStatus]
+      : acceptanceTransitions[from as EntryAcceptanceStatus];
+  if (!allowed?.includes(to as never))
+    throw new Error(`Invalid entry ${kind} transition: ${from} -> ${to}`);
+}
+export async function transitionEntry(
+  ctx: RequestContext,
+  id: string,
+  kind: 'verification' | 'acceptance',
+  to: string,
+  actor: string,
+  reason: string,
+  deps: { entries: EntryRepository },
+): Promise<Entry | null> {
+  if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
+  if (!actor.trim() || !reason.trim())
+    throw new Error('Transition actor and reason are required');
+  const current = await deps.entries.getById(ctx, id);
+  if (!current) return null;
+  const from =
+    kind === 'verification'
+      ? current.verificationStatus
+      : current.acceptanceStatus;
+  assertEntryTransition(kind, from, to);
+  return deps.entries.transition(
+    ctx,
+    id,
+    kind,
+    from,
+    to,
+    actor.trim(),
+    reason.trim(),
+  );
 }

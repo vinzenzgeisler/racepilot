@@ -101,4 +101,47 @@ describe('api entry', () => {
     ).toBe(404);
     expect(seen).toEqual([configuredOrg]);
   });
+  it('returns 404 for a foreign entry ID', async () => {
+    const org = '11111111-1111-4111-8111-111111111111';
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: org },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'admin',
+        }),
+      },
+      memberships: {
+        resolvePermissions: async () => new Set(['entry:read', 'entry:write']),
+      },
+      entries: {
+        getById: async () => null,
+        transition: async () => null,
+        softDelete: async () => null,
+      },
+    });
+    expect(
+      (await app.request('/admin/entries/22222222-2222-4222-8222-222222222222'))
+        .status,
+    ).toBe(404);
+    expect(
+      (
+        await app.request(
+          '/admin/entries/22222222-2222-4222-8222-222222222222/transitions',
+          {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({
+              transition: 'verification',
+              status: 'verified',
+              reason: 'checked',
+            }),
+          },
+        )
+      ).status,
+    ).toBe(404);
+    // does not transition a foreign entry ID; the repository receives server-resolved organization context.
+  });
 });

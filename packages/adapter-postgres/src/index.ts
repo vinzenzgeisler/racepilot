@@ -13,6 +13,7 @@ import {
   index,
   integer,
   foreignKey,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import type {
@@ -32,7 +33,12 @@ import type {
   MembershipBootstrap,
   ExternalIdentity,
 } from '@racepilot/core';
-import { organizationId, permissionsForRole } from '@racepilot/core';
+import {
+  organizationId,
+  permissionsForRole,
+  normalizeEmail,
+  normalizeRequestedStartNumber,
+} from '@racepilot/core';
 import type { Pool } from 'pg';
 export const organizations = pgTable(
   'organization',
@@ -197,6 +203,218 @@ export const organizationMemberships = pgTable(
     index('organization_membership_identity_idx').on(t.userIdentityId),
   ],
 );
+export const people = pgTable(
+  'person',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    firstName: text('first_name').notNull(),
+    lastName: text('last_name').notNull(),
+    email: text('email'),
+    emailNormalized: text('email_normalized'),
+    dateOfBirth: date('date_of_birth'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletionReason: text('deletion_reason'),
+  },
+  (t) => [
+    unique('person_org_id_unique').on(t.organizationId, t.id),
+    unique('person_org_email_unique').on(t.organizationId, t.emailNormalized),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'person_org_fk',
+    }).onDelete('cascade'),
+    check(
+      'person_deleted_reason_check',
+      sql`${t.deletedAt} is null or ${t.deletionReason} is not null`,
+    ),
+  ],
+);
+export const vehicles = pgTable(
+  'vehicle',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    make: text('make').notNull(),
+    model: text('model').notNull(),
+    year: integer('year'),
+    registration: text('registration'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletionReason: text('deletion_reason'),
+  },
+  (t) => [
+    unique('vehicle_org_id_unique').on(t.organizationId, t.id),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'vehicle_org_fk',
+    }).onDelete('cascade'),
+    check(
+      'vehicle_deleted_reason_check',
+      sql`${t.deletedAt} is null or ${t.deletionReason} is not null`,
+    ),
+  ],
+);
+export const registrationGroups = pgTable(
+  'registration_group',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    personId: uuid('person_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('registration_group_org_id_unique').on(t.organizationId, t.id),
+    unique('registration_group_org_event_id_unique').on(
+      t.organizationId,
+      t.eventId,
+      t.id,
+    ),
+    unique('registration_group_org_event_person_unique').on(
+      t.organizationId,
+      t.eventId,
+      t.id,
+      t.personId,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'registration_group_org_event_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.personId],
+      foreignColumns: [people.organizationId, people.id],
+      name: 'registration_group_org_person_fk',
+    }),
+  ],
+);
+export const entries = pgTable(
+  'entry',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    classId: uuid('class_id').notNull(),
+    registrationGroupId: uuid('registration_group_id').notNull(),
+    driverPersonId: uuid('driver_person_id').notNull(),
+    vehicleId: uuid('vehicle_id').notNull(),
+    verificationStatus: text('verification_status')
+      .notNull()
+      .default('unverified'),
+    acceptanceStatus: text('acceptance_status').notNull().default('pending'),
+    requestedStartNumber: text('requested_start_number'),
+    priceSnapshotVersion: text('price_snapshot_version'),
+    formSnapshotVersion: text('form_snapshot_version'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+    deletionReason: text('deletion_reason'),
+  },
+  (t) => [
+    unique('entry_org_id_unique').on(t.organizationId, t.id),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'entry_org_event_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.classId],
+      foreignColumns: [
+        eventClasses.organizationId,
+        eventClasses.eventId,
+        eventClasses.id,
+      ],
+      name: 'entry_org_class_fk',
+    }),
+    foreignKey({
+      columns: [
+        t.organizationId,
+        t.eventId,
+        t.registrationGroupId,
+        t.driverPersonId,
+      ],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+        registrationGroups.personId,
+      ],
+      name: 'entry_org_group_fk',
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.driverPersonId],
+      foreignColumns: [people.organizationId, people.id],
+      name: 'entry_org_driver_fk',
+    }),
+    foreignKey({
+      columns: [t.organizationId, t.vehicleId],
+      foreignColumns: [vehicles.organizationId, vehicles.id],
+      name: 'entry_org_vehicle_fk',
+    }),
+    check(
+      'entry_verification_status_check',
+      sql`${t.verificationStatus} in ('unverified','verified')`,
+    ),
+    check(
+      'entry_acceptance_status_check',
+      sql`${t.acceptanceStatus} in ('pending','accepted','rejected','waitlisted','withdrawn')`,
+    ),
+    check(
+      'entry_deleted_reason_check',
+      sql`${t.deletedAt} is null or ${t.deletionReason} is not null`,
+    ),
+    uniqueIndex('entry_event_requested_start_number_unique')
+      .on(t.organizationId, t.eventId, t.requestedStartNumber)
+      .where(
+        sql`${t.requestedStartNumber} is not null and ${t.deletedAt} is null and ${t.acceptanceStatus} <> 'withdrawn'`,
+      ),
+  ],
+);
+export const entryAuditEvents = pgTable(
+  'entry_audit_event',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    entryId: uuid('entry_id').notNull(),
+    transition: text('transition').notNull(),
+    fromStatus: text('from_status').notNull(),
+    toStatus: text('to_status').notNull(),
+    actor: text('actor').notNull(),
+    reason: text('reason').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.entryId],
+      foreignColumns: [entries.organizationId, entries.id],
+      name: 'entry_audit_org_entry_fk',
+    }).onDelete('cascade'),
+    check(
+      'entry_audit_transition_check',
+      sql`${t.transition} in ('verification','acceptance')`,
+    ),
+    check('entry_audit_actor_check', sql`length(trim(${t.actor})) > 0`),
+    check('entry_audit_reason_check', sql`length(trim(${t.reason})) > 0`),
+    index('entry_audit_entry_idx').on(
+      t.organizationId,
+      t.entryId,
+      t.occurredAt,
+    ),
+  ],
+);
+
 export type Database = ReturnType<typeof drizzle>;
 export async function migrate(databaseUrl: string): Promise<void> {
   const { Pool } = await import('pg');
@@ -534,4 +752,269 @@ export async function createDatabase(databaseUrl: string) {
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: databaseUrl });
   return { db: drizzle(pool), pool: pool as Pool };
+}
+
+function mapPerson(
+  row: typeof people.$inferSelect,
+): import('@racepilot/core').Person {
+  return {
+    ...row,
+    organizationId: organizationId(row.organizationId),
+    dateOfBirth: row.dateOfBirth ?? null,
+    createdAt: row.createdAt.toISOString(),
+    deletedAt: row.deletedAt?.toISOString() ?? null,
+  };
+}
+function mapVehicle(
+  row: typeof vehicles.$inferSelect,
+): import('@racepilot/core').Vehicle {
+  return {
+    ...row,
+    organizationId: organizationId(row.organizationId),
+    createdAt: row.createdAt.toISOString(),
+    deletedAt: row.deletedAt?.toISOString() ?? null,
+  };
+}
+function mapEntry(
+  row: typeof entries.$inferSelect,
+): import('@racepilot/core').Entry {
+  return {
+    ...row,
+    organizationId: organizationId(row.organizationId),
+    verificationStatus:
+      row.verificationStatus as import('@racepilot/core').Entry['verificationStatus'],
+    acceptanceStatus:
+      row.acceptanceStatus as import('@racepilot/core').Entry['acceptanceStatus'],
+    createdAt: row.createdAt.toISOString(),
+    deletedAt: row.deletedAt?.toISOString() ?? null,
+  };
+}
+export function createPersonRepository(
+  db: Database,
+): import('@racepilot/core').PersonRepository {
+  return {
+    create: async (ctx, input) => {
+      const firstName = input.firstName.trim();
+      const lastName = input.lastName.trim();
+      if (!firstName || !lastName) throw new Error('Person name is required');
+      const normalized =
+        input.email == null ? null : normalizeEmail(input.email);
+      const [row] = await db
+        .insert(people)
+        .values({
+          organizationId: ctx.organizationId,
+          firstName,
+          lastName,
+          email: input.email?.trim() ?? null,
+          emailNormalized: normalized,
+          dateOfBirth: input.dateOfBirth,
+        })
+        .returning();
+      return mapPerson(row!);
+    },
+    getById: async (ctx, id) => {
+      const [row] = await db
+        .select()
+        .from(people)
+        .where(
+          and(
+            eq(people.organizationId, ctx.organizationId),
+            eq(people.id, id),
+            sql`${people.deletedAt} is null`,
+          ),
+        );
+      return row ? mapPerson(row) : null;
+    },
+    softDelete: async (ctx, id, reason) => {
+      if (!reason.trim()) throw new Error('Deletion reason is required');
+      const [row] = await db
+        .update(people)
+        .set({ deletedAt: new Date(), deletionReason: reason.trim() })
+        .where(
+          and(
+            eq(people.organizationId, ctx.organizationId),
+            eq(people.id, id),
+            sql`${people.deletedAt} is null`,
+          ),
+        )
+        .returning();
+      return row ? mapPerson(row) : null;
+    },
+    findDuplicate: async (ctx, email, firstName, lastName, dateOfBirth) => {
+      const normalizedEmail = email == null ? null : normalizeEmail(email);
+      const [emailRow] = normalizedEmail
+        ? await db
+            .select()
+            .from(people)
+            .where(
+              and(
+                eq(people.organizationId, ctx.organizationId),
+                eq(people.emailNormalized, normalizedEmail),
+                sql`${people.deletedAt} is null`,
+              ),
+            )
+            .limit(1)
+        : [];
+      const [nameRow] = dateOfBirth
+        ? await db
+            .select()
+            .from(people)
+            .where(
+              and(
+                eq(people.organizationId, ctx.organizationId),
+                sql`lower(${people.firstName}) = lower(${firstName.trim()})`,
+                sql`lower(${people.lastName}) = lower(${lastName.trim()})`,
+                eq(people.dateOfBirth, dateOfBirth),
+                sql`${people.deletedAt} is null`,
+              ),
+            )
+            .limit(1)
+        : [];
+      return {
+        person: emailRow ? mapPerson(emailRow) : null,
+        nameAndBirthdateMatch: Boolean(nameRow),
+      };
+    },
+  };
+}
+export function createVehicleRepository(
+  db: Database,
+): import('@racepilot/core').VehicleRepository {
+  return {
+    create: async (ctx, input) => {
+      const [row] = await db
+        .insert(vehicles)
+        .values({
+          organizationId: ctx.organizationId,
+          make: input.make.trim(),
+          model: input.model.trim(),
+          year: input.year ?? null,
+          registration: input.registration?.trim() ?? null,
+        })
+        .returning();
+      return mapVehicle(row!);
+    },
+    getById: async (ctx, id) => {
+      const [row] = await db
+        .select()
+        .from(vehicles)
+        .where(
+          and(
+            eq(vehicles.organizationId, ctx.organizationId),
+            eq(vehicles.id, id),
+            sql`${vehicles.deletedAt} is null`,
+          ),
+        );
+      return row ? mapVehicle(row) : null;
+    },
+    softDelete: async (ctx, id, reason) => {
+      if (!reason.trim()) throw new Error('Deletion reason is required');
+      const [row] = await db
+        .update(vehicles)
+        .set({ deletedAt: new Date(), deletionReason: reason.trim() })
+        .where(
+          and(
+            eq(vehicles.organizationId, ctx.organizationId),
+            eq(vehicles.id, id),
+            sql`${vehicles.deletedAt} is null`,
+          ),
+        )
+        .returning();
+      return row ? mapVehicle(row) : null;
+    },
+  };
+}
+export function createEntryRepository(
+  db: Database,
+): import('@racepilot/core').EntryRepository {
+  return {
+    create: async (ctx, input) => {
+      const [row] = await db
+        .insert(entries)
+        .values({
+          organizationId: ctx.organizationId,
+          eventId: input.eventId,
+          classId: input.classId,
+          registrationGroupId: input.registrationGroupId,
+          driverPersonId: input.driverPersonId,
+          vehicleId: input.vehicleId,
+          requestedStartNumber: normalizeRequestedStartNumber(
+            input.requestedStartNumber,
+          ),
+          priceSnapshotVersion: input.priceSnapshotVersion,
+          formSnapshotVersion: input.formSnapshotVersion,
+        })
+        .returning();
+      return mapEntry(row!);
+    },
+    getById: async (ctx, id) => {
+      const [row] = await db
+        .select()
+        .from(entries)
+        .where(
+          and(
+            eq(entries.organizationId, ctx.organizationId),
+            eq(entries.id, id),
+            sql`${entries.deletedAt} is null`,
+          ),
+        );
+      return row ? mapEntry(row) : null;
+    },
+    transition: async (
+      ctx,
+      id,
+      transition,
+      fromStatus,
+      toStatus,
+      actor,
+      reason,
+    ) =>
+      db.transaction(async (tx) => {
+        const statusColumn =
+          transition === 'verification'
+            ? entries.verificationStatus
+            : entries.acceptanceStatus;
+        const [row] = await tx
+          .update(entries)
+          .set({
+            [transition === 'verification'
+              ? 'verificationStatus'
+              : 'acceptanceStatus']: toStatus,
+          })
+          .where(
+            and(
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.id, id),
+              eq(statusColumn, fromStatus),
+              sql`${entries.deletedAt} is null`,
+            ),
+          )
+          .returning();
+        if (!row) return null;
+        await tx.insert(entryAuditEvents).values({
+          organizationId: ctx.organizationId,
+          entryId: id,
+          transition,
+          fromStatus,
+          toStatus,
+          actor,
+          reason,
+        });
+        return mapEntry(row);
+      }),
+    softDelete: async (ctx, id, reason) => {
+      const [row] = await db
+        .update(entries)
+        .set({ deletedAt: new Date(), deletionReason: reason })
+        .where(
+          and(
+            eq(entries.organizationId, ctx.organizationId),
+            eq(entries.id, id),
+            sql`${entries.deletedAt} is null`,
+          ),
+        )
+        .returning();
+      return row ? mapEntry(row) : null;
+    },
+  };
 }
