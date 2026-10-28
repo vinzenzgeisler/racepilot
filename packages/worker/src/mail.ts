@@ -72,14 +72,14 @@ export function renderMailTemplate(
 ): MailTemplate {
   const allowed = new Set<string>(mailTemplateContracts[key]);
   for (const part of [template.subject, template.text, template.html]) {
-    for (const match of part.matchAll(/{{\s*([A-Za-z][A-Za-z0-9]*)\s*}}/g))
+    for (const match of part.matchAll(/{{\s*([^{}]+?)\s*}}/g))
       if (!allowed.has(match[1]!))
         throw new Error('Unknown mail template placeholder');
   }
   for (const name of allowed)
     if (!(name in values)) throw new Error('Missing mail template placeholder');
   const replace = (input: string, escape: boolean) =>
-    input.replace(/{{\s*([A-Za-z][A-Za-z0-9]*)\s*}}/g, (_m, name: string) => {
+    input.replace(/{{\s*([^{}]+?)\s*}}/g, (_m, name: string) => {
       if (!allowed.has(name))
         throw new Error('Unknown mail template placeholder');
       const value = values[name];
@@ -210,7 +210,7 @@ export async function processMailOutboxJob(input: {
           ? error.message.slice(0, 500)
           : 'Mail delivery failed',
     });
-    if (!terminal) throw error;
+    // The repository schedules a new Graphile job at availableAt; do not let Graphile's own retry race that schedule.
   }
 }
 

@@ -16,7 +16,9 @@ CREATE TABLE email_template_version (
   html_body text NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT email_template_version_org_id_unique UNIQUE (organization_id,id),
+  CONSTRAINT email_template_version_org_full_unique UNIQUE (organization_id,id,template_key,version,locale),
   CONSTRAINT email_template_version_org_key_version_unique UNIQUE (organization_id,template_key,version,locale),
+  CONSTRAINT email_template_version_key_check CHECK (template_key IN ('verification','entry-received','accepted','rejected')),
   CONSTRAINT email_template_version_org_fk FOREIGN KEY (organization_id) REFERENCES organization(id) ON DELETE CASCADE
 );
 CREATE TABLE email_outbox (
@@ -39,8 +41,9 @@ CREATE TABLE email_outbox (
   created_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT email_outbox_org_id_unique UNIQUE (organization_id,id),
   CONSTRAINT email_outbox_org_idempotency_unique UNIQUE (organization_id,idempotency_key),
+  CONSTRAINT email_outbox_template_key_check CHECK (template_key IN ('verification','entry-received','accepted','rejected')),
   CONSTRAINT email_outbox_org_event_fk FOREIGN KEY (organization_id,event_id) REFERENCES event(organization_id,id),
-  CONSTRAINT email_outbox_org_template_fk FOREIGN KEY (organization_id,template_version_id) REFERENCES email_template_version(organization_id,id),
+  CONSTRAINT email_outbox_org_template_fk FOREIGN KEY (organization_id,template_version_id,template_key,template_version,locale) REFERENCES email_template_version(organization_id,id,template_key,version,locale),
   CONSTRAINT email_outbox_org_fk FOREIGN KEY (organization_id) REFERENCES organization(id) ON DELETE CASCADE
 );
 CREATE INDEX email_outbox_due_idx ON email_outbox(available_at) WHERE status IN ('pending','sending');

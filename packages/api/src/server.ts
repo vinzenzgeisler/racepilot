@@ -8,6 +8,8 @@ import {
   createEventRepository,
   createEventClassRepository,
   createMembershipRepository,
+  getOrganizationMailConfiguration,
+  setOrganizationMailConfiguration,
 } from '@racepilot/adapter-postgres';
 import { createApp } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
@@ -20,6 +22,15 @@ const org = await ensureCommunityOrganization(db, {
   timezone: config.COMMUNITY_ORGANIZATION_TIMEZONE,
   locale: config.COMMUNITY_ORGANIZATION_LOCALE,
 });
+if (config.mailEnabled) {
+  await setOrganizationMailConfiguration(db, org.id, {
+    from: config.SMTP_FROM!,
+    ...(config.SMTP_REPLY_TO ? { replyTo: config.SMTP_REPLY_TO } : {}),
+  });
+}
+const mailCapabilityEnabled =
+  config.mailEnabled &&
+  (await getOrganizationMailConfiguration(db, org.id)) !== null;
 const identityProvider =
   config.OIDC_PROVIDER === 'oidc'
     ? await createOIDCIdentityProvider({
@@ -30,6 +41,10 @@ const identityProvider =
 serve({
   fetch: createApp({
     config: { deploymentMode: 'community', organizationId: org.id },
+    runtimeBootstrap: {
+      configurationVersion: '1',
+      capabilities: mailCapabilityEnabled ? ['mail-delivery'] : [],
+    },
     organizations: createOrganizationRepository(db),
     events: createEventRepository(db),
     classes: createEventClassRepository(db),
@@ -73,3 +88,7 @@ serve({
   port: config.PORT,
   hostname: '127.0.0.1',
 });
+
+console.info(
+  `Mail delivery capability: ${mailCapabilityEnabled ? 'enabled' : 'disabled (SMTP, CANONICAL_BASE_URL, or organization sender configuration is incomplete)'}`,
+);

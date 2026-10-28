@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { organizationId } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
@@ -20,9 +20,86 @@ import {
   createPersonRepository,
   createVehicleRepository,
   createEntryRepository,
+  enqueueMailOutbox,
+  createMailOutboxRepository,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
+  it('keeps mail outbox and template references tenant-bound', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    let firstId: string | undefined;
+    try {
+      const [orgA] = await db
+        .insert(organizations)
+        .values({
+          slug: `mail-a-${suffix}`,
+          name: 'Mail A',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [orgB] = await db
+        .insert(organizations)
+        .values({
+          slug: `mail-b-${suffix}`,
+          name: 'Mail B',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const templateResult = await db.execute(
+        sql`insert into email_template_version (organization_id,template_key,version,locale,subject,text_body,html_body) values (${orgA!.id},'verification',2,'en','Verify','Hello','<p>Hello</p>') returning id`,
+      );
+      const template = (
+        templateResult as unknown as { rows: Array<{ id: string }> }
+      ).rows[0];
+      const message = {
+        templateKey: 'verification',
+        templateVersion: 2,
+        templateVersionId: template!.id,
+        locale: 'en' as const,
+        recipient: 'one@example.test',
+        idempotencyKey: `mail-${suffix}`,
+        variables: {
+          recipientName: 'One',
+          verificationUrl: 'https://example.test/verify',
+        },
+      };
+      firstId = await enqueueMailOutbox(db, orgA!.id, message);
+      expect(await enqueueMailOutbox(db, orgA!.id, message)).toBe(firstId);
+      const repo = createMailOutboxRepository(db);
+      expect(await repo.get({ organizationId: orgB!.id }, firstId)).toBeNull();
+      await expect(
+        enqueueMailOutbox(db, orgB!.id, {
+          ...message,
+          idempotencyKey: `foreign-${suffix}`,
+        }),
+      ).rejects.toThrow();
+      await expect(
+        db.transaction(async (tx) => {
+          await enqueueMailOutbox(tx as unknown as typeof db, orgA!.id, {
+            ...message,
+            idempotencyKey: `rollback-${suffix}`,
+          });
+          throw new Error('rollback');
+        }),
+      ).rejects.toThrow('rollback');
+      const rolledBack = await db.execute(
+        sql`select id from email_outbox where organization_id=${orgA!.id} and idempotency_key=${`rollback-${suffix}`}`,
+      );
+      expect((rolledBack as unknown as { rows: unknown[] }).rows).toHaveLength(
+        0,
+      );
+    } finally {
+      await db
+        .delete(organizations)
+        .where(
+          inArray(organizations.slug, [`mail-a-${suffix}`, `mail-b-${suffix}`]),
+        );
+      await pool.end();
+    }
+  });
   it('keeps identities issuer-scoped, bootstraps admin idempotently, and revokes disabled membership', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();

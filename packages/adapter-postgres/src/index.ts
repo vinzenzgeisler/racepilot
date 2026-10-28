@@ -12,6 +12,7 @@ import {
   check,
   index,
   integer,
+  jsonb,
   foreignKey,
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
@@ -48,6 +49,8 @@ export const organizations = pgTable(
     name: text('name').notNull(),
     status: text('status').notNull().default('active'),
     contactEmail: text('contact_email'),
+    mailFrom: text('mail_from'),
+    mailReplyTo: text('mail_reply_to'),
     websiteUrl: text('website_url'),
     timezone: text('timezone').notNull(),
     locale: text('locale').notNull(),
@@ -62,6 +65,14 @@ export const organizations = pgTable(
     check(
       'organization_status_check',
       sql`${t.status} in ('active','disabled')`,
+    ),
+    check(
+      'organization_mail_from_check',
+      sql`${t.mailFrom} is null or (length(trim(${t.mailFrom})) > 3 and position('@' in ${t.mailFrom}) > 1)`,
+    ),
+    check(
+      'organization_mail_reply_to_check',
+      sql`${t.mailReplyTo} is null or (length(trim(${t.mailReplyTo})) > 3 and position('@' in ${t.mailReplyTo}) > 1)`,
     ),
   ],
 );
@@ -414,6 +425,160 @@ export const entryAuditEvents = pgTable(
       t.organizationId,
       t.entryId,
       t.occurredAt,
+    ),
+  ],
+);
+
+export const emailTemplateVersions = pgTable(
+  'email_template_version',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    templateKey: text('template_key').notNull(),
+    version: integer('version').notNull(),
+    locale: text('locale').notNull(),
+    subject: text('subject').notNull(),
+    textBody: text('text_body').notNull(),
+    htmlBody: text('html_body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('email_template_version_org_id_unique').on(t.organizationId, t.id),
+    unique('email_template_version_org_full_unique').on(
+      t.organizationId,
+      t.id,
+      t.templateKey,
+      t.version,
+      t.locale,
+    ),
+    unique('email_template_version_org_key_version_locale_unique').on(
+      t.organizationId,
+      t.templateKey,
+      t.version,
+      t.locale,
+    ),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'email_template_version_org_fk',
+    }).onDelete('cascade'),
+    check(
+      'email_template_version_key_check',
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
+    ),
+    check('email_template_version_version_check', sql`${t.version} > 0`),
+    check(
+      'email_template_version_locale_check',
+      sql`${t.locale} in ('de','en')`,
+    ),
+  ],
+);
+export const emailOutbox = pgTable(
+  'email_outbox',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id'),
+    templateKey: text('template_key').notNull(),
+    templateVersion: integer('template_version').notNull(),
+    templateVersionId: uuid('template_version_id'),
+    locale: text('locale').notNull(),
+    recipient: text('recipient').notNull(),
+    idempotencyKey: text('idempotency_key').notNull(),
+    variables: jsonb('variables')
+      .$type<Record<string, string>>()
+      .notNull()
+      .default({}),
+    status: text('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    availableAt: timestamp('available_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
+    sentAt: timestamp('sent_at', { withTimezone: true }),
+    lastError: text('last_error'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('email_outbox_org_id_unique').on(t.organizationId, t.id),
+    unique('email_outbox_org_idempotency_unique').on(
+      t.organizationId,
+      t.idempotencyKey,
+    ),
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'email_outbox_org_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'email_outbox_org_event_fk',
+    }),
+    foreignKey({
+      columns: [
+        t.organizationId,
+        t.templateVersionId,
+        t.templateKey,
+        t.templateVersion,
+        t.locale,
+      ],
+      foreignColumns: [
+        emailTemplateVersions.organizationId,
+        emailTemplateVersions.id,
+        emailTemplateVersions.templateKey,
+        emailTemplateVersions.version,
+        emailTemplateVersions.locale,
+      ],
+      name: 'email_outbox_org_template_fk',
+    }),
+    check('email_outbox_version_check', sql`${t.templateVersion} > 0`),
+    check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
+    check(
+      'email_outbox_template_key_check',
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
+    ),
+    check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
+    check(
+      'email_outbox_status_check',
+      sql`${t.status} in ('pending','sending','sent','failed')`,
+    ),
+    index('email_outbox_due_idx')
+      .on(t.availableAt)
+      .where(sql`${t.status} in ('pending','sending')`),
+  ],
+);
+export const emailDeliveries = pgTable(
+  'email_delivery',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    outboxId: uuid('outbox_id').notNull(),
+    attempt: integer('attempt').notNull(),
+    outcome: text('outcome').notNull(),
+    error: text('error'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.outboxId],
+      foreignColumns: [emailOutbox.organizationId, emailOutbox.id],
+      name: 'email_delivery_org_outbox_fk',
+    }).onDelete('cascade'),
+    unique('email_delivery_org_attempt_unique').on(
+      t.organizationId,
+      t.outboxId,
+      t.attempt,
+    ),
+    check(
+      'email_delivery_outcome_check',
+      sql`${t.outcome} in ('sent','retry','failed')`,
     ),
   ],
 );
@@ -1033,6 +1198,7 @@ export interface NewMailOutboxMessage {
   recipient: string;
   idempotencyKey: string;
   variables: Record<string, string>;
+  correlationId?: string;
 }
 /** Call with the caller's Drizzle transaction to atomically enqueue with domain writes. */
 export async function enqueueMailOutbox(
@@ -1045,7 +1211,19 @@ export async function enqueueMailOutbox(
     values (${organization},${input.eventId ?? null},${input.templateKey},${input.templateVersion},${input.templateVersionId ?? null},${input.locale},${input.recipient},${input.idempotencyKey},${JSON.stringify(input.variables)}::jsonb)
     on conflict (organization_id,idempotency_key) do nothing returning id`);
   const rows = (result as unknown as { rows: Array<{ id: string }> }).rows;
-  if (rows[0]) return rows[0].id;
+  if (rows[0]) {
+    const envelope = {
+      type: 'mail.outbox',
+      schemaVersion: 1,
+      organizationId: organization,
+      correlationId: input.correlationId ?? input.idempotencyKey,
+      payload: { outboxId: rows[0].id },
+    };
+    await executor.execute(
+      sql`select graphile_worker.add_job('mail_outbox', ${JSON.stringify(envelope)}::json, null, now(), 25, ${`mail-outbox:${rows[0].id}`})`,
+    );
+    return rows[0].id;
+  }
   const existing = await executor.execute(
     sql`select id from email_outbox where organization_id=${organization} and idempotency_key=${input.idempotencyKey}`,
   );
@@ -1053,6 +1231,63 @@ export async function enqueueMailOutbox(
     .rows;
   if (!existingRows[0]) throw new Error('Mail outbox enqueue failed');
   return existingRows[0].id;
+}
+
+export async function setOrganizationMailConfiguration(
+  db: Database,
+  organization: string,
+  config: { from: string; replyTo?: string },
+): Promise<void> {
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (
+    !email.test(config.from) ||
+    (config.replyTo && !email.test(config.replyTo))
+  )
+    throw new Error('Invalid organization mail configuration');
+  await db
+    .update(organizations)
+    .set({ mailFrom: config.from, mailReplyTo: config.replyTo ?? null })
+    .where(eq(organizations.id, organization));
+}
+
+export async function getOrganizationMailConfiguration(
+  db: Database,
+  organization: string,
+) {
+  const result = await db.execute(
+    sql`select mail_from as "from",mail_reply_to as "replyTo" from organization where id=${organization} and status='active'`,
+  );
+  const row = (
+    result as unknown as {
+      rows: Array<{ from: string | null; replyTo: string | null }>;
+    }
+  ).rows[0];
+  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return row?.from &&
+    email.test(row.from) &&
+    (row.replyTo === null || email.test(row.replyTo))
+    ? row
+    : null;
+}
+
+export async function saveMailTemplateVersion(
+  db: Database,
+  organization: string,
+  input: {
+    templateKey: string;
+    version: number;
+    locale: 'de' | 'en';
+    subject: string;
+    text: string;
+    html: string;
+  },
+): Promise<string> {
+  const result = await db.execute(
+    sql`insert into email_template_version(organization_id,template_key,version,locale,subject,text_body,html_body) values (${organization},${input.templateKey},${input.version},${input.locale},${input.subject},${input.text},${input.html}) returning id`,
+  );
+  const row = (result as unknown as { rows: Array<{ id: string }> }).rows[0];
+  if (!row) throw new Error('Mail template version could not be stored');
+  return row.id;
 }
 
 export function createMailOutboxRepository(db: Database) {

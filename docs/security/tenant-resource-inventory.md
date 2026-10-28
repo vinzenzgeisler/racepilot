@@ -188,3 +188,6 @@ future product-level isolation matrix has executed.
 ## Product-owned inventory
 
 The frozen MSC snapshot in `tenant-resource-inventory.v1.json` is not edited for new RacePilot resources. The product-owned resources and linked negative tests are catalogued in [`product-resource-inventory.json`](product-resource-inventory.json) and checked by `scripts/validate_product_inventory.py`.
+
+
+Issue #63 adds tenant-owned mail outbox, delivery attempts, versioned template overrides, and the `mail-outbox-job` payload to the product inventory in [`product-resource-inventory.json`](product-resource-inventory.json). The transaction API accepts the caller's Drizzle executor, while composite foreign keys bind event, template, and delivery references to the same organization.
