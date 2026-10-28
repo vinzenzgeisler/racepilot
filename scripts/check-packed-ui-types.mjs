@@ -2,11 +2,13 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
 const artifactDirectory = path.resolve(process.argv[2]);
 const manifest = JSON.parse(
-  await readFile(path.join(artifactDirectory, 'product-artifacts.json'), 'utf8'),
+  await readFile(
+    path.join(artifactDirectory, 'product-artifacts.json'),
+    'utf8',
+  ),
 );
 const archive = (name) => {
   const artifact = manifest.packages.find((entry) => entry.name === name);
@@ -59,7 +61,9 @@ try {
     ],
     { cwd: consumer, stdio: 'inherit' },
   );
-  console.log('Packed @racepilot/app/ui declarations compile in isolated consumer');
+  console.log(
+    'Packed @racepilot/app/ui declarations compile in isolated consumer',
+  );
 } finally {
   await rm(consumer, { recursive: true, force: true });
 }
