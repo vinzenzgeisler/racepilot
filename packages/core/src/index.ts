@@ -663,17 +663,9 @@ export interface EntryConfirmationRepository {
     registrationGroupId: string,
   ): Promise<EntryConfirmationData | null>;
 }
-export interface ConfirmationDocument {
-  readonly id: string;
-  readonly organizationId: OrganizationId;
-  readonly eventId: string;
-  readonly registrationGroupId: string;
-  readonly objectId: string;
-  readonly sha256: string;
-  readonly createdAt: string;
-}
 export type ArtifactKind = 'confirmation_pdf' | 'entries_csv';
 export type ArtifactStatus = 'queued' | 'processing' | 'ready' | 'failed';
+
 export interface ArtifactJob {
   readonly id: string;
   readonly organizationId: OrganizationId;
@@ -704,18 +696,9 @@ export interface ArtifactJobRepository {
   ): Promise<ArtifactJob>;
   getById(ctx: RequestContext, id: string): Promise<ArtifactJob | null>;
   claim(ctx: JobContext, id: string): Promise<ArtifactJob | null>;
+  release(ctx: JobContext, id: string): Promise<void>;
   complete(ctx: JobContext, id: string, ref: StoredObjectRef): Promise<void>;
   fail(ctx: JobContext, id: string, error: string): Promise<void>;
-}
-export interface ConfirmationDocumentRepository {
-  create(
-    ctx: RequestContext,
-    input: Omit<ConfirmationDocument, 'id' | 'organizationId' | 'createdAt'>,
-  ): Promise<ConfirmationDocument>;
-  getById(
-    ctx: RequestContext,
-    id: string,
-  ): Promise<ConfirmationDocument | null>;
 }
 export interface EntryRepository {
   create?(

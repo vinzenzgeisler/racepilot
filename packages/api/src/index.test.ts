@@ -485,6 +485,7 @@ describe('event CSV export', () => {
         },
         getById: async () => null,
         claim: async () => null,
+        release: async () => {},
         complete: async () => {},
         fail: async () => {},
       },
@@ -515,7 +516,7 @@ describe('event CSV export', () => {
   });
 });
 
-describe('entry confirmation document routes', () => {
+describe('entry confirmation artifact routes', () => {
   it('queues and downloads only tenant-owned artifacts after permission and scoped group lookup', async () => {
     const orgId = '11111111-1111-4111-8111-111111111111';
     const eventId = '22222222-2222-4222-8222-222222222222';
@@ -524,15 +525,6 @@ describe('entry confirmation document routes', () => {
     const objectId = '55555555-5555-4555-8555-555555555555';
     let groupLookups = 0;
     const pdf = new TextEncoder().encode('%PDF synthetic');
-    const doc = {
-      id: docId,
-      organizationId: orgId as never,
-      eventId,
-      registrationGroupId: groupId,
-      objectId,
-      sha256: 'a'.repeat(64),
-      createdAt: '2026-01-01T00:00:00.000Z',
-    };
     const app = createApp({
       config: { deploymentMode: 'community', organizationId: orgId },
       organizations: {
@@ -600,10 +592,6 @@ describe('entry confirmation document routes', () => {
             : null;
         },
       },
-      confirmationDocuments: {
-        create: async () => doc,
-        getById: async (_ctx, id) => (id === docId ? doc : null),
-      },
       artifactJobs: {
         enqueue: async (_ctx, input) => ({
           id: docId,
@@ -643,6 +631,7 @@ describe('entry confirmation document routes', () => {
               }
             : null,
         claim: async () => null,
+        release: async () => {},
         complete: async () => {},
         fail: async () => {},
       },
@@ -685,13 +674,6 @@ describe('entry confirmation document routes', () => {
         await app.request(
           `/admin/events/${eventId}/registration-groups/66666666-6666-4666-8666-666666666666/confirmation`,
           { method: 'POST', headers: { 'Idempotency-Key': 'foreign-key' } },
-        )
-      ).status,
-    ).toBe(404);
-    expect(
-      (
-        await app.request(
-          '/admin/documents/77777777-7777-4777-8777-777777777777',
         )
       ).status,
     ).toBe(404);

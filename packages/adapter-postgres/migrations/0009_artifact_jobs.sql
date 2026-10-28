@@ -12,6 +12,7 @@ CREATE TABLE artifact_job (
   content_type text,
   attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
   error text,
+  claimed_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT now(),
   updated_at timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT artifact_job_org_id_unique UNIQUE (organization_id, id),

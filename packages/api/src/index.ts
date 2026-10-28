@@ -30,7 +30,6 @@ import {
   type EntryListQuery,
   type EntryExportRepository,
   type EntryConfirmationRepository,
-  type ConfirmationDocumentRepository,
   type ArtifactJobRepository,
   type ObjectStorageProvider,
   entryExportFields,
@@ -169,7 +168,6 @@ export interface ApiDeps {
   entries?: EntryRepository;
   entryExports?: EntryExportRepository;
   entryConfirmations?: EntryConfirmationRepository;
-  confirmationDocuments?: ConfirmationDocumentRepository;
   artifactJobs?: ArtifactJobRepository;
   objectStorage?: ObjectStorageProvider;
   payments?: InvoicePaymentRepository;
@@ -471,38 +469,6 @@ export function createApp(deps: ApiDeps) {
       return c.json({ jobId: job.id, status: job.status }, 202);
     },
   );
-  app.get('/admin/documents/:documentId', async (c) => {
-    const context = await resolveContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('entry:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    const id = c.req.param('documentId');
-    if (
-      !z.string().uuid().safeParse(id).success ||
-      !deps.confirmationDocuments ||
-      !deps.objectStorage
-    )
-      return c.json({ error: 'Not found' }, 404);
-    const document = await deps.confirmationDocuments.getById(context, id);
-    if (!document) return c.json({ error: 'Not found' }, 404);
-    const stored = await deps.objectStorage.get(
-      context.organizationId,
-      document.objectId,
-    );
-    if (
-      !stored ||
-      stored.ref.sha256 !== document.sha256 ||
-      stored.ref.contentType !== 'application/pdf'
-    )
-      return c.json({ error: 'Not found' }, 404);
-    c.header('Content-Type', 'application/pdf');
-    c.header(
-      'Content-Disposition',
-      `attachment; filename="entry-confirmation-${document.id}.pdf"`,
-    );
-    c.header('Cache-Control', 'private, no-store');
-    return c.body(new Blob([Buffer.from(stored.body)]));
-  });
   app.get('/admin/events/:eventId/entries.csv', async (c) => {
     const context = await resolveContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);

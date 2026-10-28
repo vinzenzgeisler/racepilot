@@ -38,7 +38,6 @@ import {
   consentEvidence,
   createEntryExportRepository,
   createEntryConfirmationRepository,
-  createConfirmationDocumentRepository,
   createArtifactJobRepository,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
@@ -526,6 +525,27 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(duplicateArtifact.id).toBe(firstArtifact.id);
       expect(firstArtifact.status).toBe('queued');
+      const claims = await Promise.all([
+        artifactJobs.claim(
+          { ...ctxA, jobId: `worker-a-${suffix}` },
+          firstArtifact.id,
+        ),
+        artifactJobs.claim(
+          { ...ctxA, jobId: `worker-b-${suffix}` },
+          firstArtifact.id,
+        ),
+      ]);
+      expect(claims.filter(Boolean)).toHaveLength(1);
+      await artifactJobs.release(
+        { ...ctxA, jobId: `worker-a-${suffix}` },
+        firstArtifact.id,
+      );
+      expect(
+        await artifactJobs.claim(
+          { ...ctxA, jobId: `worker-retry-${suffix}` },
+          firstArtifact.id,
+        ),
+      ).not.toBeNull();
       expect(
         await artifactJobs.getById(
           { ...ctxA, organizationId: organizationId(orgB!) },
@@ -704,22 +724,6 @@ const cloudCtxA = { ...ctxA, deploymentMode: 'cloud' as const };
       ).toBeNull();
       expect(
         await confirmations.getByGroup(cloudCtxA, eventA!.id, groupB!.id),
-      ).toBeNull();
-      const docs = createConfirmationDocumentRepository(db);
-      const storedDocument = await docs.create(cloudCtxA, {
-        eventId: eventA!.id,
-        registrationGroupId: groupA!.id,
-        objectId: crypto.randomUUID(),
-        sha256: 'a'.repeat(64),
-      });
-      expect(await docs.getById(cloudCtxA, storedDocument.id)).toMatchObject({
-        organizationId: organizationId(orgA),
-      });
-      expect(
-        await docs.getById(
-          { ...cloudCtxA, organizationId: organizationId(orgB) },
-          storedDocument.id,
-        ),
       ).toBeNull();
 
       expect(

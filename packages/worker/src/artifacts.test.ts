@@ -45,6 +45,7 @@ describe('artifact worker', () => {
           expect(jobId).toBe(id);
           return job;
         },
+        release: async () => {},
         complete: async (ctx, jobId, ref) => {
           expect(ctx.organizationId).toBe(org);
           expect(jobId).toBe(id);

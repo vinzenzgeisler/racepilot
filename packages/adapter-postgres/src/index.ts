@@ -42,7 +42,6 @@ import type {
   MembershipBootstrap,
   ExternalIdentity,
   EntryConfirmationRepository,
-  ConfirmationDocumentRepository,
   ArtifactJobRepository,
   ArtifactJob,
   ArtifactKind,
@@ -866,48 +865,6 @@ export function createEntryConfirmationRepository(
     },
   };
 }
-export function createConfirmationDocumentRepository(
-  db: Database,
-): ConfirmationDocumentRepository {
-  return {
-    create: async (ctx, input) => {
-      const [row] = await db
-        .insert(confirmationDocuments)
-        .values({
-          organizationId: ctx.organizationId,
-          eventId: input.eventId,
-          registrationGroupId: input.registrationGroupId,
-          objectId: input.objectId,
-          sha256: input.sha256,
-        })
-        .returning();
-      return {
-        ...row!,
-        organizationId: organizationId(row!.organizationId),
-        createdAt: row!.createdAt.toISOString(),
-      };
-    },
-    getById: async (ctx, id) => {
-      const [row] = await db
-        .select()
-        .from(confirmationDocuments)
-        .where(
-          and(
-            eq(confirmationDocuments.organizationId, ctx.organizationId),
-            eq(confirmationDocuments.id, id),
-          ),
-        );
-      return row
-        ? {
-            ...row,
-            organizationId: organizationId(row.organizationId),
-            createdAt: row.createdAt.toISOString(),
-          }
-        : null;
-    },
-  };
-}
-
 export const artifactJobs = pgTable(
   'artifact_job',
   {
@@ -927,6 +884,7 @@ export const artifactJobs = pgTable(
     contentType: text('content_type'),
     attempts: integer('attempts').notNull().default(0),
     error: text('error'),
+    claimedAt: timestamp('claimed_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1048,17 +1006,30 @@ export function createArtifactJobRepository(
           status: 'processing',
           attempts: sql`${artifactJobs.attempts} + 1`,
           error: null,
+          claimedAt: new Date(),
           updatedAt: new Date(),
         })
         .where(
           and(
             eq(artifactJobs.organizationId, ctx.organizationId),
             eq(artifactJobs.id, id),
-            sql`${artifactJobs.status} in ('queued', 'processing')`,
+            sql`${artifactJobs.status} = 'queued' or (${artifactJobs.status} = 'processing' and ${artifactJobs.claimedAt} < now() - interval '5 minutes')`,
           ),
         )
         .returning();
       return row ? toArtifactJob(row) : null;
+    },
+    release: async (ctx, id) => {
+      await db
+        .update(artifactJobs)
+        .set({ status: 'queued', claimedAt: null, updatedAt: new Date() })
+        .where(
+          and(
+            eq(artifactJobs.organizationId, ctx.organizationId),
+            eq(artifactJobs.id, id),
+            eq(artifactJobs.status, 'processing'),
+          ),
+        );
     },
     complete: async (ctx, id, ref) => {
       if (ref.organizationId !== ctx.organizationId)
@@ -1067,6 +1038,7 @@ export function createArtifactJobRepository(
         .update(artifactJobs)
         .set({
           status: 'ready',
+          claimedAt: null,
           objectId: ref.objectId,
           sha256: ref.sha256,
           contentType: ref.contentType,
@@ -1085,6 +1057,7 @@ export function createArtifactJobRepository(
         .update(artifactJobs)
         .set({
           status: 'failed',
+          claimedAt: null,
           error: error.slice(0, 500),
           updatedAt: new Date(),
         })
@@ -1097,44 +1070,6 @@ export function createArtifactJobRepository(
     },
   };
 }
-
-export const confirmationDocuments = pgTable(
-  'entry_confirmation_document',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id').notNull(),
-    eventId: uuid('event_id').notNull(),
-    registrationGroupId: uuid('registration_group_id').notNull(),
-    objectId: uuid('object_id').notNull(),
-    sha256: text('sha256').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    unique('entry_confirmation_document_org_id_unique').on(
-      t.organizationId,
-      t.id,
-    ),
-    unique('entry_confirmation_document_org_object_unique').on(
-      t.organizationId,
-      t.objectId,
-    ),
-    foreignKey({
-      columns: [t.organizationId, t.eventId, t.registrationGroupId],
-      foreignColumns: [
-        registrationGroups.organizationId,
-        registrationGroups.eventId,
-        registrationGroups.id,
-      ],
-      name: 'entry_confirmation_document_group_fk',
-    }).onDelete('cascade'),
-    check(
-      'entry_confirmation_document_sha256_check',
-      sql`${t.sha256} ~ '^[a-f0-9]{64}$'`,
-    ),
-  ],
-);
 
 export type Database = ReturnType<typeof drizzle>;
 export async function migrate(databaseUrl: string): Promise<void> {

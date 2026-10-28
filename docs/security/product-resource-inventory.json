@@ -537,7 +537,7 @@
       "id": "entry-confirmation-pdf",
       "kind": "route",
       "tenantKey": "organization_id + event_id + registration_group_id + artifactJobId + server-issued objectId",
-      "isolation": "Requires entry:read; generation is queued as a tenant-scoped idempotent job after a scoped group check; worker re-resolves tenant data and stores metadata; download rechecks permission, owner, content type, and SHA-256.",
+      "isolation": "Requires entry:read; generation is queued as a tenant-scoped idempotent job after a scoped group check; worker re-resolves tenant data and stores artifact-job metadata; downloads use the job status route, which rechecks permission, owner, content type, and SHA-256.",
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
@@ -558,18 +558,6 @@
         {
           "file": "packages/adapter-s3/src/contract.test.ts",
           "name": "satisfies the shared object storage contract"
-        }
-      ]
-    },
-    {
-      "id": "entry_confirmation_document",
-      "kind": "table",
-      "tenantKey": "organization_id + event_id + registration_group_id",
-      "isolation": "Composite foreign key binds document metadata to the tenant-owned registration group; every lookup filters the trusted organizationId; objectId is issued by storage adapter and SHA-256 is checked on download.",
-      "negativeTests": [
-        {
-          "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "cloud fixture limits CSV and PDF data to organization and selected event"
         }
       ]
     },

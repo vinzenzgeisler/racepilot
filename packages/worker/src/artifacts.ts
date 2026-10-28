@@ -136,6 +136,7 @@ export function createArtifactTask(deps: {
         );
         return;
       }
+      await deps.jobs.release(ctx, job.id);
       throw error;
     }
   };
