@@ -1,4 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
+import { runMigrations } from 'graphile-worker';
 import { organizationId, createPaymentReference } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
@@ -26,7 +27,6 @@ import {
   createVehicleRepository,
   createEntryRepository,
   createInvoiceRepository,
-<<<<<<< HEAD
   createPublicRegistrationService,
   createRegistrationSettingsRepository,
   createEventConsentRepository,
@@ -36,11 +36,10 @@ import {
   saveMailTemplateVersion,
   emailOutbox,
   consentEvidence,
-=======
   createEntryExportRepository,
   createEntryConfirmationRepository,
   createConfirmationDocumentRepository,
->>>>>>> 13e4dbe (feat: complete entry confirmation documents and exports)
+  createArtifactJobRepository,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
@@ -510,6 +509,28 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       ).toBeNull();
       expect(
         await createVehicleRepository(db).getById(ctxA, vehicleB!.id),
+      ).toBeNull();
+      await runMigrations({ connectionString: url! });
+      const artifactJobs = createArtifactJobRepository(db);
+      const firstArtifact = await artifactJobs.enqueue(ctxA, {
+        eventId: eventA!.id,
+        kind: 'confirmation_pdf',
+        registrationGroupId: groupA!.id,
+        idempotencyKey: `confirmation-${suffix}`,
+      });
+      const duplicateArtifact = await artifactJobs.enqueue(ctxA, {
+        eventId: eventA!.id,
+        kind: 'confirmation_pdf',
+        registrationGroupId: groupA!.id,
+        idempotencyKey: `confirmation-${suffix}`,
+      });
+      expect(duplicateArtifact.id).toBe(firstArtifact.id);
+      expect(firstArtifact.status).toBe('queued');
+      expect(
+        await artifactJobs.getById(
+          { ...ctxA, organizationId: organizationId(orgB!) },
+          firstArtifact.id,
+        ),
       ).toBeNull();
       const ctxC = { ...ctxA, organizationId: organizationId(orgC!) };
       const duplicate = await createPersonRepository(db).findDuplicate(

@@ -71,6 +71,13 @@
       "when": 1793235600000,
       "tag": "0009_entry_confirmation_documents",
       "breakpoints": false
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793239200000,
+      "tag": "0010_artifact_jobs",
+      "breakpoints": false
     }
   ]
 }

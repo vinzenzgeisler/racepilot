@@ -15,6 +15,9 @@
     "@racepilot/adapter-smtp": "*",
     "@racepilot/contracts": "*",
     "@racepilot/core": "*",
-    "graphile-worker": "^0.16.6"
+    "graphile-worker": "^0.16.6",
+    "@racepilot/artifacts": "*",
+    "@racepilot/adapter-local-storage": "*",
+    "@racepilot/adapter-s3": "*"
   }
 }

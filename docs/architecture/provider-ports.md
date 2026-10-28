@@ -30,15 +30,18 @@ only, never values. Disabled adapters expose corresponding `mailEnabled` and
 
 ## Documents and exports (#65)
 
-The API composes the object-storage port with a tenant-filtered confirmation read model
-and document metadata repository. The PDF is synchronously rendered on the authenticated
-request path and stored with a server-issued object ID; downloads re-check `entry:read`,
-organization ownership, and the stored SHA-256 before streaming. `pdf-lib` was selected
-for maintained, pure-TypeScript PDF composition with explicit metadata timestamps; the
-small `qrcode` package renders the EPC transfer payload as a QR only when the
-server-computed `payment.bank_transfer` capability is active. The PDF metadata dates
-come from the immutable price snapshot, not wall-clock time. CSV fields are allow-listed
-and formula/control-character prefixes are neutralized before quoting.
+Both confirmation PDFs and CSV exports are persisted as organization-scoped artifact jobs
+and queued transactionally in Graphile Worker with a tenant-bearing job envelope and
+organization-scoped idempotency key. Workers rebuild tenant context, re-query event or
+registration data, render, then persist server-issued object ID, content type, and SHA-256
+on the job. The API and worker must share the selected `STORAGE_PROVIDER` configuration. Requests return `202` and a job URL; downloads re-check `entry:read`, tenant
+ownership, object owner, content type, and SHA-256 before streaming. Failed jobs remain
+retryable in Graphile Worker and become terminal only after the queue's attempt limit.
+`pdf-lib` embeds the bundled DejaVu Sans regular/bold fonts for Unicode-safe text and
+uses explicit metadata timestamps; `qrcode` renders the EPC transfer payload only when
+a valid organization payment recipient is available. PDF metadata dates come from the
+immutable price snapshot. CSV fields are allow-listed; leading whitespace, control and
+format characters before formula markers trigger apostrophe-prefix escaping before quoting.
 
 `STORAGE_PROVIDER` accepts `disabled`, `local`, or `s3`. Local storage requires
 `STORAGE_LOCAL_ROOT`; the S3-compatible adapter accepts `STORAGE_S3_BUCKET`, optional

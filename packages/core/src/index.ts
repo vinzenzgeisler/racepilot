@@ -672,6 +672,41 @@ export interface ConfirmationDocument {
   readonly sha256: string;
   readonly createdAt: string;
 }
+export type ArtifactKind = 'confirmation_pdf' | 'entries_csv';
+export type ArtifactStatus = 'queued' | 'processing' | 'ready' | 'failed';
+export interface ArtifactJob {
+  readonly id: string;
+  readonly organizationId: OrganizationId;
+  readonly eventId: string;
+  readonly kind: ArtifactKind;
+  readonly registrationGroupId: string | null;
+  readonly fields: readonly string[];
+  readonly idempotencyKey: string;
+  readonly status: ArtifactStatus;
+  readonly objectId: string | null;
+  readonly sha256: string | null;
+  readonly contentType: string | null;
+  readonly attempts: number;
+  readonly error: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+export interface ArtifactJobRepository {
+  enqueue(
+    ctx: RequestContext,
+    input: {
+      eventId: string;
+      kind: ArtifactKind;
+      registrationGroupId?: string;
+      fields?: readonly string[];
+      idempotencyKey: string;
+    },
+  ): Promise<ArtifactJob>;
+  getById(ctx: RequestContext, id: string): Promise<ArtifactJob | null>;
+  claim(ctx: JobContext, id: string): Promise<ArtifactJob | null>;
+  complete(ctx: JobContext, id: string, ref: StoredObjectRef): Promise<void>;
+  fail(ctx: JobContext, id: string, error: string): Promise<void>;
+}
 export interface ConfirmationDocumentRepository {
   create(
     ctx: RequestContext,
@@ -1136,7 +1171,10 @@ export const entryExportFields: readonly EntryExportField[] = [
 /** Protect spreadsheet consumers from formula execution, including control-character prefixes. */
 export function csvSafeCell(value: string | number | null | undefined): string {
   let text = value == null ? '' : String(value);
-  if (/^[\t\r]/.test(text) || /^[=+\-@]/.test(text)) text = "'" + text;
+  // Spreadsheet applications may ignore leading whitespace/control/format chars
+  // before formula markers. Keep the original cell but prefix an apostrophe when
+  // its first significant character would otherwise start a formula.
+  if (/^[\p{White_Space}\p{Cc}\p{Cf}]*[=+\-@]/u.test(text)) text = "'" + text;
   return '"' + text.replaceAll('"', '""') + '"';
 }
 export function renderEntryCsv(

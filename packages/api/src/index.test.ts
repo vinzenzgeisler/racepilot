@@ -426,10 +426,97 @@ describe('event CSV export', () => {
       ).status,
     ).toBe(403);
   });
+  it('queues CSV exports with allow-listed fields and a stable idempotency key', async () => {
+    const orgId = '11111111-1111-4111-8111-111111111111';
+    const eventId = '22222222-2222-4222-8222-222222222222';
+    let enqueued = 0;
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: orgId },
+      organizations: { getById: async () => null, update: async () => null },
+      events: {
+        listByOrganization: async () => [],
+        getById: async () => ({
+          id: eventId,
+          organizationId: orgId as never,
+          slug: 'race',
+          name: 'Race',
+          startsOn: '2026-05-01',
+          endsOn: '2026-05-01',
+          status: 'open',
+          registrationOpensAt: null,
+          registrationClosesAt: null,
+          openedAt: null,
+          closedAt: null,
+          archivedAt: null,
+        }),
+      },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'viewer',
+        }),
+      },
+      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
+      entryExports: {
+        listByEvent: async () => {
+          throw new Error('CSV must be generated in the worker');
+        },
+      },
+      artifactJobs: {
+        enqueue: async (_ctx, input) => {
+          enqueued++;
+          return {
+            id: '33333333-3333-4333-8333-333333333333',
+            organizationId: orgId as never,
+            eventId,
+            kind: input.kind,
+            registrationGroupId: null,
+            fields: input.fields ?? [],
+            idempotencyKey: input.idempotencyKey,
+            status: 'queued',
+            objectId: null,
+            sha256: null,
+            contentType: null,
+            attempts: 0,
+            error: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          };
+        },
+        getById: async () => null,
+        claim: async () => null,
+        complete: async () => {},
+        fail: async () => {},
+      },
+      objectStorage: {
+        put: async () => {
+          throw new Error('Must not store in request');
+        },
+        get: async () => null,
+        delete: async () => {},
+      },
+    });
+    const url = `/admin/events/${eventId}/entries.csv?fields=driver,status`;
+    expect((await app.request(url)).status).toBe(400);
+    expect(
+      (
+        await app.request(
+          `/admin/events/${eventId}/entries.csv?fields=secret`,
+          { headers: { 'Idempotency-Key': 'csv-key' } },
+        )
+      ).status,
+    ).toBe(400);
+    const response = await app.request(url, {
+      headers: { 'Idempotency-Key': 'csv-key' },
+    });
+    expect(response.status).toBe(202);
+    expect(await response.json()).toMatchObject({ status: 'queued' });
+    expect(enqueued).toBe(1);
+  });
 });
 
 describe('entry confirmation document routes', () => {
-  it('streams only tenant-owned documents after permission and scoped group lookup', async () => {
+  it('queues and downloads only tenant-owned artifacts after permission and scoped group lookup', async () => {
     const orgId = '11111111-1111-4111-8111-111111111111';
     const eventId = '22222222-2222-4222-8222-222222222222';
     const groupId = '33333333-3333-4333-8333-333333333333';
@@ -517,6 +604,48 @@ describe('entry confirmation document routes', () => {
         create: async () => doc,
         getById: async (_ctx, id) => (id === docId ? doc : null),
       },
+      artifactJobs: {
+        enqueue: async (_ctx, input) => ({
+          id: docId,
+          organizationId: orgId as never,
+          eventId,
+          kind: input.kind,
+          registrationGroupId: groupId,
+          fields: [],
+          idempotencyKey: input.idempotencyKey,
+          status: 'queued',
+          objectId: null,
+          sha256: null,
+          contentType: null,
+          attempts: 0,
+          error: null,
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z',
+        }),
+        getById: async (_ctx, id) =>
+          id === docId
+            ? {
+                id: docId,
+                organizationId: orgId as never,
+                eventId,
+                kind: 'confirmation_pdf',
+                registrationGroupId: groupId,
+                fields: [],
+                idempotencyKey: 'key',
+                status: 'ready',
+                objectId,
+                sha256: 'a'.repeat(64),
+                contentType: 'application/pdf',
+                attempts: 1,
+                error: null,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              }
+            : null,
+        claim: async () => null,
+        complete: async () => {},
+        fail: async () => {},
+      },
       objectStorage: {
         put: async () => ({
           organizationId: orgId as never,
@@ -543,11 +672,11 @@ describe('entry confirmation document routes', () => {
     });
     const created = await app.request(
       `/admin/events/${eventId}/registration-groups/${groupId}/confirmation`,
-      { method: 'POST' },
+      { method: 'POST', headers: { 'Idempotency-Key': 'pdf-key' } },
     );
-    expect(created.status).toBe(201);
-    expect(await created.json()).toEqual({ documentId: docId });
-    const download = await app.request(`/admin/documents/${docId}`);
+    expect(created.status).toBe(202);
+    expect(await created.json()).toEqual({ jobId: docId, status: 'queued' });
+    const download = await app.request(`/admin/artifact-jobs/${docId}`);
     expect(download.status).toBe(200);
     expect(download.headers.get('content-type')).toContain('application/pdf');
     expect(new Uint8Array(await download.arrayBuffer())).toEqual(pdf);
@@ -555,7 +684,7 @@ describe('entry confirmation document routes', () => {
       (
         await app.request(
           `/admin/events/${eventId}/registration-groups/66666666-6666-4666-8666-666666666666/confirmation`,
-          { method: 'POST' },
+          { method: 'POST', headers: { 'Idempotency-Key': 'foreign-key' } },
         )
       ).status,
     ).toBe(404);

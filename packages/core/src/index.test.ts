@@ -125,7 +125,18 @@ describe('entry CSV export', () => {
   it('escapes formula and control-character prefixes and quotes cells', async () => {
     const { csvSafeCell, renderEntryCsv } = await import('./index.js');
     expect(
-      ['=1', '+1', '-1', '@SUM(A1)', '\t=1', '\r=1'].map(csvSafeCell),
+      [
+        '=1',
+        '+1',
+        '-1',
+        '@SUM(A1)',
+        '\t=1',
+        '\r=1',
+        '  =1',
+        '\n=1',
+        '\r\n  +1',
+        '\u00a0@SUM(A1)',
+      ].map(csvSafeCell),
     ).toEqual([
       '"\'=1"',
       '"\'+1"',
@@ -133,6 +144,10 @@ describe('entry CSV export', () => {
       '"\'@SUM(A1)"',
       '"\'\t=1"',
       '"\'\r=1"',
+      '"\'  =1"',
+      '"\'\n=1"',
+      '"\'\r\n  +1"',
+      '"\'\u00a0@SUM(A1)"',
     ]);
     expect(renderEntryCsv([['a"b', 'x,y']])).toBe('"a""b","x,y"\r\n');
   });

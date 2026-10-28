@@ -1,4 +1,6 @@
-import { PDFDocument, StandardFonts, rgb } from 'pdf-lib';
+import { readFile } from 'node:fs/promises';
+import fontkit from '@pdf-lib/fontkit';
+import { PDFDocument, rgb } from 'pdf-lib';
 import QRCode from 'qrcode';
 import {
   createTransferInstruction,
@@ -28,6 +30,13 @@ export async function createEntryConfirmationPdf(
   input: EntryConfirmationData,
 ): Promise<Uint8Array> {
   const document = await PDFDocument.create();
+  document.registerFontkit(fontkit);
+  const [regularBytes, boldBytes] = await Promise.all([
+    readFile(new URL('../fonts/DejaVuSans.ttf', import.meta.url)),
+    readFile(new URL('../fonts/DejaVuSans-Bold.ttf', import.meta.url)),
+  ]);
+  const regular = await document.embedFont(regularBytes, { subset: true });
+  const bold = await document.embedFont(boldBytes, { subset: true });
   const date = new Date(input.priceSnapshot.calculatedAt);
   if (!Number.isFinite(date.getTime()))
     throw new Error('Invalid price snapshot timestamp');
@@ -39,8 +48,6 @@ export async function createEntryConfirmationPdf(
   document.setCreationDate(date);
   document.setModificationDate(date);
   const page = document.addPage([595.28, 841.89]);
-  const regular = await document.embedFont(StandardFonts.Helvetica);
-  const bold = await document.embedFont(StandardFonts.HelveticaBold);
   const rgbColor = (hex: string) => {
     if (!/^#[0-9a-fA-F]{6}$/.test(hex))
       throw new Error('Invalid organization brand color');

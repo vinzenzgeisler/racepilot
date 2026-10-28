@@ -521,7 +521,7 @@
       "id": "entry-export-route",
       "kind": "route",
       "tenantKey": "server-resolved organizationId + eventId",
-      "isolation": "Requires entry:read; event is resolved in tenant context and the export query filters organizationId and eventId; selected columns are allow-listed and cells are formula-safe.",
+      "isolation": "Requires entry:read; event and export source rows are tenant scoped; field selection is allow-listed; a tenant-scoped idempotent job stores CSV under organization storage and download verifies object owner, content type, and SHA-256.",
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
@@ -536,8 +536,8 @@
     {
       "id": "entry-confirmation-pdf",
       "kind": "route",
-      "tenantKey": "organization_id + event_id + registration_group_id + server-issued objectId",
-      "isolation": "Admin generation requires entry:read and a tenant-scoped event/group query; storage keys are server-issued organization/{organizationId}/{objectId}; document metadata and storage owner/hash are checked again for downloads.",
+      "tenantKey": "organization_id + event_id + registration_group_id + artifactJobId + server-issued objectId",
+      "isolation": "Requires entry:read; generation is queued as a tenant-scoped idempotent job after a scoped group check; worker re-resolves tenant data and stores metadata; download rechecks permission, owner, content type, and SHA-256.",
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
@@ -545,7 +545,7 @@
         },
         {
           "file": "packages/api/src/index.test.ts",
-          "name": "streams only tenant-owned documents after permission and scoped group lookup"
+          "name": "queues and downloads only tenant-owned artifacts after permission and scoped group lookup"
         }
       ]
     },
@@ -577,23 +577,35 @@
       "id": "admin-entry-confirmation-create",
       "kind": "route",
       "tenantKey": "server-resolved organizationId + eventId + registrationGroupId",
-      "isolation": "Requires entry:read; scoped group query and organization branding are server loaded; storage-generated object reference is persisted with tenant-bound metadata.",
+      "isolation": "Requires entry:read; validates the scoped group then idempotently enqueues a tenant-bound PDF job; worker resolves branding and group data before storage.",
       "negativeTests": [
         {
           "file": "packages/api/src/index.test.ts",
-          "name": "streams only tenant-owned documents after permission and scoped group lookup"
+          "name": "queues and downloads only tenant-owned artifacts after permission and scoped group lookup"
         }
       ]
     },
     {
-      "id": "admin-document-download",
+      "id": "admin-artifact-job-download",
       "kind": "route",
-      "tenantKey": "server-resolved organizationId + documentId",
-      "isolation": "Requires entry:read; document lookup and storage get are tenant scoped; foreign IDs/keys return 404 and stored content hash/type must match metadata.",
+      "tenantKey": "server-resolved organizationId + artifactJobId + organization-owned objectId",
+      "isolation": "Requires entry:read; status lookup and object storage reads are organization scoped; foreign IDs return 404 and ready artifact content type and SHA-256 must match persisted job metadata.",
       "negativeTests": [
         {
           "file": "packages/api/src/index.test.ts",
-          "name": "streams only tenant-owned documents after permission and scoped group lookup"
+          "name": "queues and downloads only tenant-owned artifacts after permission and scoped group lookup"
+        }
+      ]
+    },
+    {
+      "id": "artifact_job",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + kind + idempotency_key",
+      "isolation": "Composite tenant/event/group constraints bind each job to owned source data; enqueue and Graphile Worker payload are transactionally paired; idempotency is organization-scoped; status and object metadata are read and updated only in tenant context.",
+      "negativeTests": [
+        {
+          "file": "packages/worker/src/artifacts.test.ts",
+          "name": "stores an organization-bound CSV and remains retryable after storage failures"
         }
       ]
     }

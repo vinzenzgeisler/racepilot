@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { PDFDocument } from 'pdf-lib';
 import { inflateSync } from 'node:zlib';
-import { createEntryConfirmationPdf } from './documents.js';
+import { createEntryConfirmationPdf } from '@racepilot/artifacts/pdf';
 
 describe('entry confirmation PDF', () => {
   it('renders deterministically with snapshot date and organization branding only', async () => {
@@ -38,21 +38,40 @@ describe('entry confirmation PDF', () => {
     const content = decodedPdfContent(first);
     expect(content).not.toContain('MSC');
     expect(content).toContain('/Image-');
-    expect(content).toContain('Zahlungsanweisung');
-    expect(content).toContain('DE89370400440532013000');
+    expect(content).toContain('/FontFile2');
     expect(pdf.getTitle()).toContain('RacePilot Cup');
     expect(pdf.getAuthor()).toBe('Example Club');
-    for (const text of [
-      'RacePilot Cup',
-      'Max Mustermann',
-      'Example GT',
-      'GT1',
-      '125.00 EUR',
-      'Example Club e.V.',
-      'DE89370400440532013000',
-    ])
-      expect(content).toContain(text);
-    expect(content).toContain('brand-v1');
+  });
+
+  it('embeds Unicode fonts for German organization, driver, event, and payment names', async () => {
+    const input = {
+      eventName: 'München – Frühjahrslauf',
+      eventStartsOn: '2026-05-01',
+      driverName: 'Jürgen Weiß',
+      vehicle: 'Škoda – Größe',
+      classes: ['Tourenwagen Ä'],
+      priceSnapshot: {
+        version: '1' as const,
+        currency: 'EUR',
+        calculatedAt: '2026-01-01T12:00:00.000Z',
+        totalCents: 12500,
+        lines: [],
+      },
+      paymentRecipient: null,
+      paymentReference: 'RP-1',
+      bankTransferCapability: false,
+      branding: {
+        organizationName: 'Rennclub Köln e.V.',
+        primaryColor: '#174ea6',
+        contactEmail: null,
+        version: 'brand-v1',
+      },
+    };
+    const bytes = await createEntryConfirmationPdf(input);
+    const pdf = await PDFDocument.load(bytes);
+    expect(pdf.getTitle()).toContain('München');
+    expect(pdf.getAuthor()).toBe('Rennclub Köln e.V.');
+    expect(decodedPdfContent(bytes)).toContain('/Subtype /Type0');
   });
   it('does not emit transfer instructions or a QR when the capability is inactive', async () => {
     const input = {

@@ -19,7 +19,7 @@
     "@racepilot/contracts": "*",
     "@racepilot/core": "*",
     "hono": "4.13.14",
-    "pdf-lib": "^1.17.1",
-    "qrcode": "^1.5.4"
+    "@racepilot/artifacts": "*",
+    "pdf-lib": "^1.17.1"
   }
 }
