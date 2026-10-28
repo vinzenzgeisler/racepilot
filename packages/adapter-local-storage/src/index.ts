@@ -60,6 +60,8 @@ export function createLocalObjectStorage(root: string): ObjectStorageProvider {
         const ref = JSON.parse(metadata) as StoredObjectRef;
         if (ref.organizationId !== organizationId || ref.objectId !== objectId)
           throw new ProviderError('forbidden', 'Object ownership check failed');
+        if (ref.sha256 !== createHash('sha256').update(body).digest('hex'))
+          throw new ProviderError('unavailable', 'Object checksum mismatch');
         return { ref, body };
       } catch (cause) {
         if (cause instanceof ProviderError) throw cause;

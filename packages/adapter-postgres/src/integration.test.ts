@@ -1,4 +1,5 @@
 import { and, eq, inArray } from 'drizzle-orm';
+import { runMigrations } from 'graphile-worker';
 import { organizationId, createPaymentReference } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
@@ -35,6 +36,10 @@ import {
   saveMailTemplateVersion,
   emailOutbox,
   consentEvidence,
+  createEntryExportRepository,
+  createEntryConfirmationRepository,
+  createArtifactJobRepository,
+  artifactJobs as artifactJobTable,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
@@ -369,7 +374,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       await pool.end();
     }
   });
-  it('isolates registration resources and serializes duplicate start numbers; records no audit event when cross-tenant entry creation is rejected', async () => {
+  it('cloud fixture limits CSV and PDF data to organization and selected event; isolates registration resources and serializes duplicate start numbers; records no audit event when cross-tenant entry creation is rejected', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();
     let orgA: string | undefined;
@@ -505,6 +510,150 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       expect(
         await createVehicleRepository(db).getById(ctxA, vehicleB!.id),
       ).toBeNull();
+      await runMigrations({ connectionString: url! });
+      const artifactJobs = createArtifactJobRepository(db);
+      const firstArtifact = await artifactJobs.enqueue(ctxA, {
+        eventId: eventA!.id,
+        kind: 'confirmation_pdf',
+        registrationGroupId: groupA!.id,
+        idempotencyKey: `confirmation-${suffix}`,
+      });
+      const duplicateArtifact = await artifactJobs.enqueue(ctxA, {
+        eventId: eventA!.id,
+        kind: 'confirmation_pdf',
+        registrationGroupId: groupA!.id,
+        idempotencyKey: `confirmation-${suffix}`,
+      });
+      expect(duplicateArtifact.id).toBe(firstArtifact.id);
+      expect(firstArtifact.status).toBe('queued');
+      const ctxB = { ...ctxA, organizationId: organizationId(orgB!) };
+      const staleSameTenant = await artifactJobs.enqueue(ctxA, {
+        eventId: eventA!.id,
+        kind: 'entries_csv',
+        idempotencyKey: `stale-same-tenant-${suffix}`,
+      });
+      const staleForeignTenant = await artifactJobs.enqueue(ctxB, {
+        eventId: eventB!.id,
+        kind: 'entries_csv',
+        idempotencyKey: `stale-foreign-tenant-${suffix}`,
+      });
+      const staleClaimedAt = new Date(Date.now() - 10 * 60_000);
+      const staleSameTenantToken = crypto.randomUUID();
+      const staleForeignTenantToken = crypto.randomUUID();
+      await db
+        .update(artifactJobTable)
+        .set({
+          status: 'processing',
+          claimedAt: staleClaimedAt,
+          claimToken: staleSameTenantToken,
+        })
+        .where(
+          and(
+            eq(artifactJobTable.organizationId, ctxA.organizationId),
+            eq(artifactJobTable.id, staleSameTenant.id),
+          ),
+        );
+      await db
+        .update(artifactJobTable)
+        .set({
+          status: 'processing',
+          claimedAt: staleClaimedAt,
+          claimToken: staleForeignTenantToken,
+        })
+        .where(
+          and(
+            eq(artifactJobTable.organizationId, ctxB.organizationId),
+            eq(artifactJobTable.id, staleForeignTenant.id),
+          ),
+        );
+      const claimContexts = [
+        { ...ctxA, jobId: `worker-a-${suffix}` },
+        { ...ctxA, jobId: `worker-b-${suffix}` },
+      ];
+      const claims = await Promise.all(
+        claimContexts.map((claimCtx) =>
+          artifactJobs.claim(claimCtx, firstArtifact.id),
+        ),
+      );
+      expect(claims.filter(Boolean)).toHaveLength(1);
+      for (const [job, expectedToken] of [
+        [staleSameTenant, staleSameTenantToken],
+        [staleForeignTenant, staleForeignTenantToken],
+      ] as const) {
+        const [unchanged] = await db
+          .select()
+          .from(artifactJobTable)
+          .where(eq(artifactJobTable.id, job.id));
+        expect(unchanged).toMatchObject({
+          status: 'processing',
+          claimToken: expectedToken,
+          claimedAt: staleClaimedAt,
+        });
+      }
+      const winnerIndex = claims.findIndex(Boolean);
+      const firstClaim = claims[winnerIndex]!;
+      const winnerContext = claimContexts[winnerIndex]!;
+      const loserContext = claimContexts[1 - winnerIndex]!;
+      expect(firstClaim.status).toBe('processing');
+      expect(
+        await artifactJobs.claim(loserContext, firstArtifact.id),
+      ).toBeNull();
+      await artifactJobs.release(
+        loserContext,
+        firstArtifact.id,
+        crypto.randomUUID(),
+      );
+      expect((await artifactJobs.getById(ctxA, firstArtifact.id))?.status).toBe(
+        'processing',
+      );
+      await artifactJobs.release(
+        winnerContext,
+        firstArtifact.id,
+        firstClaim.claimToken,
+      );
+      const retryContext = { ...ctxA, jobId: `worker-retry-${suffix}` };
+      const retryClaim = await artifactJobs.claim(
+        retryContext,
+        firstArtifact.id,
+      );
+      expect(retryClaim).not.toBeNull();
+      expect(retryClaim?.claimToken).not.toBe(firstClaim.claimToken);
+      await artifactJobs.complete(
+        winnerContext,
+        firstArtifact.id,
+        firstClaim.claimToken,
+        {
+          organizationId: organizationId(orgA),
+          objectId: crypto.randomUUID(),
+          contentType: 'application/pdf',
+          size: 1,
+          sha256: 'a'.repeat(64),
+        },
+      );
+      expect((await artifactJobs.getById(ctxA, firstArtifact.id))?.status).toBe(
+        'processing',
+      );
+      await artifactJobs.complete(
+        retryContext,
+        firstArtifact.id,
+        retryClaim!.claimToken,
+        {
+          organizationId: organizationId(orgA),
+          objectId: crypto.randomUUID(),
+          contentType: 'application/pdf',
+          size: 1,
+          sha256: 'b'.repeat(64),
+        },
+      );
+      expect((await artifactJobs.getById(ctxA, firstArtifact.id))?.status).toBe(
+        'ready',
+      );
+      expect(
+        await artifactJobs.getById(
+          { ...ctxA, organizationId: organizationId(orgB!) },
+          firstArtifact.id,
+        ),
+      ).toBeNull();
       const ctxC = { ...ctxA, organizationId: organizationId(orgC!) };
       const duplicate = await createPersonRepository(db).findDuplicate(
         ctxC,
@@ -540,6 +689,17 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         classA!.id,
       );
       expect(entryA).toBeDefined();
+      const snapshot = {
+        version: '1' as const,
+        currency: 'EUR',
+        calculatedAt: '2030-01-01T00:00:00.000Z',
+        totalCents: 12500,
+        lines: [],
+      };
+      await db
+        .update(entries)
+        .set({ priceSnapshotVersion: '1', priceSnapshot: snapshot })
+        .where(eq(entries.id, entryA!.id));
       await expect(
         attempted(personA!.id, vehicleA!.id, groupA!.id, classA!.id),
       ).rejects.toThrow();
@@ -577,9 +737,14 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
               ?.id
           : undefined;
       expect(foreignEntryId).toBeDefined();
+      await db
+        .update(entries)
+        .set({ priceSnapshotVersion: '1', priceSnapshot: snapshot })
+        .where(eq(entries.id, foreignEntryId!));
       expect(
         await createEntryRepository(db).getById(ctxA, foreignEntryId!),
       ).toBeNull();
+
       const adminEntries = createEntryRepository(db);
       const pageA = await adminEntries.listAdmin!(ctxA, {
         page: 1,
@@ -625,6 +790,44 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           direction: 'desc',
         }),
       ).toMatchObject({ items: [], total: 0 });
+      const cloudCtxA = { ...ctxA, deploymentMode: 'cloud' as const };
+      const csvRows = await createEntryExportRepository(db).listByEvent(
+        cloudCtxA,
+        eventA!.id,
+      );
+      expect(csvRows).toHaveLength(1);
+      expect(csvRows[0]).toMatchObject({
+        driver: 'Same Name',
+        vehicle: 'X Y',
+        class: 'A',
+        priceCents: 12500,
+      });
+      expect(
+        await createEntryExportRepository(db).listByEvent(
+          cloudCtxA,
+          eventB!.id,
+        ),
+      ).toEqual([]);
+      const confirmations = createEntryConfirmationRepository(db);
+      const confirmation = await confirmations.getByGroup(
+        cloudCtxA,
+        eventA!.id,
+        groupA!.id,
+      );
+      expect(confirmation).toMatchObject({
+        eventName: 'Race',
+        driverName: 'Same Name',
+        vehicles: ['X Y'],
+        classes: ['A'],
+        priceSnapshot: snapshot,
+      });
+      expect(
+        await confirmations.getByGroup(cloudCtxA, eventB!.id, groupB!.id),
+      ).toBeNull();
+      expect(
+        await confirmations.getByGroup(cloudCtxA, eventA!.id, groupB!.id),
+      ).toBeNull();
+
       expect(
         await db
           .select()

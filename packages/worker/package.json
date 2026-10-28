@@ -11,10 +11,13 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
+    "@racepilot/adapter-postgres": "*",
+    "@racepilot/adapter-smtp": "*",
     "@racepilot/contracts": "*",
     "@racepilot/core": "*",
     "graphile-worker": "^0.16.6",
-    "@racepilot/adapter-postgres": "*",
-    "@racepilot/adapter-smtp": "*"
+    "@racepilot/artifacts": "*",
+    "@racepilot/adapter-local-storage": "*",
+    "@racepilot/adapter-s3": "*"
   }
 }

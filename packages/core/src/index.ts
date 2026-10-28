@@ -471,6 +471,48 @@ export interface ObjectStorageProvider {
   delete(organizationId: OrganizationId, objectId: string): Promise<void>;
 }
 
+/** Executable, provider-neutral assertions shared by adapter contract tests. */
+export async function verifyObjectStorageContract(
+  storage: ObjectStorageProvider,
+): Promise<void> {
+  const owner = organizationId('contract_org_a');
+  const foreign = organizationId('contract_org_b');
+  const body = new TextEncoder().encode('storage port contract');
+  const ref = await storage.put({
+    organizationId: owner,
+    body,
+    contentType: 'text/plain',
+  });
+  if (
+    !/^[0-9a-f-]{36}$/.test(ref.objectId) ||
+    ref.organizationId !== owner ||
+    ref.size !== body.length ||
+    !/^[a-f0-9]{64}$/.test(ref.sha256)
+  )
+    throw new Error('Storage put contract failed');
+  const result = await storage.get(owner, ref.objectId);
+  if (
+    !result ||
+    result.ref.sha256 !== ref.sha256 ||
+    result.ref.contentType !== ref.contentType ||
+    result.body.length !== body.length ||
+    result.body.some((value, index) => value !== body[index])
+  )
+    throw new Error('Storage get contract failed');
+  if ((await storage.get(foreign, ref.objectId)) !== null)
+    throw new Error('Foreign organization must not read object');
+  let rejected = false;
+  try {
+    await storage.get(owner, '../etc/passwd');
+  } catch (error) {
+    rejected = error instanceof ProviderError && error.code === 'invalid_input';
+  }
+  if (!rejected) throw new Error('Invalid object identifier must be rejected');
+  await storage.delete(owner, ref.objectId);
+  if ((await storage.get(owner, ref.objectId)) !== null)
+    throw new Error('Deleted object must not be returned');
+}
+
 export type EntryVerificationStatus = 'unverified' | 'verified';
 export type EntryAcceptanceStatus =
   'pending' | 'accepted' | 'rejected' | 'waitlisted' | 'withdrawn';
@@ -587,6 +629,89 @@ export interface RegistrationGroupRepository {
     ctx: RequestContext,
     input: RegistrationGroupInput,
   ): Promise<RegistrationGroup>;
+}
+export interface EntryExportRow {
+  readonly driver: string;
+  readonly vehicle: string;
+  readonly class: string;
+  readonly startNumber: string | null;
+  readonly status: EntryAcceptanceStatus;
+  readonly priceCents: number | null;
+}
+export interface EntryExportRepository {
+  listByEvent(
+    ctx: RequestContext,
+    eventId: string,
+  ): Promise<readonly EntryExportRow[]>;
+}
+
+export interface EntryConfirmationData {
+  readonly eventId: string;
+  readonly eventName: string;
+  readonly eventStartsOn: string;
+  readonly registrationGroupId: string;
+  readonly driverName: string;
+  readonly vehicles: readonly string[];
+  readonly classes: readonly string[];
+  readonly priceSnapshot: PriceSnapshot;
+  readonly paymentReference: string;
+}
+export interface EntryConfirmationRepository {
+  getByGroup(
+    ctx: RequestContext,
+    eventId: string,
+    registrationGroupId: string,
+  ): Promise<EntryConfirmationData | null>;
+}
+export type ArtifactKind = 'confirmation_pdf' | 'entries_csv';
+export type ArtifactStatus = 'queued' | 'processing' | 'ready' | 'failed';
+
+export interface ArtifactJob {
+  readonly id: string;
+  readonly organizationId: OrganizationId;
+  readonly eventId: string;
+  readonly kind: ArtifactKind;
+  readonly registrationGroupId: string | null;
+  readonly fields: readonly string[];
+  readonly idempotencyKey: string;
+  readonly status: ArtifactStatus;
+  readonly objectId: string | null;
+  readonly sha256: string | null;
+  readonly contentType: string | null;
+  readonly attempts: number;
+  readonly error: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+export interface ArtifactJobRepository {
+  enqueue(
+    ctx: RequestContext,
+    input: {
+      eventId: string;
+      kind: ArtifactKind;
+      registrationGroupId?: string;
+      fields?: readonly string[];
+      idempotencyKey: string;
+    },
+  ): Promise<ArtifactJob>;
+  getById(ctx: RequestContext, id: string): Promise<ArtifactJob | null>;
+  claim(
+    ctx: JobContext,
+    id: string,
+  ): Promise<(ArtifactJob & { claimToken: string }) | null>;
+  release(ctx: JobContext, id: string, claimToken: string): Promise<void>;
+  complete(
+    ctx: JobContext,
+    id: string,
+    claimToken: string,
+    ref: StoredObjectRef,
+  ): Promise<void>;
+  fail(
+    ctx: JobContext,
+    id: string,
+    claimToken: string,
+    error: string,
+  ): Promise<void>;
 }
 export interface EntryRepository {
   create?(
@@ -1027,4 +1152,31 @@ export async function correctInvoicePayment(
   if (!actor.trim() || !reason.trim())
     throw new Error('Correction actor and reason are required');
   return deps.payments.correct(ctx, paymentId, actor.trim(), reason.trim());
+}
+
+export type EntryExportField =
+  'driver' | 'vehicle' | 'class' | 'startNumber' | 'status' | 'price';
+export const entryExportFields: readonly EntryExportField[] = [
+  'driver',
+  'vehicle',
+  'class',
+  'startNumber',
+  'status',
+  'price',
+];
+/** Protect spreadsheet consumers from formula execution, including control-character prefixes. */
+export function csvSafeCell(value: string | number | null | undefined): string {
+  let text = value == null ? '' : String(value);
+  // Spreadsheet applications may ignore leading whitespace/control/format chars
+  // before formula markers. Keep the original cell but prefix an apostrophe when
+  // its first significant character would otherwise start a formula.
+  if (/^[\p{White_Space}\p{Cc}\p{Cf}]*[=+\-@]/u.test(text)) text = "'" + text;
+  return '"' + text.replaceAll('"', '""') + '"';
+}
+export function renderEntryCsv(
+  rows: readonly (readonly (string | number | null | undefined)[])[],
+): string {
+  return (
+    rows.map((row) => row.map(csvSafeCell).join(',')).join('\r\n') + '\r\n'
+  );
 }

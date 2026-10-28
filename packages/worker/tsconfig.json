@@ -13,6 +13,15 @@
     },
     {
       "path": "../adapter-smtp"
+    },
+    {
+      "path": "../artifacts"
+    },
+    {
+      "path": "../adapter-local-storage"
+    },
+    {
+      "path": "../adapter-s3"
     }
   ],
   "compilerOptions": {

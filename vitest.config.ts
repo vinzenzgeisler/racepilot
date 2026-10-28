@@ -11,6 +11,9 @@ export default defineConfig({
       '@racepilot/core': source('core'),
       '@racepilot/contracts': source('contracts'),
       '@racepilot/adapter-postgres': source('adapter-postgres'),
+      '@racepilot/artifacts/pdf': fileURLToPath(
+        new URL('./packages/artifacts/src/pdf.ts', import.meta.url),
+      ),
     },
   },
   test: {

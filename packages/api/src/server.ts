@@ -10,6 +10,9 @@ import {
   createRegistrationSettingsRepository,
   createEventConsentRepository,
   createPublicRegistrationService,
+  createEntryConfirmationRepository,
+  createArtifactJobRepository,
+  createEntryExportRepository,
   createMembershipRepository,
   createInvoicePaymentRepository,
   createPaymentRecipientRepository,
@@ -19,6 +22,8 @@ import {
 } from '@racepilot/adapter-postgres';
 import { createApp, createInMemoryRegistrationRateLimiter } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
+import { createLocalObjectStorage } from '@racepilot/adapter-local-storage';
+import { createS3ObjectStorage } from '@racepilot/adapter-s3';
 const config = loadConfig(process.env);
 await migrate(config.DATABASE_URL);
 const { db } = await createDatabase(config.DATABASE_URL);
@@ -36,6 +41,29 @@ const publicRegistration =
   config.mailEnabled && canonicalBaseUrl
     ? createPublicRegistrationService(db, { canonicalBaseUrl })
     : undefined;
+const storage =
+  config.STORAGE_PROVIDER === 'local'
+    ? createLocalObjectStorage(config.STORAGE_LOCAL_ROOT!)
+    : config.STORAGE_PROVIDER === 's3'
+      ? createS3ObjectStorage({
+          bucket: config.STORAGE_S3_BUCKET!,
+          ...(config.STORAGE_S3_REGION
+            ? { region: config.STORAGE_S3_REGION }
+            : {}),
+          ...(config.STORAGE_S3_ENDPOINT
+            ? { endpoint: config.STORAGE_S3_ENDPOINT }
+            : {}),
+          ...(config.STORAGE_S3_ACCESS_KEY_ID &&
+          config.STORAGE_S3_SECRET_ACCESS_KEY
+            ? {
+                credentials: {
+                  accessKeyId: config.STORAGE_S3_ACCESS_KEY_ID,
+                  secretAccessKey: config.STORAGE_S3_SECRET_ACCESS_KEY,
+                },
+              }
+            : {}),
+        })
+      : undefined;
 const identityProvider =
   config.OIDC_PROVIDER === 'oidc'
     ? await createOIDCIdentityProvider({
@@ -48,6 +76,10 @@ serve({
     config: { deploymentMode: 'community', organizationId: org.id },
     organizations: createOrganizationRepository(db),
     events: createEventRepository(db),
+    entryExports: createEntryExportRepository(db),
+    entryConfirmations: createEntryConfirmationRepository(db),
+    artifactJobs: createArtifactJobRepository(db),
+    ...(storage ? { objectStorage: storage } : {}),
     classes: createEventClassRepository(db),
     registrationSettings: createRegistrationSettingsRepository(db),
     eventConsents: createEventConsentRepository(db),

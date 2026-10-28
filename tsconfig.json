@@ -24,6 +24,9 @@
     },
     {
       "path": "./packages/adapter-postgres"
+    },
+    {
+      "path": "./packages/adapter-s3"
     }
   ]
 }

@@ -64,6 +64,20 @@
       "when": 1793232002000,
       "tag": "0008_submission_request_fingerprint",
       "breakpoints": false
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1793239200000,
+      "tag": "0009_artifact_jobs",
+      "breakpoints": false
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793239201000,
+      "tag": "0010_artifact_claim_fencing",
+      "breakpoints": false
     }
   ]
 }

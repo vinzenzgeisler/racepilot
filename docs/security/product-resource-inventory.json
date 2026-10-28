@@ -516,6 +516,86 @@
           "name": "uses generic public verification responses and rate-limits by IP and event"
         }
       ]
+    },
+    {
+      "id": "entry-export-route",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId",
+      "isolation": "Requires entry:read; event and export source rows are tenant scoped; field selection is allow-listed; a tenant-scoped idempotent job stores CSV under organization storage and download verifies object owner, content type, and SHA-256.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "cloud fixture limits CSV and PDF data to organization and selected event"
+        },
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "requires entry:read for CSV export"
+        }
+      ]
+    },
+    {
+      "id": "entry-confirmation-pdf",
+      "kind": "route",
+      "tenantKey": "organization_id + event_id + registration_group_id + artifactJobId + server-issued objectId",
+      "isolation": "Requires entry:read; generation is queued as a tenant-scoped idempotent job after a scoped group check; worker re-resolves tenant data and stores artifact-job metadata; downloads use the job status route, which rechecks permission, owner, content type, and SHA-256.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "cloud fixture limits CSV and PDF data to organization and selected event"
+        },
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "queues and downloads only tenant-owned artifacts after permission and scoped group lookup"
+        }
+      ]
+    },
+    {
+      "id": "s3-object-storage",
+      "kind": "config",
+      "tenantKey": "organization/{organizationId}/",
+      "isolation": "Adapter constructs keys exclusively from trusted organization context and UUID identifiers; callers cannot provide keys; checks metadata organization/id and SHA-256.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-s3/src/contract.test.ts",
+          "name": "satisfies the shared object storage contract"
+        }
+      ]
+    },
+    {
+      "id": "admin-entry-confirmation-create",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId + registrationGroupId",
+      "isolation": "Requires entry:read; validates the scoped group then idempotently enqueues a tenant-bound PDF job; worker resolves branding and group data before storage.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "queues and downloads only tenant-owned artifacts after permission and scoped group lookup"
+        }
+      ]
+    },
+    {
+      "id": "admin-artifact-job-download",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + artifactJobId + organization-owned objectId",
+      "isolation": "Requires entry:read; status lookup and object storage reads are organization scoped; foreign IDs return 404 and ready artifact content type and SHA-256 must match persisted job metadata.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "queues and downloads only tenant-owned artifacts after permission and scoped group lookup"
+        }
+      ]
+    },
+    {
+      "id": "artifact_job",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + kind + idempotency_key",
+      "isolation": "Composite tenant/event/group constraints bind each job to owned source data; enqueue and Graphile Worker payload are transactionally paired; idempotency is organization-scoped; status and object metadata are read and updated only in tenant context.",
+      "negativeTests": [
+        {
+          "file": "packages/worker/src/artifacts.test.ts",
+          "name": "stores an organization-bound CSV and remains retryable after storage failures"
+        }
+      ]
     }
   ]
 }

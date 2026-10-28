@@ -12,10 +12,14 @@
   },
   "dependencies": {
     "@hono/node-server": "2.1.5",
+    "@racepilot/adapter-local-storage": "*",
+    "@racepilot/adapter-oidc": "*",
+    "@racepilot/adapter-postgres": "*",
+    "@racepilot/adapter-s3": "*",
     "@racepilot/contracts": "*",
     "@racepilot/core": "*",
     "hono": "4.13.14",
-    "@racepilot/adapter-postgres": "*",
-    "@racepilot/adapter-oidc": "*"
+    "@racepilot/artifacts": "*",
+    "pdf-lib": "^1.17.1"
   }
 }

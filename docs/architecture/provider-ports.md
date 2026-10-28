@@ -27,3 +27,24 @@ must be supplied as a complete pair. Selecting local storage requires
 `STORAGE_LOCAL_ROOT`. Invalid enabled configuration fails startup with variable names
 only, never values. Disabled adapters expose corresponding `mailEnabled` and
 `storageEnabled` capability flags as false.
+
+## Documents and exports (#65)
+
+Both confirmation PDFs and CSV exports are persisted as organization-scoped artifact jobs
+and queued transactionally in Graphile Worker with a tenant-bearing job envelope and
+organization-scoped idempotency key. Workers rebuild tenant context, re-query event or
+registration data, render, then persist server-issued object ID, content type, and SHA-256
+on the job. The API and worker must share the selected `STORAGE_PROVIDER` configuration. Requests return `202` and a job URL; downloads re-check `entry:read`, tenant
+ownership, object owner, content type, and SHA-256 before streaming. Failed jobs remain
+retryable in Graphile Worker and become terminal only after the queue's attempt limit.
+`pdf-lib` embeds the bundled DejaVu Sans regular/bold fonts for Unicode-safe text and
+uses explicit metadata timestamps; `qrcode` renders the EPC transfer payload only when
+a valid organization payment recipient is available. PDF metadata dates come from the
+immutable price snapshot. CSV fields are allow-listed; leading whitespace, control and
+format characters before formula markers trigger apostrophe-prefix escaping before quoting.
+
+`STORAGE_PROVIDER` accepts `disabled`, `local`, or `s3`. Local storage requires
+`STORAGE_LOCAL_ROOT`; the S3-compatible adapter accepts `STORAGE_S3_BUCKET`, optional
+`STORAGE_S3_REGION`/`STORAGE_S3_ENDPOINT`, and an optional complete pair of
+`STORAGE_S3_ACCESS_KEY_ID` and `STORAGE_S3_SECRET_ACCESS_KEY`. Supplying an endpoint
+enables path-style addressing by default for MinIO.

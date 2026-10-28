@@ -28,6 +28,11 @@ import {
   type InvoicePaymentRepository,
   type EntryRepository,
   type EntryListQuery,
+  type EntryExportRepository,
+  type EntryConfirmationRepository,
+  type ArtifactJobRepository,
+  type ObjectStorageProvider,
+  entryExportFields,
   type OrganizationRepository,
   type EventRepository,
   type OrganizationPatch,
@@ -78,8 +83,13 @@ const configSchema = z.object({
   }),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   ...mailConfigSchema.shape,
-  STORAGE_PROVIDER: z.enum(['disabled', 'local']).default('disabled'),
+  STORAGE_PROVIDER: z.enum(['disabled', 'local', 's3']).default('disabled'),
   STORAGE_LOCAL_ROOT: z.string().optional(),
+  STORAGE_S3_BUCKET: z.string().optional(),
+  STORAGE_S3_REGION: z.string().optional(),
+  STORAGE_S3_ENDPOINT: z.string().url().optional(),
+  STORAGE_S3_ACCESS_KEY_ID: z.string().optional(),
+  STORAGE_S3_SECRET_ACCESS_KEY: z.string().optional(),
   OIDC_PROVIDER: z.enum(['disabled', 'oidc']).default('disabled'),
   OIDC_ISSUER_URL: z.string().optional(),
   OIDC_AUDIENCE: z.string().optional(),
@@ -126,16 +136,24 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
   if (
     parsed.data.STORAGE_PROVIDER === 'local' &&
     !parsed.data.STORAGE_LOCAL_ROOT
-  ) {
+  )
     throw new Error('Invalid configuration variables: STORAGE_LOCAL_ROOT');
-  }
+  if (parsed.data.STORAGE_PROVIDER === 's3' && !parsed.data.STORAGE_S3_BUCKET)
+    throw new Error('Invalid configuration variables: STORAGE_S3_BUCKET');
+  if (
+    Boolean(parsed.data.STORAGE_S3_ACCESS_KEY_ID) !==
+    Boolean(parsed.data.STORAGE_S3_SECRET_ACCESS_KEY)
+  )
+    throw new Error(
+      'Invalid configuration variables: STORAGE_S3_ACCESS_KEY_ID, STORAGE_S3_SECRET_ACCESS_KEY',
+    );
   return {
     ...parsed.data,
     ...mailConfig,
     mailEnabled:
       parsed.data.MAIL_PROVIDER === 'smtp' &&
       Boolean(parsed.data.CANONICAL_BASE_URL),
-    storageEnabled: parsed.data.STORAGE_PROVIDER === 'local',
+    storageEnabled: parsed.data.STORAGE_PROVIDER !== 'disabled',
     deploymentMode: parseDeploymentMode(parsed.data.DEPLOYMENT_MODE),
   };
 }
@@ -148,6 +166,10 @@ export interface ApiDeps {
   events: EventRepository;
   classes?: EventClassRepository;
   entries?: EntryRepository;
+  entryExports?: EntryExportRepository;
+  entryConfirmations?: EntryConfirmationRepository;
+  artifactJobs?: ArtifactJobRepository;
+  objectStorage?: ObjectStorageProvider;
   payments?: InvoicePaymentRepository;
   paymentRecipients?: PaymentRecipientRepository;
   pricing?: EventClassPricingRepository;
@@ -334,12 +356,33 @@ export function createApp(deps: ApiDeps) {
           deps.bootstrap,
         )
         .catch(() => new Set<string>())) ?? new Set<string>();
+    const capabilities = new Set(deps.runtimeBootstrap?.capabilities ?? []);
+    capabilities.delete('payment.bank_transfer');
+    if (deps.paymentRecipients) {
+      try {
+        const recipient = await deps.paymentRecipients.get(
+          createRequestContext({
+            deploymentMode: 'community',
+            organizationId: organizationId(deps.config.organizationId),
+            permissions,
+            capabilities: new Set(),
+            correlationId: crypto.randomUUID(),
+          }),
+        );
+        if (recipient) {
+          validatePaymentRecipient(recipient);
+          capabilities.add('payment.bank_transfer');
+        }
+      } catch {
+        /* capability fails closed */
+      }
+    }
     return createRequestContext({
       deploymentMode: 'community',
       organizationId: organizationId(deps.config.organizationId),
       subject: { issuer: identity.issuer, subject: identity.subject },
       permissions,
-      capabilities: new Set(),
+      capabilities,
       correlationId: crypto.randomUUID(),
     });
   };
@@ -388,6 +431,126 @@ export function createApp(deps: ApiDeps) {
     } catch {
       return c.json({ error: 'Forbidden' }, 403);
     }
+  });
+  app.post(
+    '/admin/events/:eventId/registration-groups/:groupId/confirmation',
+    async (c) => {
+      const context = await resolveContext(c.req.raw);
+      if (!context) return c.json({ error: 'Unauthorized' }, 401);
+      if (!context.permissions.has('entry:read'))
+        return c.json({ error: 'Forbidden' }, 403);
+      const eventId = c.req.param('eventId');
+      const groupId = c.req.param('groupId');
+      if (
+        !z.string().uuid().safeParse(eventId).success ||
+        !z.string().uuid().safeParse(groupId).success
+      )
+        return c.json({ error: 'Not found' }, 404);
+      if (!deps.entryConfirmations || !deps.artifactJobs || !deps.objectStorage)
+        return c.json({ error: 'Not found' }, 404);
+      const data = await deps.entryConfirmations.getByGroup(
+        context,
+        eventId,
+        groupId,
+      );
+      if (!data) return c.json({ error: 'Not found' }, 404);
+      const keyHeader = c.req.header('Idempotency-Key');
+      if (!keyHeader || !/^[\x21-\x7e]{1,200}$/.test(keyHeader))
+        return c.json({ error: 'Idempotency-Key required' }, 400);
+      const idempotencyKey = `confirmation:${eventId}:${groupId}:${keyHeader}`;
+      const job = await deps.artifactJobs.enqueue(context, {
+        eventId,
+        kind: 'confirmation_pdf',
+        registrationGroupId: groupId,
+        idempotencyKey,
+      });
+      c.header('Cache-Control', 'private, no-store');
+      c.header('Location', `/admin/artifact-jobs/${job.id}`);
+      return c.json({ jobId: job.id, status: job.status }, 202);
+    },
+  );
+  app.get('/admin/events/:eventId/entries.csv', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success)
+      return c.json({ error: 'Not found' }, 404);
+    const event = await deps.events.getById(context, eventId);
+    if (
+      !event ||
+      !deps.entryExports ||
+      !deps.artifactJobs ||
+      !deps.objectStorage
+    )
+      return c.json({ error: 'Not found' }, 404);
+    const requested = c.req.query('fields')?.split(',') ?? [
+      ...entryExportFields,
+    ];
+    if (
+      requested.length === 0 ||
+      requested.some(
+        (field) =>
+          !entryExportFields.includes(
+            field as (typeof entryExportFields)[number],
+          ),
+      )
+    )
+      return c.json({ error: 'Invalid export fields' }, 400);
+    const keyHeader = c.req.header('Idempotency-Key');
+    if (!keyHeader || !/^[\x21-\x7e]{1,200}$/.test(keyHeader))
+      return c.json({ error: 'Idempotency-Key required' }, 400);
+    const requestKey = keyHeader;
+    const job = await deps.artifactJobs.enqueue(context, {
+      eventId,
+      kind: 'entries_csv',
+      fields: requested,
+      idempotencyKey: `entries-csv:${eventId}:${requestKey}`,
+    });
+    c.header('Cache-Control', 'private, no-store');
+    c.header('Location', `/admin/artifact-jobs/${job.id}`);
+    return c.json({ jobId: job.id, status: job.status }, 202);
+  });
+  app.get('/admin/artifact-jobs/:jobId', async (c) => {
+    const context = await resolveContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    const id = c.req.param('jobId');
+    if (
+      !z.string().uuid().safeParse(id).success ||
+      !deps.artifactJobs ||
+      !deps.objectStorage
+    )
+      return c.json({ error: 'Not found' }, 404);
+    const job = await deps.artifactJobs.getById(context, id);
+    if (!job) return c.json({ error: 'Not found' }, 404);
+    c.header('Cache-Control', 'private, no-store');
+    if (job.status !== 'ready')
+      return c.json(
+        { jobId: job.id, status: job.status, error: job.error },
+        job.status === 'failed' ? 422 : 202,
+      );
+    if (!job.objectId || !job.sha256 || !job.contentType)
+      return c.json({ error: 'Not found' }, 404);
+    const stored = await deps.objectStorage.get(
+      context.organizationId,
+      job.objectId,
+    );
+    if (
+      !stored ||
+      stored.ref.organizationId !== context.organizationId ||
+      stored.ref.sha256 !== job.sha256 ||
+      stored.ref.contentType !== job.contentType
+    )
+      return c.json({ error: 'Not found' }, 404);
+    c.header('Content-Type', job.contentType);
+    c.header(
+      'Content-Disposition',
+      `attachment; filename="${job.kind === 'entries_csv' ? `entries-${job.eventId}.csv` : `entry-confirmation-${job.id}.pdf`}"`,
+    );
+    return c.body(new Blob([Buffer.from(stored.body)]));
   });
   app.get('/admin/events', async (c) => {
     const context = await resolveContext(c.req.raw);
