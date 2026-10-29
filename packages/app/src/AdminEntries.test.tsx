@@ -139,7 +139,7 @@ async function setInput(label: string, value: string) {
 }
 async function click(text: string) {
   const button = [...container.querySelectorAll('button')].find(
-    (item) => item.textContent?.trim() === text,
+    (item) => item.textContent?.includes(text) ?? false,
   );
   if (!button) throw new Error(`Button not found: ${text}`);
   await act(async () => button.click());

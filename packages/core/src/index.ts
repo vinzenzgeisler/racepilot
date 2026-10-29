@@ -514,8 +514,7 @@ export async function verifyObjectStorageContract(
 }
 
 export type EntryVerificationStatus = 'unverified' | 'verified';
-export type EntryAcceptanceStatus =
-  'pending' | 'accepted' | 'rejected' | 'waitlisted' | 'withdrawn';
+export type EntryAcceptanceStatus = string;
 export const entryWorkflowCategories = [
   'pending',
   'accepted',
@@ -534,6 +533,7 @@ export interface EntryWorkflowTransition {
   readonly from: string;
   readonly to: string;
   readonly reasonRequired: boolean;
+  readonly permission?: string;
 }
 export interface EntryWorkflow {
   readonly version: number;
@@ -645,6 +645,14 @@ export function validateEntryWorkflow(workflow: EntryWorkflow): string[] {
     if (!keys.has(edge.from) || !keys.has(edge.to))
       errors.push(`Orphan transition: ${edge.from} -> ${edge.to}`);
     const pair = `${edge.from}\0${edge.to}`;
+    if (typeof edge.reasonRequired !== 'boolean')
+      errors.push(`Invalid reason requirement: ${edge.from} -> ${edge.to}`);
+    if (
+      edge.permission !== undefined &&
+      (typeof edge.permission !== 'string' ||
+        !/^[a-z][a-z0-9:._-]{0,99}$/.test(edge.permission))
+    )
+      errors.push(`Invalid permission: ${edge.from} -> ${edge.to}`);
     if (pairs.has(pair))
       errors.push(`Duplicate transition: ${edge.from} -> ${edge.to}`);
     pairs.add(pair);
@@ -1007,6 +1015,14 @@ export async function transitionEntry(
     const pinned = await deps.workflows.getPinnedForEntry(ctx, id);
     if (!pinned) return null;
     assertWorkflowTransition(pinned.workflow, from, to, reason);
+    const workflowEdge = pinned.workflow.transitions.find(
+      (edge) => edge.from === from && edge.to === to,
+    )!;
+    if (
+      workflowEdge.permission &&
+      !ctx.permissions.has(workflowEdge.permission)
+    )
+      throw new Error('Forbidden');
     statusCategory = pinned.workflow.statuses.find(
       (status) => status.key === to,
     )?.category;

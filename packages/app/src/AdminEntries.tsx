@@ -5,6 +5,7 @@ import {
   useState,
   type FormEvent,
 } from 'react';
+import { AdminWorkflow, defaultWorkflow } from './AdminWorkflow.js';
 import {
   AdminEntryListResponse,
   EntryResponse,
@@ -32,6 +33,21 @@ const initialQuery: EntryQuery = {
   direction: 'desc',
 };
 type Gate = { generation: number; controller: AbortController | null };
+type WorkflowStatus = {
+  key: string;
+  labels: { de: string; en: string };
+  color: string;
+  category: string;
+};
+type WorkflowView = {
+  statuses: WorkflowStatus[];
+  transitions: Array<{
+    from: string;
+    to: string;
+    reasonRequired: boolean;
+    permission?: string;
+  }>;
+};
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
   return fetch(path, {
@@ -69,6 +85,7 @@ export function AdminEntries() {
   const [apiState, setApiState] = useState<ApiState>('loading');
   const [events, setEvents] = useState<Event[]>([]);
   const [eventId, setEventId] = useState('');
+  const [workflow, setWorkflow] = useState<WorkflowView | null>(null);
   const [items, setItems] = useState<Entry[]>([]);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -121,6 +138,32 @@ export function AdminEntries() {
       if (gate.controller === controller) gate.controller = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!eventId) return;
+    const controller = new AbortController();
+    fetch(
+      `/admin/events/${encodeURIComponent(eventId)}/registration-workflow`,
+      {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: controller.signal,
+      },
+    )
+      .then((response) =>
+        response.ok
+          ? (response.json() as Promise<{ workflow: WorkflowView }>)
+          : null,
+      )
+      .then((value) => {
+        if (!controller.signal.aborted)
+          setWorkflow(value?.workflow ?? defaultWorkflow);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setWorkflow(defaultWorkflow);
+      });
+    return () => controller.abort();
+  }, [eventId, refreshRevision]);
 
   useEffect(() => {
     if (!eventId) return;
@@ -401,6 +444,7 @@ export function AdminEntries() {
           ))}
         </select>
       </label>
+      <AdminWorkflow eventId={eventId} events={events} />
       {eventId && (
         <>
           <form className="admin-filters" onSubmit={applyFilters}>
@@ -432,14 +476,10 @@ export function AdminEntries() {
                 }
               >
                 <option value="">All</option>
-                {[
-                  'pending',
-                  'accepted',
-                  'rejected',
-                  'waitlisted',
-                  'withdrawn',
-                ].map((s) => (
-                  <option key={s}>{s}</option>
+                {(workflow?.statuses ?? []).map((status) => (
+                  <option key={status.key} value={status.key}>
+                    {status.labels.en} ({status.key})
+                  </option>
                 ))}
               </select>
             </label>
@@ -528,7 +568,14 @@ export function AdminEntries() {
                         {classes.find((item) => item.id === entry.classId)
                           ?.name ?? entry.classId}
                       </td>
-                      <td>{entry.acceptanceStatus}</td>
+                      <td>
+                        <StatusBadge
+                          status={workflow?.statuses.find(
+                            (item) => item.key === entry.acceptanceStatus,
+                          )}
+                          fallback={entry.acceptanceStatus}
+                        />
+                      </td>
                       <td>{entry.verificationStatus}</td>
                       <td>{new Date(entry.createdAt).toLocaleString()}</td>
                     </tr>
@@ -580,7 +627,14 @@ export function AdminEntries() {
             <dt>Vehicle record</dt>
             <dd>{selected.vehicleId}</dd>
             <dt>Acceptance</dt>
-            <dd>{selected.acceptanceStatus}</dd>
+            <dd>
+              <StatusBadge
+                status={workflow?.statuses.find(
+                  (item) => item.key === selected.acceptanceStatus,
+                )}
+                fallback={selected.acceptanceStatus}
+              />
+            </dd>
             <dt>Verification</dt>
             <dd>{selected.verificationStatus}</dd>
             <dt>Price snapshot total</dt>
@@ -602,18 +656,23 @@ export function AdminEntries() {
             />
           </label>
           <div className="admin-actions">
-            {(['accepted', 'rejected', 'waitlisted', 'withdrawn'] as const).map(
-              (status) => (
-                <button
-                  key={status}
-                  type="button"
-                  disabled={busy || !reason.trim()}
-                  onClick={() => void transition('acceptance', status)}
-                >
-                  {status}
-                </button>
-              ),
-            )}
+            {(workflow?.transitions ?? [])
+              .filter((edge) => edge.from === selected.acceptanceStatus)
+              .map((edge) => {
+                const status = workflow?.statuses.find(
+                  (item) => item.key === edge.to,
+                );
+                return (
+                  <button
+                    key={edge.to}
+                    type="button"
+                    disabled={busy || !reason.trim()}
+                    onClick={() => void transition('acceptance', edge.to)}
+                  >
+                    <StatusBadge status={status} fallback={edge.to} />
+                  </button>
+                );
+              })}
             <button
               type="button"
               disabled={
@@ -634,5 +693,28 @@ export function AdminEntries() {
       )}
       {actionError && <p role="alert">{actionError}</p>}
     </section>
+  );
+}
+
+function StatusBadge({
+  status,
+  fallback,
+}: {
+  status: WorkflowStatus | undefined;
+  fallback: string;
+}) {
+  const locale = navigator.language.toLowerCase().startsWith('de')
+    ? 'de'
+    : 'en';
+  return (
+    <span
+      className="entry-status"
+      style={
+        status ? { color: status.color, borderColor: status.color } : undefined
+      }
+      title={fallback}
+    >
+      {status ? `${status.labels[locale]} · ${status.key}` : fallback}
+    </span>
   );
 }

@@ -704,7 +704,8 @@ export function createApp(deps: ApiDeps) {
         eventId: z.string().uuid().optional(),
         classId: z.string().uuid().optional(),
         acceptanceStatus: z
-          .enum(['pending', 'accepted', 'rejected', 'waitlisted', 'withdrawn'])
+          .string()
+          .regex(/^[a-z][a-z0-9_-]{0,63}$/)
           .optional(),
         verificationStatus: z.enum(['unverified', 'verified']).optional(),
         search: z.string().trim().max(120).optional(),
