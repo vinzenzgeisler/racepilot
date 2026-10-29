@@ -34,6 +34,10 @@ function build() {
   const entries = new Map(ids.map((id, i) => [id, names[i]!]));
   let next = 1;
   const repo: TimingRepository = {
+    listEntries: async (ctx, eventId) =>
+      ctx.organizationId === org && eventId === event
+        ? ids.map((entryId, i) => ({ entryId, startNumber: names[i]! }))
+        : [],
     resolveEntry: async (_ctx, _event, lookup) => {
       const found = lookup.entryId
         ? entries.get(lookup.entryId)
@@ -243,6 +247,51 @@ describe('timing module backend', () => {
     ).toBe(404);
     expect(measurements).toHaveLength(0);
   });
+  it('rejects runs beyond configured count for manual, CSV, and correction requests', async () => {
+    const { app } = build();
+    await activate(app);
+    const manual = await send(
+      app,
+      `/admin/events/${event}/modules/timing/measurements`,
+      'POST',
+      {
+        entryId: ids[0],
+        run: 4,
+        timeMs: 100,
+        source: 'manual',
+        recordedAt: '2026-10-29T10:00:00Z',
+      },
+    );
+    expect(manual.status).toBe(400);
+    const csv = await send(
+      app,
+      `/admin/events/${event}/modules/timing/measurements/csv`,
+      'POST',
+      {
+        csv: `startNumber,run,timeMs,source,recordedAt\n1,4,100,csv,2026-10-29T10:00:00Z`,
+        dryRun: false,
+      },
+    );
+    expect(csv.status).toBe(400);
+    expect(await csv.json()).toMatchObject({
+      accepted: 0,
+      errors: [{ row: 2, message: 'Run exceeds configured run count' }],
+    });
+    const correction = await send(
+      app,
+      `/admin/events/${event}/modules/timing/measurements/measurement-id/corrections`,
+      'POST',
+      { run: 4 },
+    );
+    expect(correction.status).toBe(400);
+    const noOp = await send(
+      app,
+      `/admin/events/${event}/modules/timing/measurements/measurement-id/corrections`,
+      'POST',
+      { entryId: ids[0] },
+    );
+    expect(noOp.status).toBe(400);
+  });
   it('imports CSV and manual runs, publishes deterministic results, then versions rule changes', async () => {
     const { app, measurements } = build();
     await activate(app);
@@ -445,6 +494,47 @@ describe('timing module backend', () => {
       { method: 'GET', headers: { 'x-org': 'b', 'x-permissions': perms } },
     );
     expect(foreignOrg.status).toBe(404);
+  });
+  it('includes registered starters without measurements as DNF in drafts, never as partial sum scores', async () => {
+    const { app } = build();
+    await activate(app);
+    await send(
+      app,
+      `/admin/events/${event}/modules/timing/measurements`,
+      'POST',
+      {
+        entryId: ids[0],
+        run: 1,
+        timeMs: 5,
+        source: 'manual',
+        recordedAt: '2026-10-29T10:00:00Z',
+      },
+    );
+    await send(app, `/admin/events/${event}/modules/timing`, 'PATCH', {
+      config: {
+        version: 1,
+        runStructure: { runCount: 3, label: 'Run' },
+        scoringRule: { version: 1, method: 'sum' },
+      },
+    });
+    const draft = await send(
+      app,
+      `/admin/events/${event}/modules/timing/results/drafts`,
+      'POST',
+      {},
+    );
+    expect(draft.status).toBe(201);
+    const results = (
+      (await draft.json()) as {
+        results: { entryId: string; status: string; scoreMs: number | null }[];
+      }
+    ).results;
+    expect(results).toHaveLength(3);
+    expect(
+      results.filter(
+        (result) => result.status === 'DNF' && result.scoreMs === null,
+      ),
+    ).toHaveLength(3);
   });
   it('exposes only published results through the public module guard', async () => {
     const { app } = build();

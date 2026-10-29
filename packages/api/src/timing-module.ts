@@ -10,6 +10,7 @@ export const TimingConfigSchema = z
         label: z.string().trim().min(1).max(100).default('Run'),
       })
       .strict(),
+    incompleteRunStatus: z.enum(['DNF', 'DNS']).default('DNF'),
     scoringRule: z.discriminatedUnion('method', [
       z
         .object({
@@ -34,6 +35,7 @@ export type TimingConfig = z.infer<typeof TimingConfigSchema>;
 export const defaultTimingConfig: TimingConfig = {
   version: 1,
   runStructure: { runCount: 3, label: 'Run' },
+  incompleteRunStatus: 'DNF',
   scoringRule: { version: 1, method: 'fastest-run' },
 };
 

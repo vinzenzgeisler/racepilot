@@ -113,6 +113,9 @@ describe.skipIf(!url)('PostgreSQL timing adapter', () => {
       };
       const ctxB = { ...ctxA, organizationId: organizationId(orgB!.id) };
       const repo = createTimingRepository(db);
+      expect(await repo.listEntries(ctxA, eventA!.id)).toEqual([
+        { entryId: entryA!.id, startNumber: '7' },
+      ]);
       expect(
         await repo.resolveEntry(ctxA, eventA!.id, { startNumber: '7' }),
       ).toEqual({ entryId: entryA!.id, startNumber: '7' });
@@ -123,6 +126,7 @@ describe.skipIf(!url)('PostgreSQL timing adapter', () => {
           entryId: entryA!.id,
           run: 1,
           timeMs: 12345,
+          exclusion: 'DNF',
           source: 'manual',
           recordedAt: '2030-01-01T10:00:00.000Z',
         },
@@ -151,11 +155,12 @@ describe.skipIf(!url)('PostgreSQL timing adapter', () => {
         ctxA,
         eventA!.id,
         recorded!.id,
-        { timeMs: 12000 },
+        { timeMs: 12000, exclusion: null },
         'actor-a',
       );
       expect(corrected).toMatchObject({
         timeMs: 12000,
+        exclusion: undefined,
         version: 2,
         supersedesId: recorded!.id,
         active: true,

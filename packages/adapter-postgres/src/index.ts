@@ -3767,7 +3767,7 @@ export interface TimingMeasurementInput {
   readonly run: number;
   readonly timeMs: number;
   readonly penaltyMs?: number;
-  readonly exclusion?: 'DNF' | 'DNS' | 'DSQ';
+  readonly exclusion?: 'DNF' | 'DNS' | 'DSQ' | null;
   readonly source: string;
   readonly recordedAt: string;
 }
@@ -3781,6 +3781,10 @@ export interface TimingMeasurementRecord extends TimingMeasurementInput {
   readonly recordedBy: string;
 }
 export interface TimingRepository {
+  listEntries(
+    ctx: RequestContext,
+    eventId: string,
+  ): Promise<{ entryId: string; startNumber: string }[]>;
   record(
     ctx: RequestContext,
     eventId: string,
@@ -3943,6 +3947,22 @@ export function createTimingRepository(db: Database): TimingRepository {
     return mapTimingRow(row);
   };
   return {
+    listEntries: async (ctx, eventId) => {
+      if (!timingUuid.test(eventId)) return [];
+      const result =
+        await db.execute(sql`SELECT id, requested_start_number FROM entry
+        WHERE organization_id=${ctx.organizationId} AND event_id=${eventId} AND deleted_at IS NULL ORDER BY requested_start_number, id`);
+      const rows =
+        (
+          result as unknown as {
+            rows: { id: string; requested_start_number: string | null }[];
+          }
+        ).rows ?? [];
+      return rows.map((row) => ({
+        entryId: row.id,
+        startNumber: row.requested_start_number ?? row.id,
+      }));
+    },
     record: async (ctx, eventId, input, actor) => {
       if (!timingUuid.test(eventId) || !timingUuid.test(input.entryId))
         return null;
@@ -4069,9 +4089,13 @@ export function createTimingRepository(db: Database): TimingRepository {
               run: input.run ?? old.run,
               timeMs: input.timeMs ?? old.time_ms,
               penaltyMs: input.penaltyMs ?? old.penalty_ms,
-              ...((input.exclusion ?? old.exclusion)
-                ? { exclusion: input.exclusion ?? old.exclusion! }
-                : {}),
+              ...('exclusion' in input
+                ? input.exclusion
+                  ? { exclusion: input.exclusion }
+                  : {}
+                : old.exclusion
+                  ? { exclusion: old.exclusion }
+                  : {}),
               source: input.source ?? old.source,
               recordedAt: input.recordedAt ?? new Date().toISOString(),
             },

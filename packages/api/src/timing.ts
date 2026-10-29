@@ -40,7 +40,7 @@ const CorrectionSchema = z
     run: z.number().int().min(1).optional(),
     timeMs: z.number().int().positive().optional(),
     penaltyMs: z.number().int().min(0).optional(),
-    exclusion: z.enum(['DNF', 'DNS', 'DSQ']).optional(),
+    exclusion: z.enum(['DNF', 'DNS', 'DSQ']).nullable().optional(),
     source: z.string().trim().min(1).max(200).optional(),
     recordedAt: z.string().datetime({ offset: true }).optional(),
   })
@@ -52,7 +52,10 @@ const CorrectionSchema = z
     'Supply at most one entry selector',
   )
   .refine(
-    (x) => Object.values(x).some((v) => v !== undefined),
+    (x) =>
+      ['run', 'timeMs', 'penaltyMs', 'exclusion', 'source', 'recordedAt'].some(
+        (key) => Object.hasOwn(x, key),
+      ),
     'Correction cannot be empty',
   );
 const splitCSV = (input: string): string[][] => {
@@ -110,7 +113,12 @@ export function installTimingRoutes(
         400,
       );
     const module = c.get('module');
+    const config = TimingConfigSchema.safeParse(module.config);
+    if (!config.success)
+      return c.json({ error: 'Timing configuration is invalid' }, 409);
     const value = parsed.data;
+    if (value.run > config.data.runStructure.runCount)
+      return c.json({ error: 'Run exceeds configured run count' }, 400);
     const entry = await repository.resolveEntry(
       module.context,
       module.eventId,
@@ -180,6 +188,9 @@ export function installTimingRoutes(
     const planned: TimingMeasurementInput[] = [];
     const seen = new Set<string>();
     const module = c.get('module');
+    const config = TimingConfigSchema.safeParse(module.config);
+    if (!config.success)
+      return c.json({ error: 'Timing configuration is invalid' }, 409);
     const existing = await repository.list(module.context, module.eventId);
     const active = new Set(
       existing.filter((m) => m.active).map((m) => `${m.entryId}:${m.run}`),
@@ -222,6 +233,13 @@ export function installTimingRoutes(
       );
       if (!entry) {
         errors.push({ row: i + 1, message: 'Entry not found' });
+        continue;
+      }
+      if (input.data.run > config.data.runStructure.runCount) {
+        errors.push({
+          row: i + 1,
+          message: 'Run exceeds configured run count',
+        });
         continue;
       }
       const key = `${entry.entryId}:${input.data.run}`;
@@ -294,7 +312,15 @@ export function installTimingRoutes(
         400,
       );
     const m = c.get('module');
+    const config = TimingConfigSchema.safeParse(m.config);
+    if (!config.success)
+      return c.json({ error: 'Timing configuration is invalid' }, 409);
     const patch = parsed.data;
+    if (
+      patch.run !== undefined &&
+      patch.run > config.data.runStructure.runCount
+    )
+      return c.json({ error: 'Run exceeds configured run count' }, 400);
     let entryId = patch.entryId;
     if (patch.startNumber) {
       const entry = await repository.resolveEntry(m.context, m.eventId, {
@@ -338,19 +364,16 @@ export function installTimingRoutes(
       (x) => x.active,
     );
     const byEntry = new Map<string, TimingCompetitor>();
+    for (const entry of await repository.listEntries(m.context, m.eventId)) {
+      byEntry.set(entry.entryId, {
+        entryId: entry.entryId,
+        startNumber: entry.startNumber,
+        runs: [],
+      });
+    }
     for (const item of active) {
-      let competitor = byEntry.get(item.entryId);
-      if (!competitor) {
-        const entry = await repository.resolveEntry(m.context, m.eventId, {
-          entryId: item.entryId,
-        });
-        if (!entry) continue;
-        competitor = {
-          entryId: item.entryId,
-          startNumber: entry.startNumber,
-          runs: [],
-        };
-      }
+      const competitor = byEntry.get(item.entryId);
+      if (!competitor) continue;
       const updated = {
         ...competitor,
         runs: [
@@ -369,7 +392,14 @@ export function installTimingRoutes(
       ...parsed.data.scoringRule,
       runCount: parsed.data.runStructure.runCount,
     };
-    const results = calculateTimingResults([...byEntry.values()], rule);
+    const results = calculateTimingResults(
+      [...byEntry.values()].map((competitor) =>
+        competitor.runs.length < rule.runCount
+          ? { ...competitor, exclusion: parsed.data.incompleteRunStatus }
+          : competitor,
+      ),
+      rule,
+    );
     const draft = await repository.createDraft(
       m.context,
       m.eventId,
