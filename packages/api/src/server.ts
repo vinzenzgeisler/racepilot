@@ -21,8 +21,11 @@ import {
   createEntryRepository,
   getOrganizationMailConfiguration,
   createModuleActivationRepository,
+  createTimingRepository,
 } from '@racepilot/adapter-postgres';
 import { createModuleRegistry } from '@racepilot/core';
+import { timingModule } from './timing-module.js';
+import { installTimingRoutes } from './timing.js';
 import { createApp, createInMemoryRegistrationRateLimiter } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
 import { createLocalObjectStorage } from '@racepilot/adapter-local-storage';
@@ -30,6 +33,7 @@ import { createS3ObjectStorage } from '@racepilot/adapter-s3';
 const config = loadConfig(process.env);
 await migrate(config.DATABASE_URL);
 const { db } = await createDatabase(config.DATABASE_URL);
+const timingRepository = createTimingRepository(db);
 const org = await ensureCommunityOrganization(db, {
   slug: config.COMMUNITY_ORGANIZATION_SLUG,
   name: config.COMMUNITY_ORGANIZATION_NAME,
@@ -104,8 +108,15 @@ serve({
     // Optional event modules are registered statically here (ADR 0004); Community
     // activates everything locally, so no entitlement port is supplied.
     modules: {
-      registry: createModuleRegistry([]),
+      registry: createModuleRegistry([timingModule]),
       activations: createModuleActivationRepository(db),
+      routes: {
+        timing: (router) => installTimingRoutes(router, timingRepository),
+      },
+      publicReads: {
+        timing: (context, eventId) =>
+          timingRepository.latestPublished(context, eventId),
+      },
     },
     runtimeBootstrap: {
       configurationVersion: '1',

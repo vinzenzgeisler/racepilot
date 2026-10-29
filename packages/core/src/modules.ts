@@ -21,6 +21,8 @@ export interface ModuleRouteDeclaration {
   readonly permission?: string;
   /** Safe reads stay possible after deactivation so historical data remains accessible. */
   readonly archivedRead?: boolean;
+  /** Mounts the same guarded handler at an anonymous public read URL. */
+  readonly publicPath?: string;
 }
 export interface ModuleManifest {
   readonly id: string;
@@ -192,6 +194,13 @@ export function createModuleRegistry(
         fail(`route ${key} uses undeclared permission`);
       if (route.archivedRead && route.method !== 'GET')
         fail(`route ${key}: only GET may be archivedRead`);
+      if (
+        route.publicPath &&
+        (route.method !== 'GET' ||
+          !route.archivedRead ||
+          !/^\/[A-Za-z0-9_\-/:.]+$/.test(route.publicPath))
+      )
+        fail(`route ${key}: publicPath must be a safe archived GET path`);
     }
     for (const entry of manifest.ui)
       if (entry.permission && !permissionKeys.has(entry.permission))

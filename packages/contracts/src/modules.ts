@@ -75,6 +75,10 @@ export const ModuleManifestSchema = z
             path: z.string().regex(/^\/[A-Za-z0-9_\-/:.]+$/),
             permission: permissionKey.optional(),
             archivedRead: z.boolean().optional(),
+            publicPath: z
+              .string()
+              .regex(/^\/[A-Za-z0-9_\-/:.]+$/)
+              .optional(),
           })
           .strict(),
       )
