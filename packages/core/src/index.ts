@@ -1001,8 +1001,7 @@ export async function transitionEntry(
   deps: { entries: EntryRepository; workflows?: EntryWorkflowRepository },
 ): Promise<Entry | null> {
   if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
-  if (!actor.trim() || !reason.trim())
-    throw new Error('Transition actor and reason are required');
+  if (!actor.trim()) throw new Error('Transition actor is required');
   const current = await deps.entries.getById(ctx, id);
   if (!current) return null;
   const from =
@@ -1030,6 +1029,7 @@ export async function transitionEntry(
     workflowRevisionId = pinned.id;
   } else {
     assertEntryTransition(kind, from, to);
+    if (!reason.trim()) throw new Error('Transition reason is required');
   }
   return deps.entries.transition(
     ctx,

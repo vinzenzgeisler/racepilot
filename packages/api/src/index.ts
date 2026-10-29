@@ -762,7 +762,7 @@ export function createApp(deps: ApiDeps) {
       .object({
         transition: z.enum(['verification', 'acceptance']),
         status: z.string().min(1),
-        reason: z.string().trim().min(1).max(1000),
+        reason: z.string().trim().max(1000).optional().default(''),
       })
       .strict()
       .safeParse(body);
