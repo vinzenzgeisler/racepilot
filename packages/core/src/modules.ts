@@ -27,6 +27,23 @@ export interface ModuleManifest {
   readonly version: string;
   readonly displayName: string;
   readonly description?: string;
+  readonly gallery: {
+    readonly name: { readonly de: string; readonly en: string };
+    readonly shortDescription: { readonly de: string; readonly en: string };
+    readonly longDescription: { readonly de: string; readonly en: string };
+    readonly category:
+      | 'timing'
+      | 'scrutineering'
+      | 'communication'
+      | 'payments'
+      | 'operations'
+      | 'other';
+    readonly icon: string;
+    readonly screenshots?: readonly string[];
+    readonly source: 'core' | 'official' | 'private';
+    readonly editions: readonly ('community' | 'cloud')[];
+    readonly entitlement: string;
+  };
   readonly dependencies: ReadonlyArray<{
     readonly id: string;
     readonly range: string;
@@ -309,6 +326,7 @@ export interface ModuleAvailability {
   readonly configValid: boolean;
   /** Enabled, entitled, valid, with all dependencies available in the same scope. */
   readonly available: boolean;
+  readonly dependencyAvailable: boolean;
 }
 async function evaluate(
   deps: ModuleDeps,
@@ -328,6 +346,7 @@ async function evaluate(
     result.set(id, {
       entitled: isEntitled,
       configValid: valid,
+      dependencyAvailable: dependenciesOk,
       available:
         record?.enabled === true &&
         isEntitled &&
@@ -428,11 +447,14 @@ export interface ModuleView {
   version: string;
   displayName: string;
   description: string;
+  gallery: ModuleManifest['gallery'];
   dependencies: Array<{ id: string; range: string }>;
   enabled: boolean;
   entitled: boolean;
   configValid: boolean;
   available: boolean;
+  status: 'available' | 'active' | 'unavailable';
+  unavailableReason: 'entitlement' | 'dependency' | 'edition' | null;
   /** Event scope: the organization has made the module available. */
   organizationEnabled?: boolean;
   config: unknown;
@@ -450,11 +472,24 @@ const view = (
   version: definition.manifest.version,
   displayName: definition.manifest.displayName,
   description: definition.manifest.description ?? '',
+  gallery: definition.manifest.gallery,
   dependencies: definition.manifest.dependencies.map((d) => ({ ...d })),
   enabled: record?.enabled ?? false,
   entitled: availability.entitled,
   configValid: availability.configValid,
   available: availability.available,
+  status: availability.available
+    ? record?.enabled
+      ? 'active'
+      : 'available'
+    : 'unavailable',
+  unavailableReason: availability.available
+    ? null
+    : !availability.entitled
+      ? 'entitlement'
+      : !availability.dependencyAvailable
+        ? 'dependency'
+        : 'edition',
   ...(organizationEnabled === undefined ? {} : { organizationEnabled }),
   config: record?.config ?? definition.defaultConfig,
   stateVersion: record?.version ?? null,

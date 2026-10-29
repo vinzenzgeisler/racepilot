@@ -6,6 +6,7 @@ import {
 import './styles.css';
 import { Registration, RegistrationVerification } from './Registration.js';
 import { AdminEntries } from './AdminEntries.js';
+import { AdminModules } from './AdminModules.js';
 
 type State =
   | { kind: 'loading' }
@@ -52,6 +53,11 @@ export function App({ renderContribution }: AppProps = {}) {
           </div>
         </header>
         <AdminEntries />
+        <AdminModules
+          locale={
+            navigator.language.toLowerCase().startsWith('de') ? 'de' : 'en'
+          }
+        />
       </main>
     );
 
