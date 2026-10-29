@@ -160,11 +160,11 @@ describe.skipIf(!url)('PostgreSQL timing adapter', () => {
       );
       expect(corrected).toMatchObject({
         timeMs: 12000,
-        exclusion: undefined,
         version: 2,
         supersedesId: recorded!.id,
         active: true,
       });
+      expect(corrected!.exclusion).toBeUndefined();
       expect(
         (await repo.list(ctxA, eventA!.id)).map((x) => [x.version, x.active]),
       ).toEqual([
