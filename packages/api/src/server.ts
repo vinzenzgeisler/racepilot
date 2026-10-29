@@ -19,7 +19,9 @@ import {
   createEventClassPricingRepository,
   createEntryRepository,
   getOrganizationMailConfiguration,
+  createModuleActivationRepository,
 } from '@racepilot/adapter-postgres';
+import { createModuleRegistry } from '@racepilot/core';
 import { createApp, createInMemoryRegistrationRateLimiter } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
 import { createLocalObjectStorage } from '@racepilot/adapter-local-storage';
@@ -97,6 +99,12 @@ serve({
     paymentRecipients: createPaymentRecipientRepository(db),
     pricing: createEventClassPricingRepository(db),
     entries: createEntryRepository(db),
+    // Optional event modules are registered statically here (ADR 0004); Community
+    // activates everything locally, so no entitlement port is supplied.
+    modules: {
+      registry: createModuleRegistry([]),
+      activations: createModuleActivationRepository(db),
+    },
     runtimeBootstrap: {
       configurationVersion: '1',
       capabilities: organizationMail ? ['mail.delivery'] : [],

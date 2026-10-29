@@ -596,6 +596,134 @@
           "name": "stores an organization-bound CSV and remains retryable after storage failures"
         }
       ]
+    },
+    {
+      "id": "organization_module",
+      "kind": "table",
+      "tenantKey": "organization_id + module_id",
+      "isolation": "Composite primary key and organization foreign key; reads and writes are filtered by the server-resolved organization; rows are never deleted by deactivation and carry version, actor and audit.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "isolates modules, configuration and events between organizations"
+        },
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "persists tenant-bound, versioned module activation with audit and no data loss"
+        }
+      ]
+    },
+    {
+      "id": "event_module",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + module_id",
+      "isolation": "Composite event foreign key (organization_id,event_id); foreign event IDs are not found; activation requires organization availability; state survives deactivation.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "isolates modules, configuration and events between organizations"
+        },
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "persists tenant-bound, versioned module activation with audit and no data loss"
+        }
+      ]
+    },
+    {
+      "id": "module_activation_audit",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + module_id",
+      "isolation": "Append-only audit written in the same transaction as the state change; scoped by organization and event foreign key.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "persists tenant-bound, versioned module activation with audit and no data loss"
+        },
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "activates and deactivates per organization and event, advertising capabilities"
+        }
+      ]
+    },
+    {
+      "id": "admin-organization-modules",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + moduleId",
+      "isolation": "Requires organization:read/update; config validated against the module schema; entitlement checked server-side; other organizations never see state.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "rejects invalid configuration and permission violations"
+        },
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "lets the entitlement hook refuse activation and withdraw availability"
+        }
+      ]
+    },
+    {
+      "id": "admin-event-modules",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId + moduleId",
+      "isolation": "Requires event:read/write; foreign event IDs return 404; dependencies and organization availability enforced.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "isolates modules, configuration and events between organizations"
+        },
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "rejects invalid configuration and permission violations"
+        }
+      ]
+    },
+    {
+      "id": "module-guarded-routes",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId + moduleId",
+      "isolation": "Guard re-evaluates module state on every request; inactive modules return 404 regardless of client-supplied capability flags; module permissions are derived server-side.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "blocks module routes server-side while inactive, whatever the client claims"
+        },
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "passes server-computed capabilities and module permissions to module routes"
+        }
+      ]
+    },
+    {
+      "id": "module-job-payload",
+      "kind": "job-payload",
+      "tenantKey": "JobEnvelope.organizationId + payload.eventId",
+      "isolation": "Worker re-checks organization and module activation for the event on every run; jobs of inactive modules or foreign organization/event pairs are dropped without executing the handler.",
+      "negativeTests": [
+        {
+          "file": "packages/worker/src/modules.test.ts",
+          "name": "rejects jobs of inactive modules and runs them once active"
+        },
+        {
+          "file": "packages/worker/src/modules.test.ts",
+          "name": "does not run a job for a foreign organization/event pair"
+        }
+      ]
+    },
+    {
+      "id": "runtime-bootstrap-module-capabilities",
+      "kind": "config",
+      "tenantKey": "server-resolved organizationId",
+      "isolation": "Module capabilities in /runtime/bootstrap come only from server-side availability (activation, entitlement, dependencies); query, headers, and cookies are ignored.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "activates everything locally without an entitlement port"
+        },
+        {
+          "file": "packages/api/src/modules.test.ts",
+          "name": "isolates modules, configuration and events between organizations"
+        }
+      ]
     }
   ]
 }

@@ -78,6 +78,13 @@
       "when": 1793239201000,
       "tag": "0010_artifact_claim_fencing",
       "breakpoints": false
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793239202000,
+      "tag": "0011_event_modules",
+      "breakpoints": false
     }
   ]
 }

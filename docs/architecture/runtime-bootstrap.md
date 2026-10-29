@@ -42,3 +42,14 @@ plane or event-selection authority in this repository yet.
 
 One app build supports either contract mode. No tenant-specific assets, CSS, or
 frontend build variants are produced.
+
+## Module capabilities (Issue #84)
+
+`capabilities` includes `module.<id>` and a module's extra capability keys for every
+optional module that is available to the organization: registered, entitled (Cloud
+only, through the private entitlement hook), enabled for the organization, with a
+valid configuration and satisfied dependencies. Because `activeEvent` is still
+`null`, event-level availability is not part of bootstrap; it is returned by
+`GET /admin/events/:eventId/modules` and enforced again on every module route and
+job. See [ADR 0004](../adr/0004-event-modules-and-capabilities.md). Query
+parameters, headers, and cookies never add capabilities.

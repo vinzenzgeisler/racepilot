@@ -17,6 +17,7 @@ The following documents form the baseline:
 - [ADR 0001: editions, shared core, and deployment modes](docs/adr/0001-editions-shared-core-and-deployment-modes.md)
 - [ADR 0002: product repository, clean start, and package boundaries](docs/adr/0002-product-repository-clean-start-and-package-boundaries.md)
 - [ADR 0003: HTTP framework, background jobs, and database tooling](docs/adr/0003-http-jobs-and-database-tooling.md)
+- [ADR 0004: Event modules and capabilities](docs/adr/0004-event-modules-and-capabilities.md)
 - [Repository and module map](docs/architecture/repository-module-map.md)
 - [Current coupling inventory](docs/architecture/current-couplings.md)
 - [Required CI coverage and ownership](docs/architecture/ci-coverage.md)

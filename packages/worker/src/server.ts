@@ -18,7 +18,10 @@ import {
   createEntryExportRepository,
   createOrganizationRepository,
   createPaymentRecipientRepository,
+  createModuleActivationRepository,
 } from '@racepilot/adapter-postgres';
+import { createModuleRegistry } from '@racepilot/core';
+import { createModuleTasks } from './modules.js';
 
 const env = process.env;
 const databaseUrl = env.DATABASE_URL;
@@ -99,7 +102,25 @@ if (mode === 'community') {
     throw new Error('Configured community organization is unavailable');
   communityOrganizationId = organization.id;
 }
-const taskList = composeWorkerTasks({
+// Module jobs are guarded per organization and event (ADR 0004). No modules ship yet.
+const moduleTasks = createModuleTasks({
+  modules: {
+    registry: createModuleRegistry([]),
+    activations: createModuleActivationRepository(db),
+  },
+  handlers: {},
+  deploymentMode: mode,
+  ...(communityOrganizationId ? { communityOrganizationId } : {}),
+  getOrganization: async (id) => {
+    const [organization] = await db
+      .select({ status: organizations.status })
+      .from(organizations)
+      .where(eq(organizations.id, id));
+    return organization ?? null;
+  },
+  onRejected: (task, reason) => console.warn(`Rejected job ${task}: ${reason}`),
+});
+const taskList = composeWorkerTasks(moduleTasks, {
   ...(storage
     ? {
         artifact_generate: createArtifactTask({
