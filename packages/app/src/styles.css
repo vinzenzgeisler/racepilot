@@ -199,3 +199,40 @@ a:focus-visible {
   color: #475467;
   font-size: 0.9rem;
 }
+
+.module-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin-block: 1rem;
+}
+.module-card,
+[role='dialog'] {
+  padding: 1rem;
+  background: white;
+  border: 1px solid #d0d5dd;
+  border-radius: 0.5rem;
+}
+.module-card button,
+[role='dialog'] button,
+[role='dialog'] textarea,
+section[aria-labelledby='modules-title'] input,
+section[aria-labelledby='modules-title'] select {
+  font: inherit;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.65rem;
+  margin: 0.35rem;
+}
+[role='dialog'] textarea {
+  display: block;
+  width: 100%;
+  min-height: 10rem;
+}
+[role='dialog'] img {
+  max-width: min(100%, 36rem);
+}
+.module-card :focus-visible,
+[role='dialog'] :focus-visible {
+  outline: 0.2rem solid #8a5a00;
+  outline-offset: 0.15rem;
+}

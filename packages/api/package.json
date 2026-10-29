@@ -15,11 +15,12 @@
     "@racepilot/adapter-oidc": "*",
     "@racepilot/adapter-postgres": "*",
     "@racepilot/adapter-s3": "*",
+    "@racepilot/artifacts": "*",
     "@racepilot/contracts": "*",
     "@racepilot/core": "*",
     "hono": "4.13.14",
-    "@racepilot/artifacts": "*",
-    "pdf-lib": "^1.17.1"
+    "pdf-lib": "^1.17.1",
+    "zod": "^4.6.7"
   },
   "files": [
     "dist"

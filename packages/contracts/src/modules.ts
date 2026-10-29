@@ -17,6 +17,41 @@ export const ModuleManifestSchema = z
     version: semver,
     displayName: z.string().min(1).max(80),
     description: z.string().max(300).optional(),
+    gallery: z
+      .object({
+        name: z
+          .object({
+            de: z.string().min(1).max(80),
+            en: z.string().min(1).max(80),
+          })
+          .strict(),
+        shortDescription: z
+          .object({
+            de: z.string().min(1).max(240),
+            en: z.string().min(1).max(240),
+          })
+          .strict(),
+        longDescription: z
+          .object({
+            de: z.string().min(1).max(5000),
+            en: z.string().min(1).max(5000),
+          })
+          .strict(),
+        category: z.enum([
+          'timing',
+          'scrutineering',
+          'communication',
+          'payments',
+          'operations',
+          'other',
+        ]),
+        icon: z.string().min(1).max(500),
+        screenshots: z.array(z.string().url()).max(10).optional(),
+        source: z.enum(['core', 'official', 'private']),
+        editions: z.array(z.enum(['community', 'cloud'])).min(1),
+        entitlement: z.string().regex(/^(included|plan:[a-z0-9][a-z0-9-]*)$/),
+      })
+      .strict(),
     dependencies: z.array(z.object({ id: moduleId, range }).strict()).max(20),
     permissions: z
       .array(
@@ -77,13 +112,19 @@ export const ModuleViewSchema = z
     version: z.string(),
     displayName: z.string(),
     description: z.string(),
+    gallery: ModuleManifestSchema.shape.gallery,
     dependencies: z.array(z.object({ id: z.string(), range: z.string() })),
     enabled: z.boolean(),
     entitled: z.boolean(),
     configValid: z.boolean(),
     available: z.boolean(),
+    status: z.enum(['available', 'active', 'unavailable']),
+    unavailableReason: z
+      .enum(['entitlement', 'dependency', 'edition'])
+      .nullable(),
     organizationEnabled: z.boolean().optional(),
     config: z.unknown(),
+    configSchema: z.unknown(),
     stateVersion: z.number().int().nullable(),
     updatedAt: z.string().nullable(),
     updatedBy: z.string().nullable(),

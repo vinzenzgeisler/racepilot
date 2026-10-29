@@ -48,6 +48,16 @@ const manifest = (
 ): ModuleManifest => ({
   version: '1.0.0',
   displayName: over.id,
+  gallery: {
+    name: { de: over.id, en: over.id },
+    shortDescription: { de: over.id, en: over.id },
+    longDescription: { de: over.id, en: over.id },
+    category: 'other',
+    icon: 'puzzle',
+    source: 'official',
+    editions: ['community', 'cloud'],
+    entitlement: 'included',
+  },
   dependencies: [],
   permissions: [],
   capabilities: [],

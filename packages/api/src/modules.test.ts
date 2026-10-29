@@ -31,6 +31,16 @@ const noopDefinition: ModuleDefinition = {
     id: 'example.noop',
     version: '1.0.0',
     displayName: 'Example no-op',
+    gallery: {
+      name: { de: 'No-op', en: 'No-op' },
+      shortDescription: { de: 'Beispielmodul', en: 'Example module' },
+      longDescription: { de: 'Beispielmodul', en: 'Example module' },
+      category: 'other',
+      icon: 'puzzle',
+      source: 'official',
+      editions: ['community', 'cloud'],
+      entitlement: 'included',
+    },
     dependencies: [],
     permissions: [
       {

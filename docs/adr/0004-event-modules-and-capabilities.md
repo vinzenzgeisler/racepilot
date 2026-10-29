@@ -42,6 +42,7 @@ data; the Zod config schema and route handlers are code in the `ModuleDefinition
 |---|---|
 | `id` | Stable, dotted lowercase identifier, e.g. `timing`. Never reused. |
 | `version` | Semver of the module. |
+| `gallery` | de/en name and short/long description, category, icon reference, optional screenshots, source (`core`, `official`, `private`), supported editions (`community`, `cloud`) and an entitlement hint (`included` or `plan:<id>`). It contains no prices; entitlement remains server-authoritative. |
 | `dependencies` | `{ id, range }` with exact or caret ranges. Unknown modules, unsatisfied ranges, and cycles fail registry creation. |
 | `permissions` | Module permissions `<id>:<action>`, each *implied by* named core permissions (for example `event:write`). The server derives them from the context; clients never supply them. |
 | `capabilities` | Extra capability keys exposed while active. `module.<id>` is always exposed. |
@@ -167,4 +168,4 @@ unavailable until an admin saves a valid configuration; disabling still works.
   request.
 - Organization-level and event-level state add an administrative step; Community
   assemblies may later add a convenience that enables both in one action.
-- A UI for module management is not part of this change; the contract is the API.
+- The admin gallery consumes the organization/event module list APIs, filters registry-provided metadata and submits activation/configuration changes through the existing guarded endpoints. Disabling requires confirmation and never deletes module state. Module config forms are described by the module's JSON Schema; validation remains server-side.

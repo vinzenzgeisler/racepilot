@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { Context } from 'hono';
 import {
   ModuleError,
@@ -76,12 +77,28 @@ export function installModules(
     );
     return parsed.success ? parsed.data : null;
   };
+  const withConfigSchema = (
+    module: Awaited<ReturnType<typeof listOrganizationModules>>[number],
+  ) => {
+    const definition = deps.registry.get(module.id);
+    let configSchema: unknown = {};
+    if (definition) {
+      try {
+        configSchema = z.toJSONSchema(definition.configSchema as z.ZodType);
+      } catch {
+        // Non-Zod structural schemas remain editable through the JSON fallback.
+      }
+    }
+    return { ...module, configSchema };
+  };
 
   app.get('/admin/organization/modules', (c) =>
     respond(c, async (ctx) =>
       c.json(
         ModuleListResponse.parse({
-          modules: await listOrganizationModules(ctx, deps),
+          modules: (await listOrganizationModules(ctx, deps)).map(
+            withConfigSchema,
+          ),
         }),
       ),
     ),
@@ -98,7 +115,7 @@ export function installModules(
         actorOf(ctx),
       );
       return module
-        ? c.json(ModuleViewSchema.parse(module))
+        ? c.json(ModuleViewSchema.parse(withConfigSchema(module)))
         : c.json({ error: 'Not found' }, 404);
     });
   });
@@ -106,7 +123,11 @@ export function installModules(
     respond(c, async (ctx) => {
       const modules = await listEventModules(ctx, deps, c.req.param('eventId'));
       return modules
-        ? c.json(ModuleListResponse.parse({ modules }))
+        ? c.json(
+            ModuleListResponse.parse({
+              modules: modules.map(withConfigSchema),
+            }),
+          )
         : c.json({ error: 'Not found' }, 404);
     }),
   );
@@ -123,7 +144,7 @@ export function installModules(
         actorOf(ctx),
       );
       return module
-        ? c.json(ModuleViewSchema.parse(module))
+        ? c.json(ModuleViewSchema.parse(withConfigSchema(module)))
         : c.json({ error: 'Not found' }, 404);
     });
   });
