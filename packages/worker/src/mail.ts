@@ -7,6 +7,13 @@ export const mailTemplateContracts = {
   'entry-received': ['recipientName', 'eventName'],
   accepted: ['recipientName', 'eventName'],
   rejected: ['recipientName', 'eventName'],
+  'status-change': [
+    'recipientName',
+    'eventName',
+    'statusKey',
+    'statusLabelDe',
+    'statusLabelEn',
+  ],
 } as const;
 export type MailTemplateKey = keyof typeof mailTemplateContracts;
 export type MailLocale = 'de' | 'en';
@@ -50,6 +57,18 @@ const defaultCopy: Record<MailTemplateKey, Record<MailLocale, MailTemplate>> = {
       subject: 'Entry accepted: {{eventName}}',
       text: 'Hello {{recipientName}}, your entry for {{eventName}} was accepted.',
       html: '<p>Hello {{recipientName}}, your entry for {{eventName}} was accepted.</p>',
+    },
+  },
+  'status-change': {
+    de: {
+      subject: 'Neuer Nennungsstatus: {{eventName}}',
+      text: 'Hallo {{recipientName}}, der Status deiner Nennung für {{eventName}} ist jetzt {{statusLabelDe}} ({{statusKey}}).',
+      html: '<p>Hallo {{recipientName}},</p><p>Der Status deiner Nennung für {{eventName}} ist jetzt {{statusLabelDe}} (<code>{{statusKey}}</code>).</p>',
+    },
+    en: {
+      subject: 'Entry status updated: {{eventName}}',
+      text: 'Hello {{recipientName}}, your entry status for {{eventName}} is now {{statusLabelEn}} ({{statusKey}}).',
+      html: '<p>Hello {{recipientName}},</p><p>Your entry status for {{eventName}} is now {{statusLabelEn}} (<code>{{statusKey}}</code>).</p>',
     },
   },
   rejected: {

@@ -1437,7 +1437,7 @@ export const emailTemplateVersions = pgTable(
     }).onDelete('cascade'),
     check(
       'email_template_version_key_check',
-      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected','status-change')`,
     ),
     check('email_template_version_version_check', sql`${t.version} > 0`),
     check(
@@ -1511,7 +1511,7 @@ export const emailOutbox = pgTable(
     check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
     check(
       'email_outbox_template_key_check',
-      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected')`,
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected','status-change')`,
     ),
     check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
     check(
@@ -2245,6 +2245,73 @@ export function createEntryRepository(
             workflow?.workflowRevisionId ?? row.workflowRevisionId!,
           ...(workflow ? { statusCategory: workflow.statusCategory } : {}),
         });
+        if (transition === 'acceptance' && workflow?.notification) {
+          const [recipient] = await tx
+            .select({
+              email: sql<
+                string | null
+              >`coalesce(${registrationGroups.contactEmail}, ${people.email})`,
+              recipientName: sql<string>`concat_ws(' ', ${people.firstName}, ${people.lastName})`,
+              eventName: events.name,
+              locale: organizations.locale,
+            })
+            .from(entries)
+            .innerJoin(
+              events,
+              and(
+                eq(events.id, entries.eventId),
+                eq(events.organizationId, entries.organizationId),
+              ),
+            )
+            .innerJoin(
+              organizations,
+              eq(organizations.id, entries.organizationId),
+            )
+            .innerJoin(
+              people,
+              and(
+                eq(people.id, entries.driverPersonId),
+                eq(people.organizationId, entries.organizationId),
+              ),
+            )
+            .innerJoin(
+              registrationGroups,
+              and(
+                eq(registrationGroups.id, entries.registrationGroupId),
+                eq(registrationGroups.organizationId, entries.organizationId),
+              ),
+            )
+            .where(
+              and(
+                eq(entries.organizationId, ctx.organizationId),
+                eq(entries.id, id),
+              ),
+            )
+            .limit(1);
+          if (recipient?.email) {
+            await enqueueMailOutbox(
+              db,
+              ctx.organizationId,
+              {
+                eventId: row.eventId,
+                templateKey: 'status-change',
+                templateVersion: 1,
+                locale: recipient.locale === 'en' ? 'en' : 'de',
+                recipient: recipient.email,
+                idempotencyKey: `entry-status:${id}:${workflow.workflowRevisionId}:${fromStatus}:${toStatus}`,
+                correlationId: ctx.correlationId,
+                variables: {
+                  recipientName: recipient.recipientName,
+                  eventName: recipient.eventName,
+                  statusKey: workflow.notification.statusKey,
+                  statusLabelDe: workflow.notification.statusLabelDe,
+                  statusLabelEn: workflow.notification.statusLabelEn,
+                },
+              },
+              tx,
+            );
+          }
+        }
         return mapEntry(row);
       }),
     softDelete: async (ctx, id, reason) => {
@@ -2712,7 +2779,11 @@ export function createMailOutboxRepository(
     organizationId: row.organizationId,
     eventId: row.eventId,
     templateKey: row.templateKey as
-      'verification' | 'entry-received' | 'accepted' | 'rejected',
+      | 'verification'
+      | 'entry-received'
+      | 'accepted'
+      | 'rejected'
+      | 'status-change',
     templateVersion: row.templateVersion,
     locale: row.locale as 'de' | 'en',
     recipient: row.recipient,

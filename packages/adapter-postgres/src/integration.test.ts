@@ -1037,7 +1037,12 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         ],
         transitions: [
           ...defaultEntryWorkflow.transitions,
-          { from: 'pending', to: 'documents_missing', reasonRequired: true },
+          {
+            from: 'pending',
+            to: 'documents_missing',
+            reasonRequired: true,
+            notify: true,
+          },
         ],
       };
       await workflows.setEvent(
@@ -1089,6 +1094,20 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           { entries: createEntryRepository(db), workflows },
         ),
       ).rejects.toThrow(/required/);
+      expect(
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, orgA!)),
+      ).toHaveLength(0);
+      await db
+        .update(people)
+        .set({ email: `driver-${suffix}@example.test` })
+        .where(eq(people.id, personA!.id));
+      await db
+        .update(registrationGroups)
+        .set({ contactEmail: null })
+        .where(eq(registrationGroups.id, groupA!.id));
       const transitionedCustom = await transitionEntry(
         ctxA,
         entryAfterChange!.id,
@@ -1108,7 +1127,53 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         statusCategory: 'pending',
         workflowRevisionId: newPinned!.id,
       });
+      const statusMails = await db
+        .select()
+        .from(emailOutbox)
+        .where(eq(emailOutbox.organizationId, orgA!));
+      expect(statusMails).toHaveLength(1);
+      expect(statusMails[0]).toMatchObject({
+        eventId: eventA!.id,
+        templateKey: 'status-change',
+        recipient: `driver-${suffix}@example.test`,
+        variables: {
+          statusKey: 'documents_missing',
+          statusLabelDe: 'Unterlagen fehlen',
+          statusLabelEn: 'Documents missing',
+        },
+      });
+      await expect(
+        transitionEntry(
+          ctxB,
+          entryAfterChange!.id,
+          'acceptance',
+          'documents_missing',
+          'foreign',
+          'request documents',
+          { entries: createEntryRepository(db), workflows },
+        ),
+      ).resolves.toBeNull();
+      await expect(
+        transitionEntry(
+          ctxA,
+          entryAfterChange!.id,
+          'acceptance',
+          'documents_missing',
+          'admin',
+          'request documents',
+          { entries: createEntryRepository(db), workflows },
+        ),
+      ).rejects.toThrow(/Invalid entry acceptance transition/);
+      const afterDuplicate = await db
+        .select()
+        .from(emailOutbox)
+        .where(eq(emailOutbox.organizationId, orgA!));
+      expect(afterDuplicate).toHaveLength(1);
     } finally {
+      if (orgA)
+        await db
+          .delete(emailOutbox)
+          .where(eq(emailOutbox.organizationId, orgA));
       await db.delete(events).where(eq(events.slug, `event-${suffix}`));
       if (orgA)
         await db.delete(organizations).where(eq(organizations.id, orgA));

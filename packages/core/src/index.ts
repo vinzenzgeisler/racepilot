@@ -430,8 +430,9 @@ export function permissionsForRole(role: MembershipRole): ReadonlySet<string> {
         'entry:write',
         'payment:read',
         'payment:write',
+        'role:admin',
       ])
-    : new Set();
+    : new Set(['role:member']);
 }
 export interface MailMessage {
   readonly organizationId: OrganizationId;
@@ -534,6 +535,8 @@ export interface EntryWorkflowTransition {
   readonly to: string;
   readonly reasonRequired: boolean;
   readonly permission?: string;
+  readonly roles?: readonly MembershipRole[];
+  readonly notify?: boolean;
 }
 export interface EntryWorkflow {
   readonly version: number;
@@ -926,6 +929,11 @@ export interface EntryRepository {
     workflow?: {
       statusCategory: EntryWorkflowCategory;
       workflowRevisionId: string;
+      notification?: {
+        statusKey: string;
+        statusLabelDe: string;
+        statusLabelEn: string;
+      };
     },
   ): Promise<Entry | null>;
   softDelete(
@@ -1000,7 +1008,11 @@ export async function transitionEntry(
   reason: string,
   deps: { entries: EntryRepository; workflows?: EntryWorkflowRepository },
 ): Promise<Entry | null> {
-  if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
+  if (
+    !ctx.permissions.has('entry:write') &&
+    (kind !== 'acceptance' || !deps.workflows)
+  )
+    throw new Error('Forbidden');
   if (!actor.trim()) throw new Error('Transition actor is required');
   const current = await deps.entries.getById(ctx, id);
   if (!current) return null;
@@ -1010,6 +1022,9 @@ export async function transitionEntry(
       : current.acceptanceStatus;
   let statusCategory: EntryWorkflowCategory | undefined;
   let workflowRevisionId: string | undefined;
+  let notification:
+    | { statusKey: string; statusLabelDe: string; statusLabelEn: string }
+    | undefined;
   if (kind === 'acceptance' && deps.workflows) {
     const pinned = await deps.workflows.getPinnedForEntry(ctx, id);
     if (!pinned) return null;
@@ -1017,6 +1032,11 @@ export async function transitionEntry(
     const workflowEdge = pinned.workflow.transitions.find(
       (edge) => edge.from === from && edge.to === to,
     )!;
+    if (
+      !ctx.permissions.has('entry:write') &&
+      !workflowEdge.roles?.some((role) => ctx.permissions.has(`role:${role}`))
+    )
+      throw new Error('Forbidden');
     if (
       workflowEdge.permission &&
       !ctx.permissions.has(workflowEdge.permission)
@@ -1027,6 +1047,16 @@ export async function transitionEntry(
     )?.category;
     if (!statusCategory) throw new Error(`Unknown entry status: ${to}`);
     workflowRevisionId = pinned.id;
+    if (workflowEdge.notify) {
+      const targetStatus = pinned.workflow.statuses.find(
+        (status) => status.key === to,
+      )!;
+      notification = {
+        statusKey: targetStatus.key,
+        statusLabelDe: targetStatus.labels.de,
+        statusLabelEn: targetStatus.labels.en,
+      };
+    }
   } else {
     assertEntryTransition(kind, from, to);
     if (!reason.trim()) throw new Error('Transition reason is required');
@@ -1040,7 +1070,11 @@ export async function transitionEntry(
     actor.trim(),
     reason.trim(),
     statusCategory
-      ? { statusCategory, workflowRevisionId: workflowRevisionId! }
+      ? {
+          statusCategory,
+          workflowRevisionId: workflowRevisionId!,
+          ...(notification ? { notification } : {}),
+        }
       : undefined,
   );
 }

@@ -10,6 +10,7 @@ import {
   organizationId,
   type Entry,
   type RequestContext,
+  permissionsForRole,
 } from './index.js';
 const ctx: RequestContext = {
   deploymentMode: 'community',
@@ -36,6 +37,10 @@ const entry: Entry = {
   deletionReason: null,
 };
 describe('entry domain rules', () => {
+  it('exposes workflow role claims without granting members global entry write', () => {
+    expect(permissionsForRole('member')).toEqual(new Set(['role:member']));
+    expect(permissionsForRole('admin').has('role:admin')).toBe(true);
+  });
   it('preserves the legacy acceptance workflow as the default', () => {
     expect(validateEntryWorkflow(defaultEntryWorkflow)).toEqual([]);
     expect(
@@ -132,6 +137,69 @@ describe('entry domain rules', () => {
   ])('rejects %s to %s', (from, to) =>
     expect(() => assertEntryTransition('acceptance', from, to)).toThrow(),
   );
+
+  it('allows server-resolved workflow roles only when the edge permits them and derives notification labels', async () => {
+    const memberContext: RequestContext = {
+      ...ctx,
+      permissions: new Set(['role:member']),
+    };
+    const workflow = {
+      ...defaultEntryWorkflow,
+      transitions: defaultEntryWorkflow.transitions.map((edge) =>
+        edge.from === 'pending' && edge.to === 'accepted'
+          ? { ...edge, roles: ['member'] as const, notify: true }
+          : edge,
+      ),
+    };
+    let transitionInput: unknown;
+    const entries = {
+      getById: async () => entry,
+      transition: async (...args: unknown[]) => {
+        transitionInput = args[7];
+        return entry;
+      },
+      softDelete: async () => null,
+    };
+    const workflows = {
+      getPinnedForEntry: async () => ({
+        id: 'revision-7',
+        organizationId: ctx.organizationId,
+        eventId: 'ev',
+        version: 7,
+        workflow,
+      }),
+    };
+    await expect(
+      transitionEntry(
+        memberContext,
+        'e',
+        'acceptance',
+        'accepted',
+        'member',
+        '',
+        { entries, workflows: workflows as never },
+      ),
+    ).resolves.toBe(entry);
+    expect(transitionInput).toMatchObject({
+      workflowRevisionId: 'revision-7',
+      notification: {
+        statusKey: 'accepted',
+        statusLabelDe: 'Angenommen',
+        statusLabelEn: 'Accepted',
+      },
+    });
+    await expect(
+      transitionEntry(
+        { ...memberContext, permissions: new Set() },
+        'e',
+        'acceptance',
+        'accepted',
+        'member',
+        '',
+        { entries, workflows: workflows as never },
+      ),
+    ).rejects.toThrow(/Forbidden/);
+  });
   it('normalizes email and requested numbers', () => {
     expect(normalizeEmail('  JANE@Example.COM ')).toBe('jane@example.com');
     expect(normalizeRequestedStartNumber('  a-01 ')).toBe('A-01');

@@ -13,6 +13,8 @@ type Transition = {
   to: string;
   reasonRequired: boolean;
   permission?: string;
+  roles?: Array<'admin' | 'member'> | undefined;
+  notify?: boolean;
 };
 type Workflow = {
   version: number;
@@ -137,6 +139,7 @@ export function AdminWorkflow({
       if (i !== index) return edge;
       const next = { ...edge, ...patch };
       if (patch.permission === '') delete next.permission;
+      if (patch.roles?.length === 0) delete next.roles;
       return next;
     });
     updateWorkflow({ ...workflow, transitions });
@@ -319,6 +322,40 @@ export function AdminWorkflow({
                   />{' '}
                   Reason required
                 </label>
+                <label>
+                  <input
+                    type="checkbox"
+                    aria-label={`Transition ${index + 1} notify driver`}
+                    checked={edge.notify ?? false}
+                    onChange={(e) =>
+                      updateTransition(index, { notify: e.target.checked })
+                    }
+                  />{' '}
+                  Notify entrant by email
+                </label>
+                <fieldset>
+                  <legend>
+                    Allowed membership roles (empty uses entry:write permission)
+                  </legend>
+                  {(['admin', 'member'] as const).map((role) => (
+                    <label key={role}>
+                      <input
+                        type="checkbox"
+                        aria-label={`Transition ${index + 1} role ${role}`}
+                        checked={edge.roles?.includes(role) ?? false}
+                        onChange={(e) => {
+                          const roles = new Set(edge.roles ?? []);
+                          if (e.target.checked) roles.add(role);
+                          else roles.delete(role);
+                          updateTransition(index, {
+                            roles: roles.size ? [...roles] : undefined,
+                          });
+                        }}
+                      />{' '}
+                      {role}
+                    </label>
+                  ))}
+                </fieldset>
                 <label>
                   Required permission (optional)
                   <input

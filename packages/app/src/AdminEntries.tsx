@@ -46,6 +46,8 @@ type WorkflowView = {
     to: string;
     reasonRequired: boolean;
     permission?: string;
+    roles?: Array<'admin' | 'member'> | undefined;
+    notify?: boolean;
   }>;
 };
 
