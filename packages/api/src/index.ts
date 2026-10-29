@@ -5,7 +5,21 @@ import { z } from 'zod';
 import { installModules, type ModuleApiDeps } from './modules.js';
 import { resolveOrganizationModuleCapabilities } from '@racepilot/core';
 export * from './modules.js';
-import { mailConfigSchema, validateMailConfig } from '@racepilot/contracts';
+import {
+  mailConfigSchema,
+  validateMailConfig,
+  OrganizationPublicRegistrationRateLimitOverridesSchema,
+  EventPublicRegistrationRateLimitOverridesSchema,
+} from '@racepilot/contracts';
+import {
+  compileTrustedProxyList,
+  resolveClientIdentity,
+  type RegistrationRateLimitScope,
+  type RegistrationRateLimitResult,
+  type RegistrationRateLimiter,
+  resolveRegistrationRateLimits,
+} from './rate-limit.js';
+export { createInMemoryRegistrationRateLimiter } from './rate-limit.js';
 import {
   parseDeploymentMode,
   createRequestContext,
@@ -88,6 +102,25 @@ const configSchema = z.object({
     }
   }),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  TRUSTED_PROXIES: z.string().default(''),
+  PUBLIC_REGISTRATION_ORG_LIMIT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100_000)
+    .default(60),
+  PUBLIC_REGISTRATION_EVENT_LIMIT: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(100_000)
+    .default(8),
+  PUBLIC_REGISTRATION_WINDOW_SECONDS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(86_400)
+    .default(60),
   ...mailConfigSchema.shape,
   STORAGE_PROVIDER: z.enum(['disabled', 'local', 's3']).default('disabled'),
   STORAGE_LOCAL_ROOT: z.string().optional(),
@@ -153,8 +186,17 @@ export function loadConfig(env: NodeJS.ProcessEnv) {
     throw new Error(
       'Invalid configuration variables: STORAGE_S3_ACCESS_KEY_ID, STORAGE_S3_SECRET_ACCESS_KEY',
     );
+  const trustedProxyAddresses = parsed.data.TRUSTED_PROXIES.split(',')
+    .map((address) => address.trim())
+    .filter(Boolean);
+  try {
+    compileTrustedProxyList(trustedProxyAddresses);
+  } catch {
+    throw new Error('Invalid configuration variables: TRUSTED_PROXIES');
+  }
   return {
     ...parsed.data,
+    TRUSTED_PROXIES: trustedProxyAddresses,
     ...mailConfig,
     mailEnabled:
       parsed.data.MAIL_PROVIDER === 'smtp' &&
@@ -167,7 +209,14 @@ export interface Authenticator {
   authenticate(request: Request): Promise<ExternalIdentity | null>;
 }
 export interface ApiDeps {
-  config: { deploymentMode: DeploymentMode; organizationId?: string };
+  config: {
+    deploymentMode: DeploymentMode;
+    organizationId?: string;
+    TRUSTED_PROXIES?: readonly string[];
+    PUBLIC_REGISTRATION_ORG_LIMIT?: number;
+    PUBLIC_REGISTRATION_EVENT_LIMIT?: number;
+    PUBLIC_REGISTRATION_WINDOW_SECONDS?: number;
+  };
   organizations: OrganizationRepository;
   events: EventRepository;
   classes?: EventClassRepository;
@@ -205,8 +254,54 @@ export interface ApiDeps {
       token: string,
     ): Promise<boolean>;
   };
-  registrationRateLimiter?: {
-    consume(ip: string, eventKey: string): Promise<boolean>;
+  registrationRateLimiter?: RegistrationRateLimiter;
+  publicRegistrationRateLimits?: {
+    getOrganization(context: RequestContext): Promise<{
+      organizationLimit?: number;
+      eventLimit?: number;
+      windowSeconds?: number;
+    } | null>;
+    updateOrganization(
+      context: RequestContext,
+      settings: {
+        organizationLimit?: number | undefined;
+        eventLimit?: number | undefined;
+        windowSeconds?: number | undefined;
+      },
+      actor: string,
+    ): Promise<{
+      organizationLimit?: number;
+      eventLimit?: number;
+      windowSeconds?: number;
+    } | null>;
+    getEvent(
+      context: RequestContext,
+      eventId: string,
+    ): Promise<{
+      eventLimit?: number;
+      windowSeconds?: number;
+    } | null>;
+    updateEvent(
+      context: RequestContext,
+      eventId: string,
+      settings: {
+        eventLimit?: number | undefined;
+        windowSeconds?: number | undefined;
+      },
+      actor: string,
+    ): Promise<{ eventLimit?: number; windowSeconds?: number } | null>;
+    resolvePublicEvent(
+      context: RequestContext,
+      slug: string,
+    ): Promise<{
+      eventId: string;
+      organization: {
+        organizationLimit?: number;
+        eventLimit?: number;
+        windowSeconds?: number;
+      } | null;
+      event: { eventLimit?: number; windowSeconds?: number } | null;
+    } | null>;
   };
   canonicalBaseUrl?: string;
   eventConsents?: {
@@ -270,38 +365,21 @@ export interface ApiDeps {
     },
   ) => void;
 }
-export function createInMemoryRegistrationRateLimiter(
-  options: { limit?: number; windowMs?: number; now?: () => number } = {},
-) {
-  const limit = options.limit ?? 8;
-  const windowMs = options.windowMs ?? 60_000;
-  const now = options.now ?? Date.now;
-  const hits = new Map<string, number[]>();
-  let calls = 0;
-  return {
-    consume: async (ip: string, eventKey: string) => {
-      const key = `${eventKey.slice(0, 180)}:${ip.slice(0, 120)}`;
-      const cutoff = now() - windowMs;
-      if (++calls % 128 === 0) {
-        for (const [storedKey, times] of hits) {
-          const fresh = times.filter((time) => time > cutoff);
-          if (fresh.length) hits.set(storedKey, fresh);
-          else hits.delete(storedKey);
-        }
-      }
-      const recent = (hits.get(key) ?? []).filter((time) => time > cutoff);
-      if (recent.length >= limit) {
-        hits.set(key, recent);
-        return false;
-      }
-      recent.push(now());
-      hits.set(key, recent);
-      if (hits.size > 20_000) hits.delete(hits.keys().next().value!);
-      return true;
-    },
-  };
-}
 export function createApp(deps: ApiDeps) {
+  if (deps.publicRegistration && !deps.registrationRateLimiter)
+    throw new Error('Public registration requires a configured rate limiter');
+  if (deps.publicRegistration && !deps.publicRegistrationRateLimits)
+    throw new Error(
+      'Public registration requires configured tenant rate-limit settings',
+    );
+  if (
+    deps.config.deploymentMode === 'cloud' &&
+    deps.publicRegistration &&
+    deps.registrationRateLimiter?.persistence !== 'shared'
+  )
+    throw new Error(
+      'Cloud public registration requires shared persistent rate-limit storage',
+    );
   if (
     deps.config.deploymentMode === 'community' &&
     !deps.config.organizationId
@@ -309,6 +387,53 @@ export function createApp(deps: ApiDeps) {
     throw new Error('Community mode requires a configured organization');
   }
   const app = new Hono();
+  const trustedProxyMatcher = compileTrustedProxyList(
+    deps.config.TRUSTED_PROXIES ?? [],
+  );
+  const rateLimitDefaults = {
+    organizationLimit: deps.config.PUBLIC_REGISTRATION_ORG_LIMIT ?? 60,
+    eventLimit: deps.config.PUBLIC_REGISTRATION_EVENT_LIMIT ?? 8,
+    windowSeconds: deps.config.PUBLIC_REGISTRATION_WINDOW_SECONDS ?? 60,
+  };
+  const clientIdentityFor = (context: {
+    env: unknown;
+    req: { header(name: string): string | undefined };
+  }) => {
+    const env = (context.env ?? {}) as {
+      incoming?: { socket?: { remoteAddress?: string } };
+    };
+    const incoming = env.incoming;
+    return resolveClientIdentity(
+      incoming?.socket?.remoteAddress,
+      context.req.header('x-forwarded-for'),
+      trustedProxyMatcher,
+    );
+  };
+  const consumeRegistrationBudget = async (
+    context: Parameters<typeof clientIdentityFor>[0],
+    scopes: readonly RegistrationRateLimitScope[],
+  ): Promise<RegistrationRateLimitResult & { unavailable?: boolean }> => {
+    if (!deps.registrationRateLimiter)
+      return { allowed: true, retryAfterMs: 0 };
+    try {
+      const clientIdentity = clientIdentityFor(context);
+      if (!clientIdentity)
+        return { allowed: false, retryAfterMs: 0, unavailable: true };
+      return await deps.registrationRateLimiter.consume(clientIdentity, scopes);
+    } catch {
+      return { allowed: false, retryAfterMs: 0, unavailable: true };
+    }
+  };
+  const setRetryAfter = (
+    context: { header(name: string, value: string): void },
+    retryAfterMs: number,
+  ) => {
+    if (retryAfterMs > 0)
+      context.header(
+        'Retry-After',
+        String(Math.max(1, Math.ceil(retryAfterMs / 1000))),
+      );
+  };
   app.get('/health', (c) => c.json({ status: 'ok' }));
   const mode = deps.config.deploymentMode;
   const communityOrganizationId =
@@ -1033,17 +1158,39 @@ export function createApp(deps: ApiDeps) {
       )
         return c.json({ error: 'Registration unavailable' }, 404);
       const eventSlug = c.req.param('slug');
-      // Forwarding headers are attacker-controlled unless a trusted proxy has
-      // been explicitly configured. Use a shared bucket by default.
-      const ip = 'unknown';
-      if (
-        deps.registrationRateLimiter &&
-        !(await deps.registrationRateLimiter.consume(
-          ip,
-          `${orgId}:${eventSlug}`,
-        ))
-      )
+      let configuredRateLimits;
+      try {
+        configuredRateLimits =
+          await deps.publicRegistrationRateLimits!.resolvePublicEvent(
+            context,
+            eventSlug,
+          );
+      } catch {
+        return c.json({ error: 'Registration unavailable' }, 503);
+      }
+      if (!configuredRateLimits)
+        return c.json({ error: 'Registration unavailable' }, 404);
+      const effectiveRateLimits = resolveRegistrationRateLimits(
+        rateLimitDefaults,
+        configuredRateLimits.organization,
+        configuredRateLimits.event,
+      );
+      const budget = await consumeRegistrationBudget(c, [
+        {
+          key: `organization:${orgId}`,
+          ...effectiveRateLimits.organization,
+        },
+        {
+          key: `event:${orgId}:${configuredRateLimits.eventId}`,
+          ...effectiveRateLimits.event,
+        },
+      ]);
+      if (budget.unavailable)
+        return c.json({ error: 'Registration unavailable' }, 503);
+      if (!budget.allowed) {
+        setRetryAfter(c, budget.retryAfterMs);
         return c.json({ error: 'Registration unavailable' }, 429);
+      }
       const payload = PublicRegistrationRequestSchema.safeParse(
         await c.req.json().catch(() => null),
       );
@@ -1092,6 +1239,90 @@ export function createApp(deps: ApiDeps) {
       hash: z.string().regex(/^[a-f0-9]{64}$/),
     })
     .strict();
+  app.get('/admin/organization/public-registration-rate-limits', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.publicRegistrationRateLimits)
+      return c.json({ error: 'Not found' }, 404);
+    const settings =
+      await deps.publicRegistrationRateLimits.getOrganization(context);
+    return c.json(settings ?? {});
+  });
+  app.put('/admin/organization/public-registration-rate-limits', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:update'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.publicRegistrationRateLimits)
+      return c.json({ error: 'Not found' }, 404);
+    const parsed =
+      OrganizationPublicRegistrationRateLimitOverridesSchema.safeParse(
+        await c.req.json().catch(() => null),
+      );
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : context.correlationId;
+    return c.json(
+      (await deps.publicRegistrationRateLimits.updateOrganization(
+        context,
+        parsed.data,
+        actor,
+      )) ?? {},
+    );
+  });
+  app.get(
+    '/admin/events/:eventId/public-registration-rate-limits',
+    async (c) => {
+      const context = await resolveMemberContext(c.req.raw);
+      if (!context) return c.json({ error: 'Unauthorized' }, 401);
+      if (!context.permissions.has('event:read'))
+        return c.json({ error: 'Forbidden' }, 403);
+      if (!deps.publicRegistrationRateLimits)
+        return c.json({ error: 'Not found' }, 404);
+      const eventId = c.req.param('eventId');
+      if (!z.string().uuid().safeParse(eventId).success)
+        return c.json({ error: 'Not found' }, 404);
+      if (!(await deps.events.getById(context, eventId)))
+        return c.json({ error: 'Not found' }, 404);
+      return c.json(
+        (await deps.publicRegistrationRateLimits.getEvent(context, eventId)) ??
+          {},
+      );
+    },
+  );
+  app.put(
+    '/admin/events/:eventId/public-registration-rate-limits',
+    async (c) => {
+      const context = await resolveMemberContext(c.req.raw);
+      if (!context) return c.json({ error: 'Unauthorized' }, 401);
+      if (!context.permissions.has('event:write'))
+        return c.json({ error: 'Forbidden' }, 403);
+      if (!deps.publicRegistrationRateLimits)
+        return c.json({ error: 'Not found' }, 404);
+      const eventId = c.req.param('eventId');
+      if (!z.string().uuid().safeParse(eventId).success)
+        return c.json({ error: 'Not found' }, 404);
+      const parsed = EventPublicRegistrationRateLimitOverridesSchema.safeParse(
+        await c.req.json().catch(() => null),
+      );
+      if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+      if (!(await deps.events.getById(context, eventId)))
+        return c.json({ error: 'Not found' }, 404);
+      const actor = context.subject
+        ? `${context.subject.issuer}|${context.subject.subject}`
+        : context.correlationId;
+      const result = await deps.publicRegistrationRateLimits.updateEvent(
+        context,
+        eventId,
+        parsed.data,
+        actor,
+      );
+      return c.json(result ?? {});
+    },
+  );
   app.get('/admin/events/:eventId/consents', async (c) => {
     const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);

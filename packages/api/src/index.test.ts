@@ -29,6 +29,37 @@ describe('api entry', () => {
     });
     expect(config.mailEnabled).toBe(false);
     expect(config.storageEnabled).toBe(false);
+    expect(config.TRUSTED_PROXIES).toEqual([]);
+    expect(config.PUBLIC_REGISTRATION_ORG_LIMIT).toBe(60);
+    expect(config.PUBLIC_REGISTRATION_EVENT_LIMIT).toBe(8);
+    expect(config.PUBLIC_REGISTRATION_WINDOW_SECONDS).toBe(60);
+  });
+  it('validates trusted proxy CIDRs and configurable public rate limits', () => {
+    const base = {
+      DEPLOYMENT_MODE: 'community',
+      DATABASE_URL: 'postgres://localhost/racepilot',
+      COMMUNITY_ORGANIZATION_SLUG: 'club',
+      COMMUNITY_ORGANIZATION_NAME: 'Club',
+      COMMUNITY_ORGANIZATION_TIMEZONE: 'UTC',
+      COMMUNITY_ORGANIZATION_LOCALE: 'en',
+    };
+    const config = loadConfig({
+      ...base,
+      TRUSTED_PROXIES: '10.0.0.0/8, 192.0.2.10',
+      PUBLIC_REGISTRATION_ORG_LIMIT: '90',
+      PUBLIC_REGISTRATION_EVENT_LIMIT: '12',
+      PUBLIC_REGISTRATION_WINDOW_SECONDS: '30',
+    });
+    expect(config.TRUSTED_PROXIES).toEqual(['10.0.0.0/8', '192.0.2.10']);
+    expect(config.PUBLIC_REGISTRATION_ORG_LIMIT).toBe(90);
+    expect(config.PUBLIC_REGISTRATION_EVENT_LIMIT).toBe(12);
+    expect(config.PUBLIC_REGISTRATION_WINDOW_SECONDS).toBe(30);
+    expect(() =>
+      loadConfig({ ...base, TRUSTED_PROXIES: 'not a proxy CIDR' }),
+    ).toThrow(/TRUSTED_PROXIES/);
+    expect(() =>
+      loadConfig({ ...base, PUBLIC_REGISTRATION_EVENT_LIMIT: '0' }),
+    ).toThrow(/PUBLIC_REGISTRATION_EVENT_LIMIT/);
   });
   it('fails closed when mail lacks a canonical base URL', () => {
     const config = loadConfig({

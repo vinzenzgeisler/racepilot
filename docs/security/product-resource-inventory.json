@@ -506,14 +506,54 @@
       ]
     },
     {
-      "id": "registration-rate-limiter",
+      "id": "public-registration-rate-limit-store",
+      "kind": "table",
+      "tenantKey": "hashed client identity + hashed server-derived organization/event scope",
+      "isolation": "PostgreSQL token buckets are shared across API instances and atomically check organization and event budgets together; only hashes of client and scope keys are persisted.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/rate-limit.integration.test.ts",
+          "name": "persists isolated organization/event token buckets across instances and retries"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-rate-limit-overrides",
       "kind": "config",
-      "tenantKey": "client IP + server-resolved organizationId + event",
-      "isolation": "Replaceable API port with per-window in-memory implementation; tenant/event keying is server-derived.",
+      "tenantKey": "authenticated organizationId; event overrides use organizationId + eventId",
+      "isolation": "Organization/event overrides are stored separately, the event foreign key is composite and tenant-scoped, management requires organization:update or event:write, requests are range-validated, changes are actor-audited, and public resolution uses route slug only beneath the resolved tenant.",
       "negativeTests": [
         {
           "file": "packages/api/src/organization.test.ts",
-          "name": "uses generic public verification responses and rate-limits by IP and event"
+          "name": "resolves rate overrides by trusted organization/event, with event > organization > defaults"
+        },
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "validates and tenant-scopes the rate-override management endpoints"
+        },
+        {
+          "file": "packages/adapter-postgres/src/rate-limit.integration.test.ts",
+          "name": "persists tenant-scoped organization and event overrides with independent fallback"
+        }
+      ]
+    },
+    {
+      "id": "registration-rate-limiter",
+      "kind": "config",
+      "tenantKey": "connection-derived client identity + server-resolved organizationId + event",
+      "isolation": "Only the socket peer is trusted by default; X-Forwarded-For is considered only behind configured trusted proxy CIDRs. Organization/event limits are independent and fail closed if persistent storage is unavailable; Cloud requires shared storage.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "does not trust spoofed client forwarding headers for registration rate limits"
+        },
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "uses forwarded identities only behind a configured trusted proxy"
+        },
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "separates organization and event budgets across clients and tenants with retry guidance"
         }
       ]
     },

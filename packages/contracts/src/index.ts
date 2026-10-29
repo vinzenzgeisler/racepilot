@@ -280,6 +280,27 @@ export const RegistrationSettingsSchema = z
   })
   .strict();
 export type RegistrationSettings = z.infer<typeof RegistrationSettingsSchema>;
+const registrationRateLimitValue = z.number().int().min(1).max(100_000);
+const registrationRateLimitWindow = z.number().int().min(1).max(86_400);
+export const OrganizationPublicRegistrationRateLimitOverridesSchema = z
+  .object({
+    organizationLimit: registrationRateLimitValue.optional(),
+    eventLimit: registrationRateLimitValue.optional(),
+    windowSeconds: registrationRateLimitWindow.optional(),
+  })
+  .strict();
+export type OrganizationPublicRegistrationRateLimitOverrides = z.infer<
+  typeof OrganizationPublicRegistrationRateLimitOverridesSchema
+>;
+export const EventPublicRegistrationRateLimitOverridesSchema = z
+  .object({
+    eventLimit: registrationRateLimitValue.optional(),
+    windowSeconds: registrationRateLimitWindow.optional(),
+  })
+  .strict();
+export type EventPublicRegistrationRateLimitOverrides = z.infer<
+  typeof EventPublicRegistrationRateLimitOverridesSchema
+>;
 export const PublicRegistrationRequestSchema = z
   .object({
     submissionId: z.string().uuid(),

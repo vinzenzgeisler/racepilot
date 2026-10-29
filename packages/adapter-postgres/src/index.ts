@@ -25,6 +25,7 @@ import {
   check,
   index,
   integer,
+  doublePrecision,
   foreignKey,
   uniqueIndex,
   jsonb,
@@ -676,6 +677,117 @@ export const publicEntrySubmissions = pgTable(
       ],
       name: 'public_entry_submission_group_fk',
     }),
+  ],
+);
+export const publicRegistrationRateLimits = pgTable(
+  'public_registration_rate_limit',
+  {
+    scopeHash: text('scope_hash').notNull(),
+    clientHash: text('client_hash').notNull(),
+    remainingTokens: doublePrecision('remaining_tokens').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.scopeHash, t.clientHash] }),
+    check(
+      'public_registration_rate_limit_tokens_check',
+      sql`${t.remainingTokens} >= 0`,
+    ),
+    index('public_registration_rate_limit_updated_at_idx').on(t.updatedAt),
+  ],
+);
+export const organizationPublicRegistrationRateLimitOverrides = pgTable(
+  'organization_public_registration_rate_limit_override',
+  {
+    organizationId: uuid('organization_id')
+      .primaryKey()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    organizationLimit: integer('organization_limit'),
+    eventLimit: integer('event_limit'),
+    windowSeconds: integer('window_seconds'),
+  },
+  (t) => [
+    check(
+      'organization_public_registration_rate_limit_override_org_check',
+      sql`${t.organizationLimit} is null or ${t.organizationLimit} between 1 and 100000`,
+    ),
+    check(
+      'organization_public_registration_rate_limit_override_event_check',
+      sql`${t.eventLimit} is null or ${t.eventLimit} between 1 and 100000`,
+    ),
+    check(
+      'organization_public_registration_rate_limit_override_window_check',
+      sql`${t.windowSeconds} is null or ${t.windowSeconds} between 1 and 86400`,
+    ),
+    check(
+      'organization_public_registration_rate_limit_override_nonempty_check',
+      sql`${t.organizationLimit} is not null or ${t.eventLimit} is not null or ${t.windowSeconds} is not null`,
+    ),
+  ],
+);
+export const eventPublicRegistrationRateLimitOverrides = pgTable(
+  'event_public_registration_rate_limit_override',
+  {
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    eventLimit: integer('event_limit'),
+    windowSeconds: integer('window_seconds'),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.eventId] }),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'event_public_registration_rate_limit_override_event_fk',
+    }).onDelete('cascade'),
+    check(
+      'event_public_registration_rate_limit_override_limit_check',
+      sql`${t.eventLimit} is null or ${t.eventLimit} between 1 and 100000`,
+    ),
+    check(
+      'event_public_registration_rate_limit_override_window_check',
+      sql`${t.windowSeconds} is null or ${t.windowSeconds} between 1 and 86400`,
+    ),
+    check(
+      'event_public_registration_rate_limit_override_nonempty_check',
+      sql`${t.eventLimit} is not null or ${t.windowSeconds} is not null`,
+    ),
+  ],
+);
+export const publicRegistrationRateLimitOverrideAudit = pgTable(
+  'public_registration_rate_limit_override_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id')
+      .notNull()
+      .references(() => organizations.id, { onDelete: 'cascade' }),
+    eventId: uuid('event_id'),
+    scope: text('scope').notNull(),
+    actor: text('actor').notNull(),
+    beforeSettings: jsonb('before_settings'),
+    afterSettings: jsonb('after_settings'),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'public_registration_rate_limit_override_audit_event_fk',
+    }).onDelete('cascade'),
+    check(
+      'public_registration_rate_limit_override_audit_scope_check',
+      sql`${t.scope} in ('organization', 'event')`,
+    ),
+    check(
+      'public_registration_rate_limit_override_audit_target_check',
+      sql`(${t.scope} = 'organization' and ${t.eventId} is null) or (${t.scope} = 'event' and ${t.eventId} is not null)`,
+    ),
+    index('public_registration_rate_limit_override_audit_org_idx').on(
+      t.organizationId,
+      t.occurredAt,
+    ),
   ],
 );
 export const groupEmailVerifications = pgTable(
@@ -1339,6 +1451,303 @@ export function createArtifactJobRepository(
 }
 
 export type Database = ReturnType<typeof drizzle>;
+export function createPostgresRegistrationRateLimiter(
+  db: Database,
+  options: { now?: () => number; cleanupEvery?: number } = {},
+) {
+  const now = options.now ?? Date.now;
+  const cleanupEvery = options.cleanupEvery ?? 256;
+  let calls = 0;
+  const hash = (value: string) =>
+    createHash('sha256').update(value).digest('hex');
+  return {
+    persistence: 'shared' as const,
+    consume: async (
+      clientIdentity: string,
+      scopes: readonly { key: string; limit: number; windowMs: number }[],
+    ): Promise<{ allowed: boolean; retryAfterMs: number }> => {
+      if (scopes.length === 0) return { allowed: true, retryAfterMs: 0 };
+      if (
+        !clientIdentity ||
+        scopes.some(
+          (scope) =>
+            !scope.key ||
+            !Number.isSafeInteger(scope.limit) ||
+            scope.limit < 1 ||
+            !Number.isSafeInteger(scope.windowMs) ||
+            scope.windowMs < 1,
+        )
+      )
+        throw new Error('Invalid public registration rate-limit configuration');
+      const clientHash = hash(clientIdentity);
+      const buckets = scopes
+        .map((scope) => ({ ...scope, scopeHash: hash(scope.key) }))
+        .sort((a, b) => a.scopeHash.localeCompare(b.scopeHash));
+      const currentTime = now();
+      return db.transaction(async (tx) => {
+        for (const bucket of buckets) {
+          await tx.execute(
+            sql`select pg_advisory_xact_lock(hashtextextended(${`${bucket.scopeHash}:${clientHash}`}, 0))`,
+          );
+        }
+        const prepared: Array<{
+          bucket: (typeof buckets)[number];
+          remaining: number;
+        }> = [];
+        for (const bucket of buckets) {
+          const rows = (
+            await tx.execute(sql`
+            select remaining_tokens, updated_at
+            from public_registration_rate_limit
+            where scope_hash = ${bucket.scopeHash} and client_hash = ${clientHash}
+            for update
+          `)
+          ).rows as Array<{
+            remaining_tokens: number | string;
+            updated_at: Date | string;
+          }>;
+          const prior = rows[0];
+          const elapsedMs = prior
+            ? Math.max(0, currentTime - new Date(prior.updated_at).getTime())
+            : bucket.windowMs;
+          const replenished = prior
+            ? Number(prior.remaining_tokens) +
+              (elapsedMs * bucket.limit) / bucket.windowMs
+            : bucket.limit;
+          prepared.push({
+            bucket,
+            remaining: Math.min(bucket.limit, replenished),
+          });
+        }
+        const blocked = prepared.filter(({ remaining }) => remaining < 1);
+        if (blocked.length) {
+          return {
+            allowed: false,
+            retryAfterMs: Math.max(
+              ...blocked.map(({ bucket, remaining }) =>
+                Math.max(
+                  1,
+                  Math.ceil(((1 - remaining) * bucket.windowMs) / bucket.limit),
+                ),
+              ),
+            ),
+          };
+        }
+        for (const { bucket, remaining } of prepared) {
+          await tx.execute(sql`
+            insert into public_registration_rate_limit
+              (scope_hash, client_hash, remaining_tokens, updated_at)
+            values (${bucket.scopeHash}, ${clientHash}, ${remaining - 1}, to_timestamp(${currentTime} / 1000.0))
+            on conflict (scope_hash, client_hash) do update
+              set remaining_tokens = excluded.remaining_tokens,
+                  updated_at = excluded.updated_at
+          `);
+        }
+        if (++calls % cleanupEvery === 0) {
+          await tx.execute(sql`
+            delete from public_registration_rate_limit
+            where updated_at < to_timestamp(${currentTime} / 1000.0) - interval '1 day'
+          `);
+        }
+        return { allowed: true, retryAfterMs: 0 };
+      });
+    },
+  };
+}
+export function createPublicRegistrationRateLimitSettingsRepository(
+  db: Database,
+) {
+  const organizationSettings = async (ctx: RequestContext) => {
+    const [row] = await db
+      .select({
+        organizationLimit:
+          organizationPublicRegistrationRateLimitOverrides.organizationLimit,
+        eventLimit: organizationPublicRegistrationRateLimitOverrides.eventLimit,
+        windowSeconds:
+          organizationPublicRegistrationRateLimitOverrides.windowSeconds,
+      })
+      .from(organizationPublicRegistrationRateLimitOverrides)
+      .where(
+        eq(
+          organizationPublicRegistrationRateLimitOverrides.organizationId,
+          ctx.organizationId,
+        ),
+      );
+    if (!row) return null;
+    return {
+      ...(row.organizationLimit !== null
+        ? { organizationLimit: row.organizationLimit }
+        : {}),
+      ...(row.eventLimit !== null ? { eventLimit: row.eventLimit } : {}),
+      ...(row.windowSeconds !== null
+        ? { windowSeconds: row.windowSeconds }
+        : {}),
+    };
+  };
+  const eventSettings = async (ctx: RequestContext, eventId: string) => {
+    const [row] = await db
+      .select({
+        eventLimit: eventPublicRegistrationRateLimitOverrides.eventLimit,
+        windowSeconds: eventPublicRegistrationRateLimitOverrides.windowSeconds,
+      })
+      .from(eventPublicRegistrationRateLimitOverrides)
+      .where(
+        and(
+          eq(
+            eventPublicRegistrationRateLimitOverrides.organizationId,
+            ctx.organizationId,
+          ),
+          eq(eventPublicRegistrationRateLimitOverrides.eventId, eventId),
+        ),
+      );
+    if (!row) return null;
+    return {
+      ...(row.eventLimit !== null ? { eventLimit: row.eventLimit } : {}),
+      ...(row.windowSeconds !== null
+        ? { windowSeconds: row.windowSeconds }
+        : {}),
+    };
+  };
+  return {
+    getOrganization: organizationSettings,
+    getEvent: eventSettings,
+    resolvePublicEvent: async (ctx: RequestContext, slug: string) => {
+      const [event] = await db
+        .select({ id: events.id })
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.slug, slug),
+          ),
+        );
+      if (!event) return null;
+      return {
+        eventId: event.id,
+        organization: await organizationSettings(ctx),
+        event: await eventSettings(ctx, event.id),
+      };
+    },
+    updateOrganization: async (
+      ctx: RequestContext,
+      settings: {
+        organizationLimit?: number;
+        eventLimit?: number;
+        windowSeconds?: number;
+      },
+      actor: string,
+    ) =>
+      db.transaction(async (tx) => {
+        const [organization] = await tx
+          .select({ id: organizations.id })
+          .from(organizations)
+          .where(eq(organizations.id, ctx.organizationId))
+          .for('update');
+        if (!organization) throw new Error('Organization not found');
+        const table = organizationPublicRegistrationRateLimitOverrides;
+        const [before] = await tx
+          .select()
+          .from(table)
+          .where(eq(table.organizationId, ctx.organizationId))
+          .for('update');
+        const after = Object.keys(settings).length ? settings : null;
+        if (after) {
+          await tx
+            .insert(table)
+            .values({ organizationId: ctx.organizationId, ...after })
+            .onConflictDoUpdate({
+              target: table.organizationId,
+              set: after,
+            });
+        } else {
+          await tx
+            .delete(table)
+            .where(eq(table.organizationId, ctx.organizationId));
+        }
+        await tx.insert(publicRegistrationRateLimitOverrideAudit).values({
+          organizationId: ctx.organizationId,
+          scope: 'organization',
+          actor,
+          beforeSettings: before
+            ? {
+                organizationLimit: before.organizationLimit,
+                eventLimit: before.eventLimit,
+                windowSeconds: before.windowSeconds,
+              }
+            : null,
+          afterSettings: after ?? null,
+        });
+        return after;
+      }),
+    updateEvent: async (
+      ctx: RequestContext,
+      eventId: string,
+      settings: { eventLimit?: number; windowSeconds?: number },
+      actor: string,
+    ) =>
+      db.transaction(async (tx) => {
+        const [event] = await tx
+          .select({ id: events.id })
+          .from(events)
+          .where(
+            and(
+              eq(events.id, eventId),
+              eq(events.organizationId, ctx.organizationId),
+            ),
+          )
+          .for('update');
+        if (!event) return null;
+        const table = eventPublicRegistrationRateLimitOverrides;
+        const [before] = await tx
+          .select()
+          .from(table)
+          .where(
+            and(
+              eq(table.organizationId, ctx.organizationId),
+              eq(table.eventId, eventId),
+            ),
+          )
+          .for('update');
+        const after = Object.keys(settings).length ? settings : null;
+        if (after) {
+          await tx
+            .insert(table)
+            .values({
+              organizationId: ctx.organizationId,
+              eventId,
+              ...after,
+            })
+            .onConflictDoUpdate({
+              target: [table.organizationId, table.eventId],
+              set: after,
+            });
+        } else {
+          await tx
+            .delete(table)
+            .where(
+              and(
+                eq(table.organizationId, ctx.organizationId),
+                eq(table.eventId, eventId),
+              ),
+            );
+        }
+        await tx.insert(publicRegistrationRateLimitOverrideAudit).values({
+          organizationId: ctx.organizationId,
+          eventId,
+          scope: 'event',
+          actor,
+          beforeSettings: before
+            ? {
+                eventLimit: before.eventLimit,
+                windowSeconds: before.windowSeconds,
+              }
+            : null,
+          afterSettings: after ?? null,
+        });
+        return after;
+      }),
+  };
+}
 export async function migrate(databaseUrl: string): Promise<void> {
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: databaseUrl });
