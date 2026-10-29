@@ -1773,6 +1773,31 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         .from(entries)
         .where(eq(entries.organizationId, org!.id));
       expect(savedEntries).toHaveLength(2);
+      const secondGroup = (
+        await db
+          .insert(registrationGroups)
+          .values({
+            organizationId: org!.id,
+            eventId: event!.id,
+            personId: groups[0]!.personId,
+            contactEmail: 'family@example.test',
+          })
+          .returning()
+      )[0]!;
+      await db.insert(groupEmailVerifications).values({
+        organizationId: org!.id,
+        eventId: event!.id,
+        registrationGroupId: secondGroup.id,
+        tokenHash: createHash('sha256')
+          .update('second-group-verified')
+          .digest('hex'),
+        expiresAt: new Date(Date.now() + 60_000),
+        consumedAt: new Date(),
+      });
+      await db
+        .update(entries)
+        .set({ registrationGroupId: secondGroup.id })
+        .where(eq(entries.id, savedEntries[1]!.id));
       expect(
         savedEntries.every(
           (entry) =>
@@ -1863,6 +1888,17 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           row.locale === 'en',
       )!;
       expect(accessMail.locale).toBe('en');
+      const englishAccessMails = (
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, org!.id))
+      ).filter(
+        (row) =>
+          row.templateKey === 'participant-status-access' &&
+          row.locale === 'en',
+      );
+      expect(englishAccessMails).toHaveLength(2);
       const accessUrl = new URL(accessMail.variables.accessUrl!);
       expect(accessUrl.origin).toBe('https://racepilot.example.test');
       const statusToken = accessUrl.searchParams.get('token')!;
@@ -1908,7 +1944,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         ctx,
         statusToken,
       );
-      expect(participantView).toHaveLength(2);
+      expect(participantView).toHaveLength(1);
       expect(
         participantView?.every(
           (item) =>

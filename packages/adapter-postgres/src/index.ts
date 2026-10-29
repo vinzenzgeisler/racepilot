@@ -3576,7 +3576,7 @@ export function createPublicRegistrationService(
       const event = eventRows[0];
       if (!event) return;
       const matches = await db
-        .select({
+        .selectDistinct({
           groupId: registrationGroups.id,
           personId: registrationGroups.personId,
           contact: registrationGroups.contactEmail,
@@ -3605,87 +3605,89 @@ export function createPublicRegistrationService(
             sql`exists (select 1 from entry e where e.organization_id = ${registrationGroups.organizationId} and e.event_id = ${registrationGroups.eventId} and e.registration_group_id = ${registrationGroups.id} and e.deleted_at is null)`,
           ),
         )
-        .limit(1);
-      const group = matches[0];
-      if (!group?.contact) return;
-      const accessToken = randomBytes(32).toString('base64url');
-      const now = new Date();
-      await db.transaction(async (tx) => {
-        const [lockedGroup] = await tx
-          .select({ contact: registrationGroups.contactEmail })
-          .from(registrationGroups)
-          .where(
-            and(
-              eq(registrationGroups.organizationId, ctx.organizationId),
-              eq(registrationGroups.eventId, event.id),
-              eq(registrationGroups.id, group.groupId),
-              sql`lower(${registrationGroups.contactEmail}) = ${normalized}`,
-              sql`exists (select 1 from registration_group_email_verification v where v.organization_id = ${registrationGroups.organizationId} and v.event_id = ${registrationGroups.eventId} and v.registration_group_id = ${registrationGroups.id} and v.consumed_at is not null)`,
-            ),
-          )
-          .for('update')
-          .limit(1);
-        if (!lockedGroup?.contact) return;
-        await tx
-          .update(participantStatusAccessTokens)
-          .set({ revokedAt: now })
-          .where(
-            and(
-              eq(
-                participantStatusAccessTokens.organizationId,
-                ctx.organizationId,
+        // One request can deliver at most 10 status links to the verified contact.
+        .limit(10);
+      for (const group of matches) {
+        if (!group.contact) continue;
+        const accessToken = randomBytes(32).toString('base64url');
+        const now = new Date();
+        await db.transaction(async (tx) => {
+          const [lockedGroup] = await tx
+            .select({ contact: registrationGroups.contactEmail })
+            .from(registrationGroups)
+            .where(
+              and(
+                eq(registrationGroups.organizationId, ctx.organizationId),
+                eq(registrationGroups.eventId, event.id),
+                eq(registrationGroups.id, group.groupId),
+                sql`lower(${registrationGroups.contactEmail}) = ${normalized}`,
+                sql`exists (select 1 from registration_group_email_verification v where v.organization_id = ${registrationGroups.organizationId} and v.event_id = ${registrationGroups.eventId} and v.registration_group_id = ${registrationGroups.id} and v.consumed_at is not null)`,
               ),
-              eq(
-                participantStatusAccessTokens.registrationGroupId,
-                group.groupId,
+            )
+            .for('update')
+            .limit(1);
+          if (!lockedGroup?.contact) return;
+          await tx
+            .update(participantStatusAccessTokens)
+            .set({ revokedAt: now })
+            .where(
+              and(
+                eq(
+                  participantStatusAccessTokens.organizationId,
+                  ctx.organizationId,
+                ),
+                eq(
+                  participantStatusAccessTokens.registrationGroupId,
+                  group.groupId,
+                ),
+                sql`${participantStatusAccessTokens.consumedAt} is null`,
+                sql`${participantStatusAccessTokens.revokedAt} is null`,
               ),
-              sql`${participantStatusAccessTokens.consumedAt} is null`,
-              sql`${participantStatusAccessTokens.revokedAt} is null`,
-            ),
-          );
-        await tx.insert(participantStatusAccessTokens).values({
-          organizationId: ctx.organizationId,
-          eventId: event.id,
-          registrationGroupId: group.groupId,
-          tokenHash: hashToken(accessToken),
-          locale,
-          expiresAt: new Date(now.getTime() + 30 * 60_000),
-        });
-        const [person] = await tx
-          .select({ firstName: people.firstName, lastName: people.lastName })
-          .from(people)
-          .where(
-            and(
-              eq(people.organizationId, ctx.organizationId),
-              eq(people.id, group.personId),
-            ),
-          )
-          .limit(1);
-        const url = new URL(
-          `/registration/status?token=${encodeURIComponent(accessToken)}`,
-          canonicalBase,
-        ).toString();
-        await enqueueMailOutbox(
-          db,
-          ctx.organizationId,
-          {
+            );
+          await tx.insert(participantStatusAccessTokens).values({
+            organizationId: ctx.organizationId,
             eventId: event.id,
-            templateKey: 'participant-status-access',
-            templateVersion: 1,
-            templateVersionId: null,
+            registrationGroupId: group.groupId,
+            tokenHash: hashToken(accessToken),
             locale,
-            recipient: lockedGroup.contact,
-            idempotencyKey: `participant-status-access:${randomUUID()}`,
-            variables: {
-              accessUrl: url,
-              recipientName:
-                `${person?.firstName ?? ''} ${person?.lastName ?? ''}`.trim(),
+            expiresAt: new Date(now.getTime() + 30 * 60_000),
+          });
+          const [person] = await tx
+            .select({ firstName: people.firstName, lastName: people.lastName })
+            .from(people)
+            .where(
+              and(
+                eq(people.organizationId, ctx.organizationId),
+                eq(people.id, group.personId),
+              ),
+            )
+            .limit(1);
+          const url = new URL(
+            `/registration/status?token=${encodeURIComponent(accessToken)}`,
+            canonicalBase,
+          ).toString();
+          await enqueueMailOutbox(
+            db,
+            ctx.organizationId,
+            {
+              eventId: event.id,
+              templateKey: 'participant-status-access',
+              templateVersion: 1,
+              templateVersionId: null,
+              locale,
+              recipient: lockedGroup.contact,
+              idempotencyKey: `participant-status-access:${randomUUID()}`,
+              variables: {
+                accessUrl: url,
+                recipientName:
+                  `${person?.firstName ?? ''} ${person?.lastName ?? ''}`.trim(),
+              },
+              correlationId: ctx.correlationId,
             },
-            correlationId: ctx.correlationId,
-          },
-          tx,
-        );
-      });
+            tx,
+          );
+        });
+      }
     },
     redeemStatusAccess: async (ctx: RequestContext, token: string) =>
       db.transaction(async (tx) => {
