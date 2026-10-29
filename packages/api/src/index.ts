@@ -776,7 +776,10 @@ export function createApp(deps: ApiDeps) {
           ? `${context.subject.issuer}#${context.subject.subject}`
           : context.correlationId,
         parsed.data.reason,
-        { entries: deps.entries },
+        {
+          entries: deps.entries,
+          ...(deps.entryWorkflows ? { workflows: deps.entryWorkflows } : {}),
+        },
       );
       return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
     } catch {

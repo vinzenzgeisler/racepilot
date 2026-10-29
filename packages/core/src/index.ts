@@ -553,6 +553,10 @@ export interface EntryWorkflowRepository {
     ctx: RequestContext,
     eventId: string,
   ): Promise<EntryWorkflowRevision | null>;
+  getPinnedForEntry(
+    ctx: RequestContext,
+    entryId: string,
+  ): Promise<EntryWorkflowRevision | null>;
   setOrganization(
     ctx: RequestContext,
     workflow: EntryWorkflow,
@@ -911,6 +915,10 @@ export interface EntryRepository {
     toStatus: string,
     actor: string,
     reason: string,
+    workflow?: {
+      statusCategory: EntryWorkflowCategory;
+      workflowRevisionId: string;
+    },
   ): Promise<Entry | null>;
   softDelete(
     ctx: RequestContext,
@@ -982,7 +990,7 @@ export async function transitionEntry(
   to: string,
   actor: string,
   reason: string,
-  deps: { entries: EntryRepository },
+  deps: { entries: EntryRepository; workflows?: EntryWorkflowRepository },
 ): Promise<Entry | null> {
   if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
   if (!actor.trim() || !reason.trim())
@@ -993,7 +1001,20 @@ export async function transitionEntry(
     kind === 'verification'
       ? current.verificationStatus
       : current.acceptanceStatus;
-  assertEntryTransition(kind, from, to);
+  let statusCategory: EntryWorkflowCategory | undefined;
+  let workflowRevisionId: string | undefined;
+  if (kind === 'acceptance' && deps.workflows) {
+    const pinned = await deps.workflows.getPinnedForEntry(ctx, id);
+    if (!pinned) return null;
+    assertWorkflowTransition(pinned.workflow, from, to, reason);
+    statusCategory = pinned.workflow.statuses.find(
+      (status) => status.key === to,
+    )?.category;
+    if (!statusCategory) throw new Error(`Unknown entry status: ${to}`);
+    workflowRevisionId = pinned.id;
+  } else {
+    assertEntryTransition(kind, from, to);
+  }
   return deps.entries.transition(
     ctx,
     id,
@@ -1002,6 +1023,9 @@ export async function transitionEntry(
     to,
     actor.trim(),
     reason.trim(),
+    statusCategory
+      ? { statusCategory, workflowRevisionId: workflowRevisionId! }
+      : undefined,
   );
 }
 

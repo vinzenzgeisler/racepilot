@@ -520,6 +520,7 @@ describe('registration workflow admin routes', () => {
     };
     const calls: string[] = [];
     api.entryWorkflows = {
+      getPinnedForEntry: async () => stored,
       getOrganization: async () => stored,
       getEffective: async (_ctx, eventId) =>
         eventId === foreignEventId
@@ -581,6 +582,7 @@ describe('registration workflow admin routes', () => {
     const api = deps();
     api.entryWorkflows = {
       getOrganization: async () => null,
+      getPinnedForEntry: async () => null,
       getEffective: async () => null,
       setOrganization: async () => {
         throw new Error('unexpected');

@@ -10,6 +10,7 @@ import {
   setEventModule,
   setOrganizationModule,
   defaultEntryWorkflow,
+  transitionEntry,
 } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
@@ -608,7 +609,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       const ctxA = {
         deploymentMode: 'community' as const,
         organizationId: organizationId(orgA),
-        permissions: new Set<string>(),
+        permissions: new Set<string>(['entry:write']),
         capabilities: new Set<string>(),
         correlationId: suffix,
       };
@@ -777,6 +778,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         vehicleId: string,
         groupId: string,
         clsId: string,
+        startNumber = 'A-01',
       ) =>
         db
           .insert(entries)
@@ -787,7 +789,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
             registrationGroupId: groupId,
             driverPersonId: personId,
             vehicleId,
-            requestedStartNumber: 'A-01',
+            requestedStartNumber: startNumber,
           })
           .returning();
       const [entryA] = await attempted(
@@ -963,6 +965,96 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         toStatus: 'verified',
         actor: 'admin',
         reason: 'documents checked',
+      });
+      const workflows = createEntryWorkflowRepository(db);
+      const beforeWorkflow = await workflows.getPinnedForEntry(
+        ctxA,
+        entryA!.id,
+      );
+      expect(beforeWorkflow).not.toBeNull();
+      const customWorkflow = {
+        ...defaultEntryWorkflow,
+        statuses: [
+          ...defaultEntryWorkflow.statuses,
+          {
+            key: 'documents_missing',
+            labels: { de: 'Unterlagen fehlen', en: 'Documents missing' },
+            color: '#ca8a04',
+            category: 'pending' as const,
+          },
+        ],
+        transitions: [
+          ...defaultEntryWorkflow.transitions,
+          { from: 'pending', to: 'documents_missing', reasonRequired: true },
+        ],
+      };
+      await workflows.setEvent(
+        ctxA,
+        eventA!.id,
+        customWorkflow,
+        'admin',
+        'Enable documents status',
+      );
+      const [entryAfterChange] = await attempted(
+        personA!.id,
+        vehicleA!.id,
+        groupA!.id,
+        classA!.id,
+        'A-02',
+      );
+      const oldPinned = await workflows.getPinnedForEntry(ctxA, entryA!.id);
+      const newPinned = await workflows.getPinnedForEntry(
+        ctxA,
+        entryAfterChange!.id,
+      );
+      expect(oldPinned?.id).toBe(beforeWorkflow!.id);
+      expect(newPinned?.id).not.toBe(beforeWorkflow!.id);
+      expect(oldPinned?.workflow.statuses.map(({ key }) => key)).not.toContain(
+        'documents_missing',
+      );
+      expect(newPinned?.workflow.statuses.map(({ key }) => key)).toContain(
+        'documents_missing',
+      );
+      await expect(
+        transitionEntry(
+          ctxA,
+          entryA!.id,
+          'acceptance',
+          'documents_missing',
+          'admin',
+          'missing',
+          { entries: createEntryRepository(db), workflows },
+        ),
+      ).rejects.toThrow();
+      await expect(
+        transitionEntry(
+          ctxA,
+          entryAfterChange!.id,
+          'acceptance',
+          'documents_missing',
+          '',
+          'missing',
+          { entries: createEntryRepository(db), workflows },
+        ),
+      ).rejects.toThrow(/required/);
+      const transitionedCustom = await transitionEntry(
+        ctxA,
+        entryAfterChange!.id,
+        'acceptance',
+        'documents_missing',
+        'admin',
+        'request documents',
+        { entries: createEntryRepository(db), workflows },
+      );
+      expect(transitionedCustom?.acceptanceStatus).toBe('documents_missing');
+      const customAudit = await db
+        .select()
+        .from(entryAuditEvents)
+        .where(eq(entryAuditEvents.entryId, entryAfterChange!.id));
+      expect(customAudit[0]).toMatchObject({
+        toStatus: 'documents_missing',
+        statusCategory: 'pending',
+        workflowRevisionId: newPinned!.id,
       });
     } finally {
       await db.delete(events).where(eq(events.slug, `event-${suffix}`));

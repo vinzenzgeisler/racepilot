@@ -386,6 +386,7 @@ export const entries = pgTable(
       .notNull()
       .default('unverified'),
     acceptanceStatus: text('acceptance_status').notNull().default('pending'),
+    workflowRevisionId: uuid('workflow_revision_id'),
     requestedStartNumber: text('requested_start_number'),
     priceSnapshotVersion: text('price_snapshot_version'),
     priceSnapshot: jsonb('price_snapshot').$type<
@@ -444,10 +445,6 @@ export const entries = pgTable(
       sql`${t.verificationStatus} in ('unverified','verified')`,
     ),
     check(
-      'entry_acceptance_status_check',
-      sql`${t.acceptanceStatus} in ('pending','accepted','rejected','waitlisted','withdrawn')`,
-    ),
-    check(
       'entry_deleted_reason_check',
       sql`${t.deletedAt} is null or ${t.deletionReason} is not null`,
     ),
@@ -469,6 +466,8 @@ export const entryAuditEvents = pgTable(
     toStatus: text('to_status').notNull(),
     actor: text('actor').notNull(),
     reason: text('reason').notNull(),
+    statusCategory: text('status_category'),
+    workflowRevisionId: uuid('workflow_revision_id').notNull(),
     occurredAt: timestamp('occurred_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2210,6 +2209,7 @@ export function createEntryRepository(
       toStatus,
       actor,
       reason,
+      workflow,
     ) =>
       db.transaction(async (tx) => {
         const statusColumn =
@@ -2241,6 +2241,9 @@ export function createEntryRepository(
           toStatus,
           actor,
           reason,
+          workflowRevisionId:
+            workflow?.workflowRevisionId ?? row.workflowRevisionId!,
+          ...(workflow ? { statusCategory: workflow.statusCategory } : {}),
         });
         return mapEntry(row);
       }),
@@ -3511,7 +3514,10 @@ export function createPublicRegistrationService(
                 eq(entries.verificationStatus, entry.verificationStatus),
               ),
             )
-            .returning({ id: entries.id });
+            .returning({
+              id: entries.id,
+              workflowRevisionId: entries.workflowRevisionId,
+            });
           if (updated.length)
             await tx.insert(entryAuditEvents).values({
               organizationId: ctx.organizationId,
@@ -3521,6 +3527,7 @@ export function createPublicRegistrationService(
               toStatus: 'verified',
               actor: 'email-verification',
               reason: 'Registration group email verified',
+              workflowRevisionId: updated[0]!.workflowRevisionId!,
             });
         }
         return groupEntries.length > 0;
@@ -3619,6 +3626,14 @@ export function createEntryWorkflowRepository(
     getEffective: async (ctx, eventId) => {
       const result = await db.execute(
         sql`SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry_workflow_current c JOIN entry_workflow_revision r ON r.organization_id=c.organization_id AND r.id=c.workflow_revision_id JOIN event e ON e.organization_id=c.organization_id AND e.id=c.event_id WHERE c.organization_id=${ctx.organizationId} AND c.event_id=${eventId} UNION ALL SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry_workflow_current c JOIN entry_workflow_revision r ON r.organization_id=c.organization_id AND r.id=c.workflow_revision_id JOIN event e ON e.organization_id=c.organization_id AND e.id=${eventId} WHERE c.organization_id=${ctx.organizationId} AND c.event_id IS NULL AND NOT EXISTS (SELECT 1 FROM entry_workflow_current x WHERE x.organization_id=c.organization_id AND x.event_id=e.id) LIMIT 1`,
+      );
+      const row = (result as unknown as { rows: Parameters<typeof map>[0][] })
+        .rows[0];
+      return row ? map(row) : null;
+    },
+    getPinnedForEntry: async (ctx, entryId) => {
+      const result = await db.execute(
+        sql`SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry e JOIN entry_workflow_revision r ON r.organization_id=e.organization_id AND r.id=e.workflow_revision_id WHERE e.organization_id=${ctx.organizationId} AND e.id=${entryId} AND e.deleted_at IS NULL`,
       );
       const row = (result as unknown as { rows: Parameters<typeof map>[0][] })
         .rows[0];

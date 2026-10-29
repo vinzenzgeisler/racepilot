@@ -92,6 +92,13 @@
       "when": 1793239203000,
       "tag": "0012_entry_workflows",
       "breakpoints": false
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793277000000,
+      "tag": "0013_entry_transition_workflow_audit",
+      "breakpoints": false
     }
   ]
 }

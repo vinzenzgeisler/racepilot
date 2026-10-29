@@ -5,7 +5,11 @@ import {
   health,
   loadConfig,
 } from './index.js';
-import { createRequestContext, organizationId } from '@racepilot/core';
+import {
+  createRequestContext,
+  organizationId,
+  defaultEntryWorkflow,
+} from '@racepilot/core';
 
 describe('api entry', () => {
   it('returns a contract-validated health response', () =>
@@ -378,6 +382,97 @@ describe('api entry', () => {
     });
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual(transitioned);
+  });
+
+  it('transitions acceptance through the entry pinned workflow revision', async () => {
+    const org = '11111111-1111-4111-8111-111111111111';
+    const workflow = {
+      ...defaultEntryWorkflow,
+      statuses: [
+        ...defaultEntryWorkflow.statuses,
+        {
+          key: 'documents_missing',
+          labels: { de: 'Unterlagen fehlen', en: 'Documents missing' },
+          color: '#ca8a04',
+          category: 'pending' as const,
+        },
+      ],
+      transitions: [
+        ...defaultEntryWorkflow.transitions,
+        { from: 'pending', to: 'documents_missing', reasonRequired: true },
+      ],
+    };
+    const revision = {
+      id: 'revision-2',
+      organizationId: organizationId(org),
+      eventId: 'event-1',
+      version: 2,
+      workflow,
+    };
+    let received: unknown;
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: org },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'admin',
+        }),
+      },
+      memberships: {
+        resolvePermissions: async () => new Set(['entry:read', 'entry:write']),
+      },
+      entries: {
+        getById: async () =>
+          ({
+            id: 'entry-1',
+            verificationStatus: 'unverified',
+            acceptanceStatus: 'pending',
+          }) as never,
+        transition: async (...args: unknown[]) => {
+          received = args;
+          return {
+            id: 'entry-1',
+            acceptanceStatus: 'documents_missing',
+          } as never;
+        },
+        softDelete: async () => null,
+      },
+      entryWorkflows: {
+        getOrganization: async () => null,
+        getEffective: async () => revision,
+        getPinnedForEntry: async (_ctx, entryId) =>
+          entryId === 'entry-1' ? revision : null,
+        setOrganization: async () => revision,
+        setEvent: async () => revision,
+      },
+    });
+    const request = (reason?: string, status = 'documents_missing') =>
+      app.request('/admin/entries/entry-1/transitions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          transition: 'acceptance',
+          status,
+          ...(reason === undefined ? {} : { reason }),
+        }),
+      });
+    expect((await request()).status).toBe(400);
+    expect((await request('')).status).toBe(400);
+    expect((await request('not allowed', 'pending')).status).toBe(403);
+    const response = await request('request documents');
+    expect(response.status).toBe(200);
+    expect(received).toEqual([
+      expect.objectContaining({ organizationId: organizationId(org) }),
+      'entry-1',
+      'acceptance',
+      'pending',
+      'documents_missing',
+      'https://id.example#admin',
+      'request documents',
+      { statusCategory: 'pending', workflowRevisionId: 'revision-2' },
+    ]);
   });
 
   it('requires payment:write for admin payment intake', async () => {
