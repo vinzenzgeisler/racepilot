@@ -52,3 +52,10 @@ ALTER TABLE entry ALTER COLUMN workflow_revision_id SET NOT NULL;
 ALTER TABLE entry ADD CONSTRAINT entry_workflow_revision_fk FOREIGN KEY (organization_id, event_id, workflow_revision_id)
   REFERENCES entry_workflow_revision(organization_id, event_id, id);
 -- Every legacy event receives a version-1 copy of its organization default; existing entries stay pinned to it.
+ALTER TABLE entry_audit_event ADD COLUMN workflow_revision_id uuid;
+UPDATE entry_audit_event a SET workflow_revision_id = e.workflow_revision_id
+FROM entry e WHERE e.organization_id = a.organization_id AND e.id = a.entry_id;
+ALTER TABLE entry_audit_event ALTER COLUMN workflow_revision_id SET NOT NULL;
+ALTER TABLE entry_audit_event ADD CONSTRAINT entry_audit_workflow_revision_fk
+  FOREIGN KEY (organization_id, workflow_revision_id)
+  REFERENCES entry_workflow_revision(organization_id, id);
