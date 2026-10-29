@@ -8,6 +8,7 @@ import {
   createEventRepository,
   createEventClassRepository,
   createRegistrationSettingsRepository,
+  createEntryWorkflowRepository,
   createEventConsentRepository,
   createPublicRegistrationService,
   createEntryConfirmationRepository,
@@ -84,6 +85,7 @@ serve({
     ...(storage ? { objectStorage: storage } : {}),
     classes: createEventClassRepository(db),
     registrationSettings: createRegistrationSettingsRepository(db),
+    entryWorkflows: createEntryWorkflowRepository(db),
     eventConsents: createEventConsentRepository(db),
     ...(publicRegistration
       ? {

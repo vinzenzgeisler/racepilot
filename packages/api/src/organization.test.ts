@@ -497,3 +497,119 @@ describe('registration administration and public endpoints', () => {
     expect(bad.status).toBe(400);
   });
 });
+
+describe('registration workflow admin routes', () => {
+  it('validates, authorizes and scopes organization and event workflow revisions', async () => {
+    const { defaultEntryWorkflow } = await import('@racepilot/core');
+    const stored = {
+      id: 'rev1',
+      organizationId: organizationId(config.organizationId),
+      eventId: null,
+      version: 1,
+      workflow: defaultEntryWorkflow,
+    };
+    const api = deps();
+    api.memberships = {
+      resolvePermissions: async () =>
+        new Set([
+          'organization:read',
+          'organization:update',
+          'event:read',
+          'event:write',
+        ]),
+    };
+    const calls: string[] = [];
+    api.entryWorkflows = {
+      getPinnedForEntry: async () => stored,
+      getOrganization: async () => stored,
+      getEffective: async (_ctx, eventId) =>
+        eventId === foreignEventId
+          ? null
+          : { ...stored, eventId, workflow: stored.workflow },
+      setOrganization: async (_ctx, workflow, actor, reason) => {
+        calls.push(`org:${actor}:${reason}`);
+        return { ...stored, workflow, version: 2 };
+      },
+      setEvent: async (_ctx, eventId, workflow, actor, reason) => {
+        if (eventId === foreignEventId) return null;
+        calls.push(`event:${eventId}:${actor}:${reason}`);
+        return { ...stored, eventId, workflow, version: 2 };
+      },
+    };
+    const app = createApp(api);
+    let response = await app.request(
+      '/admin/organization/registration-workflow',
+    );
+    expect(response.status).toBe(200);
+    response = await app.request('/admin/organization/registration-workflow', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflow: stored.workflow,
+        reason: 'Policy update',
+      }),
+    });
+    expect(response.status).toBe(200);
+    expect(calls[0]).toContain('org:test|user:Policy update');
+    response = await app.request(
+      `/admin/events/${foreignEventId}/registration-workflow`,
+    );
+    expect(response.status).toBe(404);
+    response = await app.request(
+      `/admin/events/${foreignEventId}/registration-workflow`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          workflow: stored.workflow,
+          reason: 'Event override',
+        }),
+      },
+    );
+    expect(response.status).toBe(404);
+    response = await app.request('/admin/organization/registration-workflow', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        workflow: { ...stored.workflow, transitions: [] },
+        reason: 'bad',
+      }),
+    });
+    expect(response.status).toBe(400);
+  });
+
+  it('requires explicit workflow permissions', async () => {
+    const api = deps();
+    api.entryWorkflows = {
+      getOrganization: async () => null,
+      getPinnedForEntry: async () => null,
+      getEffective: async () => null,
+      setOrganization: async () => {
+        throw new Error('unexpected');
+      },
+      setEvent: async () => null,
+    };
+    api.memberships = {
+      resolvePermissions: async () => new Set(['event:read']),
+    };
+    expect(
+      (
+        await createApp(api).request(
+          '/admin/organization/registration-workflow',
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await createApp(api).request(
+          '/admin/organization/registration-workflow',
+          {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: '{}',
+          },
+        )
+      ).status,
+    ).toBe(403);
+  });
+});

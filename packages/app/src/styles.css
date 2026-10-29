@@ -236,3 +236,26 @@ section[aria-labelledby='modules-title'] select {
   outline: 0.2rem solid #8a5a00;
   outline-offset: 0.15rem;
 }
+
+.entry-status {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 0.15rem 0.55rem;
+  font-weight: 600;
+}
+.admin-workflow {
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 0.75rem;
+}
+.admin-workflow summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.admin-workflow textarea {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+}

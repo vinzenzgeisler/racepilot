@@ -430,8 +430,9 @@ export function permissionsForRole(role: MembershipRole): ReadonlySet<string> {
         'entry:write',
         'payment:read',
         'payment:write',
+        'role:admin',
       ])
-    : new Set();
+    : new Set(['role:member']);
 }
 export interface MailMessage {
   readonly organizationId: OrganizationId;
@@ -514,8 +515,205 @@ export async function verifyObjectStorageContract(
 }
 
 export type EntryVerificationStatus = 'unverified' | 'verified';
-export type EntryAcceptanceStatus =
-  'pending' | 'accepted' | 'rejected' | 'waitlisted' | 'withdrawn';
+export type EntryAcceptanceStatus = string;
+export const entryWorkflowCategories = [
+  'pending',
+  'accepted',
+  'rejected',
+  'waitlisted',
+  'withdrawn',
+] as const;
+export type EntryWorkflowCategory = (typeof entryWorkflowCategories)[number];
+export interface EntryWorkflowStatus {
+  readonly key: string;
+  readonly labels: { readonly de: string; readonly en: string };
+  readonly color: string;
+  readonly category: EntryWorkflowCategory;
+}
+export interface EntryWorkflowTransition {
+  readonly from: string;
+  readonly to: string;
+  readonly reasonRequired: boolean;
+  readonly permission?: string;
+  readonly roles?: readonly MembershipRole[];
+  readonly notify?: boolean;
+}
+export interface EntryWorkflow {
+  readonly version: number;
+  readonly statuses: readonly EntryWorkflowStatus[];
+  readonly transitions: readonly EntryWorkflowTransition[];
+}
+export interface EntryWorkflowRevision {
+  readonly id: string;
+  readonly organizationId: OrganizationId;
+  readonly eventId: string | null;
+  readonly workflow: EntryWorkflow;
+  readonly version: number;
+}
+export interface EntryWorkflowRepository {
+  getOrganization(ctx: RequestContext): Promise<EntryWorkflowRevision | null>;
+  getEffective(
+    ctx: RequestContext,
+    eventId: string,
+  ): Promise<EntryWorkflowRevision | null>;
+  getPinnedForEntry(
+    ctx: RequestContext,
+    entryId: string,
+  ): Promise<EntryWorkflowRevision | null>;
+  setOrganization(
+    ctx: RequestContext,
+    workflow: EntryWorkflow,
+    actor: string,
+    reason: string,
+  ): Promise<EntryWorkflowRevision>;
+  setEvent(
+    ctx: RequestContext,
+    eventId: string,
+    workflow: EntryWorkflow,
+    actor: string,
+    reason: string,
+  ): Promise<EntryWorkflowRevision | null>;
+}
+export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
+  {
+    version: 1,
+    statuses: [
+      {
+        key: 'pending',
+        labels: { de: 'Ausstehend', en: 'Pending' },
+        color: '#64748b',
+        category: 'pending',
+      },
+      {
+        key: 'accepted',
+        labels: { de: 'Angenommen', en: 'Accepted' },
+        color: '#15803d',
+        category: 'accepted',
+      },
+      {
+        key: 'rejected',
+        labels: { de: 'Abgelehnt', en: 'Rejected' },
+        color: '#b91c1c',
+        category: 'rejected',
+      },
+      {
+        key: 'waitlisted',
+        labels: { de: 'Warteliste', en: 'Waitlisted' },
+        color: '#a16207',
+        category: 'waitlisted',
+      },
+      {
+        key: 'withdrawn',
+        labels: { de: 'Zurückgezogen', en: 'Withdrawn' },
+        color: '#475569',
+        category: 'withdrawn',
+      },
+    ],
+    transitions: [
+      ...['accepted', 'rejected', 'waitlisted', 'withdrawn'].map((to) => ({
+        from: 'pending',
+        to,
+        reasonRequired: false,
+      })),
+      ...['accepted', 'rejected'].map((from) => ({
+        from,
+        to: 'withdrawn',
+        reasonRequired: false,
+      })),
+      { from: 'waitlisted', to: 'accepted', reasonRequired: false },
+      { from: 'waitlisted', to: 'rejected', reasonRequired: false },
+      { from: 'waitlisted', to: 'withdrawn', reasonRequired: false },
+    ],
+  },
+);
+export function validateEntryWorkflow(workflow: EntryWorkflow): string[] {
+  const errors: string[] = [],
+    keys = new Set<string>(),
+    edges = new Map<string, string[]>(),
+    pairs = new Set<string>();
+  for (const status of workflow.statuses) {
+    if (!/^[a-z][a-z0-9_-]{0,63}$/.test(status.key) || keys.has(status.key))
+      errors.push(`Invalid or duplicate status key: ${status.key}`);
+    keys.add(status.key);
+    if (!entryWorkflowCategories.includes(status.category))
+      errors.push(`Invalid category: ${status.category}`);
+    if (!/^#[0-9a-f]{6}$/i.test(status.color))
+      errors.push(`Invalid color: ${status.key}`);
+    if (!status.labels.de.trim() || !status.labels.en.trim())
+      errors.push(`Missing localized label: ${status.key}`);
+  }
+  if (
+    !workflow.statuses.some(
+      (status) => status.key === 'pending' && status.category === 'pending',
+    )
+  )
+    errors.push('Workflow must include the pending system status');
+  if (!Number.isInteger(workflow.version) || workflow.version < 1)
+    errors.push('Invalid workflow version');
+  for (const edge of workflow.transitions) {
+    if (!keys.has(edge.from) || !keys.has(edge.to))
+      errors.push(`Orphan transition: ${edge.from} -> ${edge.to}`);
+    const pair = `${edge.from}\0${edge.to}`;
+    if (typeof edge.reasonRequired !== 'boolean')
+      errors.push(`Invalid reason requirement: ${edge.from} -> ${edge.to}`);
+    if (
+      edge.permission !== undefined &&
+      (typeof edge.permission !== 'string' ||
+        !/^[a-z][a-z0-9:._-]{0,99}$/.test(edge.permission))
+    )
+      errors.push(`Invalid permission: ${edge.from} -> ${edge.to}`);
+    if (pairs.has(pair))
+      errors.push(`Duplicate transition: ${edge.from} -> ${edge.to}`);
+    pairs.add(pair);
+    edges.set(edge.from, [...(edges.get(edge.from) ?? []), edge.to]);
+  }
+  const visiting = new Set<string>(),
+    visited = new Set<string>();
+  const visit = (key: string): void => {
+    if (visiting.has(key)) {
+      errors.push('Workflow transitions must be acyclic');
+      return;
+    }
+    if (visited.has(key)) return;
+    visiting.add(key);
+    for (const next of edges.get(key) ?? []) visit(next);
+    visiting.delete(key);
+    visited.add(key);
+  };
+  for (const key of keys) visit(key);
+  const start = 'pending';
+  const reachable = new Set<string>();
+  const walk = (key: string): void => {
+    if (reachable.has(key)) return;
+    reachable.add(key);
+    for (const next of edges.get(key) ?? []) walk(next);
+  };
+  if (start) walk(start);
+  for (const category of entryWorkflowCategories)
+    if (
+      !workflow.statuses.some(
+        (status) => status.category === category && reachable.has(status.key),
+      )
+    )
+      errors.push(`Unreachable category: ${category}`);
+  if ([...keys].some((key) => !reachable.has(key)))
+    errors.push('Workflow contains unreachable statuses');
+  return [...new Set(errors)];
+}
+export function assertWorkflowTransition(
+  workflow: EntryWorkflow,
+  from: string,
+  to: string,
+  reason: string,
+): void {
+  const edge = workflow.transitions.find(
+    (item) => item.from === from && item.to === to,
+  );
+  if (!edge)
+    throw new Error(`Invalid entry acceptance transition: ${from} -> ${to}`);
+  if (edge.reasonRequired && !reason.trim())
+    throw new Error('Transition reason is required');
+}
 export interface Person {
   id: string;
   organizationId: OrganizationId;
@@ -732,6 +930,15 @@ export interface EntryRepository {
     toStatus: string,
     actor: string,
     reason: string,
+    workflow?: {
+      statusCategory: EntryWorkflowCategory;
+      workflowRevisionId: string;
+      notification?: {
+        statusKey: string;
+        statusLabelDe: string;
+        statusLabelEn: string;
+      };
+    },
   ): Promise<Entry | null>;
   softDelete(
     ctx: RequestContext,
@@ -803,18 +1010,59 @@ export async function transitionEntry(
   to: string,
   actor: string,
   reason: string,
-  deps: { entries: EntryRepository },
+  deps: { entries: EntryRepository; workflows?: EntryWorkflowRepository },
 ): Promise<Entry | null> {
+  // Workflow role claims may further restrict entry writers, but must never
+  // grant tenant-wide write access to entries.
   if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
-  if (!actor.trim() || !reason.trim())
-    throw new Error('Transition actor and reason are required');
+  if (!actor.trim()) throw new Error('Transition actor is required');
   const current = await deps.entries.getById(ctx, id);
   if (!current) return null;
   const from =
     kind === 'verification'
       ? current.verificationStatus
       : current.acceptanceStatus;
-  assertEntryTransition(kind, from, to);
+  let statusCategory: EntryWorkflowCategory | undefined;
+  let workflowRevisionId: string | undefined;
+  let notification:
+    | { statusKey: string; statusLabelDe: string; statusLabelEn: string }
+    | undefined;
+  if (kind === 'acceptance' && deps.workflows) {
+    const pinned = await deps.workflows.getPinnedForEntry(ctx, id);
+    if (!pinned) return null;
+    assertWorkflowTransition(pinned.workflow, from, to, reason);
+    const workflowEdge = pinned.workflow.transitions.find(
+      (edge) => edge.from === from && edge.to === to,
+    )!;
+    if (
+      workflowEdge.roles?.length &&
+      !workflowEdge.roles.some((role) => ctx.permissions.has(`role:${role}`))
+    )
+      throw new Error('Forbidden');
+    if (
+      workflowEdge.permission &&
+      !ctx.permissions.has(workflowEdge.permission)
+    )
+      throw new Error('Forbidden');
+    statusCategory = pinned.workflow.statuses.find(
+      (status) => status.key === to,
+    )?.category;
+    if (!statusCategory) throw new Error(`Unknown entry status: ${to}`);
+    workflowRevisionId = pinned.id;
+    if (workflowEdge.notify) {
+      const targetStatus = pinned.workflow.statuses.find(
+        (status) => status.key === to,
+      )!;
+      notification = {
+        statusKey: targetStatus.key,
+        statusLabelDe: targetStatus.labels.de,
+        statusLabelEn: targetStatus.labels.en,
+      };
+    }
+  } else {
+    assertEntryTransition(kind, from, to);
+    if (!reason.trim()) throw new Error('Transition reason is required');
+  }
   return deps.entries.transition(
     ctx,
     id,
@@ -823,6 +1071,13 @@ export async function transitionEntry(
     to,
     actor.trim(),
     reason.trim(),
+    statusCategory
+      ? {
+          statusCategory,
+          workflowRevisionId: workflowRevisionId!,
+          ...(notification ? { notification } : {}),
+        }
+      : undefined,
   );
 }
 

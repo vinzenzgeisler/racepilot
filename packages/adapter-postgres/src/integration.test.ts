@@ -9,6 +9,8 @@ import {
   resolveEventModuleAccess,
   setEventModule,
   setOrganizationModule,
+  defaultEntryWorkflow,
+  transitionEntry,
 } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
@@ -38,6 +40,7 @@ import {
   createInvoiceRepository,
   createPublicRegistrationService,
   createRegistrationSettingsRepository,
+  createEntryWorkflowRepository,
   createEventConsentRepository,
   registrationSettingsAudit,
   eventConsentTermsAudit,
@@ -55,6 +58,128 @@ import {
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
+  it('persists organization and event workflow revisions with Cloud tenant isolation', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    const createdEventIds: string[] = [];
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          slug: `workflow-${suffix}`,
+          name: 'Workflow',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [foreign] = await db
+        .insert(organizations)
+        .values({
+          slug: `workflow-foreign-${suffix}`,
+          name: 'Foreign',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [event] = await db
+        .insert(events)
+        .values({
+          organizationId: org!.id,
+          slug: 'event',
+          name: 'Event',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-02',
+        })
+        .returning();
+      createdEventIds.push(event!.id);
+      const [secondEvent] = await db
+        .insert(events)
+        .values({
+          organizationId: org!.id,
+          slug: 'second-event',
+          name: 'Second event',
+          startsOn: '2030-02-01',
+          endsOn: '2030-02-02',
+        })
+        .returning();
+      createdEventIds.push(secondEvent!.id);
+      const context = (id: string) =>
+        createRequestContext({
+          deploymentMode: 'cloud',
+          organizationId: organizationId(id),
+          permissions: new Set(),
+          capabilities: new Set(),
+          correlationId: 'workflow-test',
+        });
+      const repository = createEntryWorkflowRepository(db);
+      const orgWorkflow = { ...defaultEntryWorkflow, version: 1 };
+      const storedOrg = await repository.getOrganization(context(org!.id));
+      expect(storedOrg?.workflow.statuses.map((s) => s.key)).toContain(
+        'pending',
+      );
+      const updatedOrg = await repository.setOrganization(
+        context(org!.id),
+        orgWorkflow,
+        'test-admin',
+        'organization change',
+      );
+      expect(updatedOrg.version).toBe(2);
+      const effective = await repository.getEffective(
+        context(org!.id),
+        event!.id,
+      );
+      expect(effective?.eventId).toBe(event!.id);
+      const customEventWorkflow = {
+        ...orgWorkflow,
+        statuses: orgWorkflow.statuses.map((status) =>
+          status.key === 'pending'
+            ? { ...status, labels: { ...status.labels, en: 'Custom pending' } }
+            : status,
+        ),
+      };
+      const override = await repository.setEvent(
+        context(org!.id),
+        event!.id,
+        customEventWorkflow,
+        'test-admin',
+        'event override',
+      );
+      expect(override?.version).toBe(2);
+      const siblingWorkflow = await repository.getEffective(
+        context(org!.id),
+        secondEvent!.id,
+      );
+      expect(
+        siblingWorkflow?.workflow.statuses.find(
+          (status) => status.key === 'pending',
+        )?.labels.en,
+      ).not.toBe('Custom pending');
+      expect(
+        await repository.getEffective(context(foreign!.id), event!.id),
+      ).toBeNull();
+      expect(
+        await repository.setEvent(
+          context(foreign!.id),
+          event!.id,
+          orgWorkflow,
+          'foreign-admin',
+          'forbidden',
+        ),
+      ).toBeNull();
+    } finally {
+      if (createdEventIds.length)
+        await db.delete(events).where(inArray(events.id, createdEventIds));
+      await db
+        .delete(organizations)
+        .where(
+          inArray(organizations.slug, [
+            `workflow-${suffix}`,
+            `workflow-foreign-${suffix}`,
+          ]),
+        );
+      await pool.end();
+    }
+  });
   it('keeps identities issuer-scoped, bootstraps admin idempotently, and revokes disabled membership', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();
@@ -512,7 +637,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       const ctxA = {
         deploymentMode: 'community' as const,
         organizationId: organizationId(orgA),
-        permissions: new Set<string>(),
+        permissions: new Set<string>(['entry:write']),
         capabilities: new Set<string>(),
         correlationId: suffix,
       };
@@ -681,6 +806,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         vehicleId: string,
         groupId: string,
         clsId: string,
+        startNumber = 'A-01',
       ) =>
         db
           .insert(entries)
@@ -691,7 +817,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
             registrationGroupId: groupId,
             driverPersonId: personId,
             vehicleId,
-            requestedStartNumber: 'A-01',
+            requestedStartNumber: startNumber,
           })
           .returning();
       const [entryA] = await attempted(
@@ -755,6 +881,30 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         .where(eq(entries.id, foreignEntryId!));
       expect(
         await createEntryRepository(db).getById(ctxA, foreignEntryId!),
+      ).toBeNull();
+      const foreignScopeRepository = createEntryRepository(db);
+      expect(
+        await foreignScopeRepository.listAdmin!(ctxA, {
+          page: 1,
+          pageSize: 100,
+          eventId: eventB!.id,
+          sort: 'createdAt',
+          direction: 'desc',
+        }),
+      ).toMatchObject({ items: [], total: 0 });
+      expect(
+        await transitionEntry(
+          ctxA,
+          foreignEntryId!,
+          'acceptance',
+          'accepted',
+          'admin',
+          'cross-tenant attempt',
+          {
+            entries: foreignScopeRepository,
+            workflows: createEntryWorkflowRepository(db),
+          },
+        ),
       ).toBeNull();
 
       const adminEntries = createEntryRepository(db);
@@ -868,7 +1018,164 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         actor: 'admin',
         reason: 'documents checked',
       });
+      const workflows = createEntryWorkflowRepository(db);
+      const beforeWorkflow = await workflows.getPinnedForEntry(
+        ctxA,
+        entryA!.id,
+      );
+      expect(beforeWorkflow).not.toBeNull();
+      const customWorkflow = {
+        ...defaultEntryWorkflow,
+        statuses: [
+          ...defaultEntryWorkflow.statuses,
+          {
+            key: 'documents_missing',
+            labels: { de: 'Unterlagen fehlen', en: 'Documents missing' },
+            color: '#ca8a04',
+            category: 'pending' as const,
+          },
+        ],
+        transitions: [
+          ...defaultEntryWorkflow.transitions,
+          {
+            from: 'pending',
+            to: 'documents_missing',
+            reasonRequired: true,
+            notify: true,
+          },
+        ],
+      };
+      const activeRevision = await workflows.setEvent(
+        ctxA,
+        eventA!.id,
+        customWorkflow,
+        'admin',
+        'Enable documents status',
+      );
+      const [entryAfterChange] = await attempted(
+        personA!.id,
+        vehicleA!.id,
+        groupA!.id,
+        classA!.id,
+        'A-02',
+      );
+      const oldPinned = await workflows.getPinnedForEntry(ctxA, entryA!.id);
+      const newPinned = await workflows.getPinnedForEntry(
+        ctxA,
+        entryAfterChange!.id,
+      );
+      expect(entryAfterChange?.acceptanceStatus).toBe('pending');
+      expect(newPinned?.id).toBe(activeRevision?.id);
+      expect(oldPinned?.id).toBe(beforeWorkflow!.id);
+      expect(newPinned?.id).not.toBe(beforeWorkflow!.id);
+      expect(oldPinned?.workflow.statuses.map(({ key }) => key)).not.toContain(
+        'documents_missing',
+      );
+      expect(newPinned?.workflow.statuses.map(({ key }) => key)).toContain(
+        'documents_missing',
+      );
+      await expect(
+        transitionEntry(
+          ctxA,
+          entryA!.id,
+          'acceptance',
+          'documents_missing',
+          'admin',
+          'missing',
+          { entries: createEntryRepository(db), workflows },
+        ),
+      ).rejects.toThrow();
+      await expect(
+        transitionEntry(
+          ctxA,
+          entryAfterChange!.id,
+          'acceptance',
+          'documents_missing',
+          '',
+          'missing',
+          { entries: createEntryRepository(db), workflows },
+        ),
+      ).rejects.toThrow(/required/);
+      expect(
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, orgA!)),
+      ).toHaveLength(0);
+      await db
+        .update(people)
+        .set({ email: `driver-${suffix}@example.test` })
+        .where(eq(people.id, personA!.id));
+      await db
+        .update(registrationGroups)
+        .set({ contactEmail: null })
+        .where(eq(registrationGroups.id, groupA!.id));
+      const transitionedCustom = await transitionEntry(
+        ctxA,
+        entryAfterChange!.id,
+        'acceptance',
+        'documents_missing',
+        'admin',
+        'request documents',
+        { entries: createEntryRepository(db), workflows },
+      );
+      expect(transitionedCustom?.acceptanceStatus).toBe('documents_missing');
+      const customAudit = await db
+        .select()
+        .from(entryAuditEvents)
+        .where(eq(entryAuditEvents.entryId, entryAfterChange!.id));
+      expect(customAudit[0]).toMatchObject({
+        toStatus: 'documents_missing',
+        statusCategory: 'pending',
+        workflowRevisionId: newPinned!.id,
+      });
+      const statusMails = await db
+        .select()
+        .from(emailOutbox)
+        .where(eq(emailOutbox.organizationId, orgA!));
+      expect(statusMails).toHaveLength(1);
+      expect(statusMails[0]).toMatchObject({
+        eventId: eventA!.id,
+        templateKey: 'status-change',
+        recipient: `driver-${suffix}@example.test`,
+        variables: {
+          statusKey: 'documents_missing',
+          statusLabelDe: 'Unterlagen fehlen',
+          statusLabelEn: 'Documents missing',
+        },
+      });
+      await expect(
+        transitionEntry(
+          ctxB,
+          entryAfterChange!.id,
+          'acceptance',
+          'documents_missing',
+          'foreign',
+          'request documents',
+          { entries: createEntryRepository(db), workflows },
+        ),
+      ).resolves.toBeNull();
+      await expect(
+        transitionEntry(
+          ctxA,
+          entryAfterChange!.id,
+          'acceptance',
+          'documents_missing',
+          'admin',
+          'request documents',
+          { entries: createEntryRepository(db), workflows },
+        ),
+      ).rejects.toThrow(/Invalid entry acceptance transition/);
+      const afterDuplicate = await db
+        .select()
+        .from(emailOutbox)
+        .where(eq(emailOutbox.organizationId, orgA!));
+      expect(afterDuplicate).toHaveLength(1);
     } finally {
+      if (orgA)
+        await db
+          .delete(emailOutbox)
+          .where(eq(emailOutbox.organizationId, orgA));
       await db.delete(events).where(eq(events.slug, `event-${suffix}`));
       if (orgA)
         await db.delete(organizations).where(eq(organizations.id, orgA));
