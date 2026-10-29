@@ -5,13 +5,19 @@ import { z } from 'zod';
 import { installModules, type ModuleApiDeps } from './modules.js';
 import { resolveOrganizationModuleCapabilities } from '@racepilot/core';
 export * from './modules.js';
-import { mailConfigSchema, validateMailConfig } from '@racepilot/contracts';
+import {
+  mailConfigSchema,
+  validateMailConfig,
+  OrganizationPublicRegistrationRateLimitOverridesSchema,
+  EventPublicRegistrationRateLimitOverridesSchema,
+} from '@racepilot/contracts';
 import {
   compileTrustedProxyList,
   resolveClientIdentity,
   type RegistrationRateLimitScope,
   type RegistrationRateLimitResult,
   type RegistrationRateLimiter,
+  resolveRegistrationRateLimits,
 } from './rate-limit.js';
 export { createInMemoryRegistrationRateLimiter } from './rate-limit.js';
 import {
@@ -249,6 +255,54 @@ export interface ApiDeps {
     ): Promise<boolean>;
   };
   registrationRateLimiter?: RegistrationRateLimiter;
+  publicRegistrationRateLimits?: {
+    getOrganization(context: RequestContext): Promise<{
+      organizationLimit?: number;
+      eventLimit?: number;
+      windowSeconds?: number;
+    } | null>;
+    updateOrganization(
+      context: RequestContext,
+      settings: {
+        organizationLimit?: number | undefined;
+        eventLimit?: number | undefined;
+        windowSeconds?: number | undefined;
+      },
+      actor: string,
+    ): Promise<{
+      organizationLimit?: number;
+      eventLimit?: number;
+      windowSeconds?: number;
+    } | null>;
+    getEvent(
+      context: RequestContext,
+      eventId: string,
+    ): Promise<{
+      eventLimit?: number;
+      windowSeconds?: number;
+    } | null>;
+    updateEvent(
+      context: RequestContext,
+      eventId: string,
+      settings: {
+        eventLimit?: number | undefined;
+        windowSeconds?: number | undefined;
+      },
+      actor: string,
+    ): Promise<{ eventLimit?: number; windowSeconds?: number } | null>;
+    resolvePublicEvent(
+      context: RequestContext,
+      slug: string,
+    ): Promise<{
+      eventId: string;
+      organization: {
+        organizationLimit?: number;
+        eventLimit?: number;
+        windowSeconds?: number;
+      } | null;
+      event: { eventLimit?: number; windowSeconds?: number } | null;
+    } | null>;
+  };
   canonicalBaseUrl?: string;
   eventConsents?: {
     get(
@@ -314,6 +368,10 @@ export interface ApiDeps {
 export function createApp(deps: ApiDeps) {
   if (deps.publicRegistration && !deps.registrationRateLimiter)
     throw new Error('Public registration requires a configured rate limiter');
+  if (deps.publicRegistration && !deps.publicRegistrationRateLimits)
+    throw new Error(
+      'Public registration requires configured tenant rate-limit settings',
+    );
   if (
     deps.config.deploymentMode === 'cloud' &&
     deps.publicRegistration &&
@@ -332,10 +390,11 @@ export function createApp(deps: ApiDeps) {
   const trustedProxyMatcher = compileTrustedProxyList(
     deps.config.TRUSTED_PROXIES ?? [],
   );
-  const rateLimitWindowMs =
-    (deps.config.PUBLIC_REGISTRATION_WINDOW_SECONDS ?? 60) * 1000;
-  const organizationLimit = deps.config.PUBLIC_REGISTRATION_ORG_LIMIT ?? 60;
-  const eventLimit = deps.config.PUBLIC_REGISTRATION_EVENT_LIMIT ?? 8;
+  const rateLimitDefaults = {
+    organizationLimit: deps.config.PUBLIC_REGISTRATION_ORG_LIMIT ?? 60,
+    eventLimit: deps.config.PUBLIC_REGISTRATION_EVENT_LIMIT ?? 8,
+    windowSeconds: deps.config.PUBLIC_REGISTRATION_WINDOW_SECONDS ?? 60,
+  };
   const clientIdentityFor = (context: {
     env: unknown;
     req: { header(name: string): string | undefined };
@@ -1099,16 +1158,31 @@ export function createApp(deps: ApiDeps) {
       )
         return c.json({ error: 'Registration unavailable' }, 404);
       const eventSlug = c.req.param('slug');
+      let configuredRateLimits;
+      try {
+        configuredRateLimits =
+          await deps.publicRegistrationRateLimits!.resolvePublicEvent(
+            context,
+            eventSlug,
+          );
+      } catch {
+        return c.json({ error: 'Registration unavailable' }, 503);
+      }
+      if (!configuredRateLimits)
+        return c.json({ error: 'Registration unavailable' }, 404);
+      const effectiveRateLimits = resolveRegistrationRateLimits(
+        rateLimitDefaults,
+        configuredRateLimits.organization,
+        configuredRateLimits.event,
+      );
       const budget = await consumeRegistrationBudget(c, [
         {
           key: `organization:${orgId}`,
-          limit: organizationLimit,
-          windowMs: rateLimitWindowMs,
+          ...effectiveRateLimits.organization,
         },
         {
-          key: `event:${orgId}:${eventSlug}`,
-          limit: eventLimit,
-          windowMs: rateLimitWindowMs,
+          key: `event:${orgId}:${configuredRateLimits.eventId}`,
+          ...effectiveRateLimits.event,
         },
       ]);
       if (budget.unavailable)
@@ -1165,6 +1239,90 @@ export function createApp(deps: ApiDeps) {
       hash: z.string().regex(/^[a-f0-9]{64}$/),
     })
     .strict();
+  app.get('/admin/organization/public-registration-rate-limits', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.publicRegistrationRateLimits)
+      return c.json({ error: 'Not found' }, 404);
+    const settings =
+      await deps.publicRegistrationRateLimits.getOrganization(context);
+    return c.json(settings ?? {});
+  });
+  app.put('/admin/organization/public-registration-rate-limits', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:update'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.publicRegistrationRateLimits)
+      return c.json({ error: 'Not found' }, 404);
+    const parsed =
+      OrganizationPublicRegistrationRateLimitOverridesSchema.safeParse(
+        await c.req.json().catch(() => null),
+      );
+    if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : context.correlationId;
+    return c.json(
+      (await deps.publicRegistrationRateLimits.updateOrganization(
+        context,
+        parsed.data,
+        actor,
+      )) ?? {},
+    );
+  });
+  app.get(
+    '/admin/events/:eventId/public-registration-rate-limits',
+    async (c) => {
+      const context = await resolveMemberContext(c.req.raw);
+      if (!context) return c.json({ error: 'Unauthorized' }, 401);
+      if (!context.permissions.has('event:read'))
+        return c.json({ error: 'Forbidden' }, 403);
+      if (!deps.publicRegistrationRateLimits)
+        return c.json({ error: 'Not found' }, 404);
+      const eventId = c.req.param('eventId');
+      if (!z.string().uuid().safeParse(eventId).success)
+        return c.json({ error: 'Not found' }, 404);
+      if (!(await deps.events.getById(context, eventId)))
+        return c.json({ error: 'Not found' }, 404);
+      return c.json(
+        (await deps.publicRegistrationRateLimits.getEvent(context, eventId)) ??
+          {},
+      );
+    },
+  );
+  app.put(
+    '/admin/events/:eventId/public-registration-rate-limits',
+    async (c) => {
+      const context = await resolveMemberContext(c.req.raw);
+      if (!context) return c.json({ error: 'Unauthorized' }, 401);
+      if (!context.permissions.has('event:write'))
+        return c.json({ error: 'Forbidden' }, 403);
+      if (!deps.publicRegistrationRateLimits)
+        return c.json({ error: 'Not found' }, 404);
+      const eventId = c.req.param('eventId');
+      if (!z.string().uuid().safeParse(eventId).success)
+        return c.json({ error: 'Not found' }, 404);
+      const parsed = EventPublicRegistrationRateLimitOverridesSchema.safeParse(
+        await c.req.json().catch(() => null),
+      );
+      if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+      if (!(await deps.events.getById(context, eventId)))
+        return c.json({ error: 'Not found' }, 404);
+      const actor = context.subject
+        ? `${context.subject.issuer}|${context.subject.subject}`
+        : context.correlationId;
+      const result = await deps.publicRegistrationRateLimits.updateEvent(
+        context,
+        eventId,
+        parsed.data,
+        actor,
+      );
+      return c.json(result ?? {});
+    },
+  );
   app.get('/admin/events/:eventId/consents', async (c) => {
     const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);

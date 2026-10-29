@@ -4,7 +4,9 @@ import { sql } from 'drizzle-orm';
 import {
   createDatabase,
   createPostgresRegistrationRateLimiter,
+  createPublicRegistrationRateLimitSettingsRepository,
 } from './index.js';
+import { createRequestContext, organizationId } from '@racepilot/core';
 
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 
@@ -100,6 +102,101 @@ describe.skipIf(!url)('PostgreSQL public registration rate limiter', () => {
         firstConnection.pool.end(),
         secondConnection.pool.end(),
       ]);
+    }
+  });
+
+  it('persists tenant-scoped organization and event overrides with independent fallback', async () => {
+    const connection = await createDatabase(url!);
+    const orgA = randomUUID();
+    const orgB = randomUUID();
+    const eventA1 = randomUUID();
+    const eventA2 = randomUUID();
+    const eventB1 = randomUUID();
+    const contextA = createRequestContext({
+      deploymentMode: 'cloud',
+      organizationId: organizationId(orgA),
+      permissions: new Set(),
+      capabilities: new Set(),
+      correlationId: randomUUID(),
+    });
+    const contextB = createRequestContext({
+      deploymentMode: 'cloud',
+      organizationId: organizationId(orgB),
+      permissions: new Set(),
+      capabilities: new Set(),
+      correlationId: randomUUID(),
+    });
+    const settings = createPublicRegistrationRateLimitSettingsRepository(
+      connection.db,
+    );
+    try {
+      await connection.db.execute(sql`
+        insert into organization (id, slug, name, timezone, locale)
+        values (${orgA}, ${`rate-${orgA}`}, 'Rate test A', 'UTC', 'en'),
+               (${orgB}, ${`rate-${orgB}`}, 'Rate test B', 'UTC', 'en')
+      `);
+      await connection.db.execute(sql`
+        insert into event (id, organization_id, slug, name, starts_on, ends_on)
+        values (${eventA1}, ${orgA}, 'first', 'First', '2026-01-01', '2026-01-02'),
+               (${eventA2}, ${orgA}, 'second', 'Second', '2026-01-01', '2026-01-02'),
+               (${eventB1}, ${orgB}, 'first', 'First', '2026-01-01', '2026-01-02')
+      `);
+      await settings.updateOrganization(
+        contextA,
+        { organizationLimit: 20, eventLimit: 10, windowSeconds: 30 },
+        'test|admin-a',
+      );
+      await settings.updateEvent(
+        contextA,
+        eventA1,
+        { eventLimit: 2, windowSeconds: 5 },
+        'test|admin-a',
+      );
+      expect(await settings.getOrganization(contextA)).toEqual({
+        organizationLimit: 20,
+        eventLimit: 10,
+        windowSeconds: 30,
+      });
+      expect(await settings.resolvePublicEvent(contextA, 'first')).toEqual({
+        eventId: eventA1,
+        organization: {
+          organizationLimit: 20,
+          eventLimit: 10,
+          windowSeconds: 30,
+        },
+        event: { eventLimit: 2, windowSeconds: 5 },
+      });
+      expect(await settings.resolvePublicEvent(contextA, 'second')).toEqual({
+        eventId: eventA2,
+        organization: {
+          organizationLimit: 20,
+          eventLimit: 10,
+          windowSeconds: 30,
+        },
+        event: null,
+      });
+      expect(await settings.resolvePublicEvent(contextB, 'first')).toEqual({
+        eventId: eventB1,
+        organization: null,
+        event: null,
+      });
+      expect(await settings.getEvent(contextA, eventB1)).toBeNull();
+      expect(
+        await settings.updateEvent(
+          contextA,
+          eventB1,
+          { eventLimit: 1 },
+          'test|admin-a',
+        ),
+      ).toBeNull();
+    } finally {
+      await connection.db.execute(sql`
+        delete from event where organization_id in (${orgA}, ${orgB})
+      `);
+      await connection.db.execute(sql`
+        delete from organization where id in (${orgA}, ${orgB})
+      `);
+      await connection.pool.end();
     }
   });
 });

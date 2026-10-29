@@ -518,6 +518,26 @@
       ]
     },
     {
+      "id": "public-registration-rate-limit-overrides",
+      "kind": "config",
+      "tenantKey": "authenticated organizationId; event overrides use organizationId + eventId",
+      "isolation": "Organization/event overrides are stored separately, the event foreign key is composite and tenant-scoped, management requires organization:update or event:write, requests are range-validated, changes are actor-audited, and public resolution uses route slug only beneath the resolved tenant.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "resolves rate overrides by trusted organization/event, with event > organization > defaults"
+        },
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "validates and tenant-scopes the rate-override management endpoints"
+        },
+        {
+          "file": "packages/adapter-postgres/src/rate-limit.integration.test.ts",
+          "name": "persists tenant-scoped organization and event overrides with independent fallback"
+        }
+      ]
+    },
+    {
       "id": "registration-rate-limiter",
       "kind": "config",
       "tenantKey": "connection-derived client identity + server-resolved organizationId + event",

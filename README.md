@@ -74,9 +74,13 @@ Local development PostgreSQL is available through `docker compose -f compose.dev
 
 Public registration is rate-limited through PostgreSQL so multiple API processes
 share the same budgets. Defaults are 60 requests/minute per client and organization
-and 8 requests/minute per client, organization, and event. Configure these with
-`PUBLIC_REGISTRATION_ORG_LIMIT`, `PUBLIC_REGISTRATION_EVENT_LIMIT`, and
-`PUBLIC_REGISTRATION_WINDOW_SECONDS`. Direct connection addresses are used by
+and 8 requests/minute per client, organization, and event. Configure global
+defaults with `PUBLIC_REGISTRATION_ORG_LIMIT`, `PUBLIC_REGISTRATION_EVENT_LIMIT`,
+and `PUBLIC_REGISTRATION_WINDOW_SECONDS`. Authorized organization/event managers
+can set audited tenant-scoped overrides via the management API; event values take
+precedence over organization overrides, which take precedence over these defaults.
+See the [override management contract](docs/architecture/public-registration.md#rate-limit-overrides).
+Direct connection addresses are used by
 default; configure `TRUSTED_PROXIES` with a comma-separated list of proxy IPs/CIDRs
 only when the API is reachable exclusively through those proxies and they append
 the actual upstream address to `X-Forwarded-For`. Other client-supplied address

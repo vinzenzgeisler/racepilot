@@ -23,6 +23,7 @@ import {
   createModuleActivationRepository,
   createTimingRepository,
   createPostgresRegistrationRateLimiter,
+  createPublicRegistrationRateLimitSettingsRepository,
 } from '@racepilot/adapter-postgres';
 import { createModuleRegistry } from '@racepilot/core';
 import { timingModule } from './timing-module.js';
@@ -104,6 +105,8 @@ serve({
       ? {
           publicRegistration,
           registrationRateLimiter: createPostgresRegistrationRateLimiter(db),
+          publicRegistrationRateLimits:
+            createPublicRegistrationRateLimitSettingsRepository(db),
         }
       : {}),
     ...(config.CANONICAL_BASE_URL

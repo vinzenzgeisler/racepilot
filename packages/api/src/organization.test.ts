@@ -11,6 +11,7 @@ import {
   getEvent,
   organizationId,
 } from '@racepilot/core';
+import { resolveRegistrationRateLimits } from './rate-limit.js';
 import { readFileSync } from 'node:fs';
 const config = {
   deploymentMode: 'community' as const,
@@ -38,6 +39,34 @@ function deps(): ApiDeps {
     events: {
       listByOrganization: async () => [],
       getById: async () => null,
+    },
+    publicRegistrationRateLimits: {
+      getOrganization: async () => null,
+      updateOrganization: async (_context, settings) => ({
+        ...(settings.organizationLimit !== undefined
+          ? { organizationLimit: settings.organizationLimit }
+          : {}),
+        ...(settings.eventLimit !== undefined
+          ? { eventLimit: settings.eventLimit }
+          : {}),
+        ...(settings.windowSeconds !== undefined
+          ? { windowSeconds: settings.windowSeconds }
+          : {}),
+      }),
+      getEvent: async () => null,
+      updateEvent: async (_context, _eventId, settings) => ({
+        ...(settings.eventLimit !== undefined
+          ? { eventLimit: settings.eventLimit }
+          : {}),
+        ...(settings.windowSeconds !== undefined
+          ? { windowSeconds: settings.windowSeconds }
+          : {}),
+      }),
+      resolvePublicEvent: async (_context, slug) => ({
+        eventId: slug,
+        organization: null,
+        event: null,
+      }),
     },
     authenticator: {
       authenticate: async () => ({
@@ -554,6 +583,204 @@ describe('registration administration and public endpoints', () => {
     expect(
       (await submit(firstApp, config.organizationId, 'event', clientA)).status,
     ).toBe(202);
+  });
+
+  it('resolves rate overrides by trusted organization/event, with event > organization > defaults', async () => {
+    const defaults = {
+      organizationLimit: 60,
+      eventLimit: 8,
+      windowSeconds: 60,
+    };
+    const orgOverrides = {
+      organizationLimit: 21,
+      eventLimit: 11,
+      windowSeconds: 31,
+    };
+    const eventOverrides = { eventLimit: 3, windowSeconds: 9 };
+    expect(
+      resolveRegistrationRateLimits(defaults, orgOverrides, eventOverrides),
+    ).toEqual({
+      organization: { limit: 21, windowMs: 31_000 },
+      event: { limit: 3, windowMs: 9_000 },
+    });
+    expect(resolveRegistrationRateLimits(defaults, orgOverrides, null)).toEqual(
+      {
+        organization: { limit: 21, windowMs: 31_000 },
+        event: { limit: 11, windowMs: 31_000 },
+      },
+    );
+    expect(resolveRegistrationRateLimits(defaults, null, null)).toEqual({
+      organization: { limit: 60, windowMs: 60_000 },
+      event: { limit: 8, windowMs: 60_000 },
+    });
+
+    const seen: Array<{
+      organizationId: string;
+      scopes: Array<{ key: string; limit: number; windowMs: number }>;
+    }> = [];
+    const firstOrg = deps();
+    firstOrg.publicRegistration = {
+      getForm: async () => null,
+      submit: async () => ({}),
+      verify: async () => false,
+    };
+    firstOrg.registrationRateLimiter = {
+      consume: async (_client, scopes) => {
+        seen.push({
+          organizationId: scopes[0]!.key.slice('organization:'.length),
+          scopes: scopes.map(({ key, limit, windowMs }) => ({
+            key,
+            limit,
+            windowMs,
+          })),
+        });
+        return { allowed: true, retryAfterMs: 0 };
+      },
+    };
+    firstOrg.publicRegistrationRateLimits = {
+      ...firstOrg.publicRegistrationRateLimits!,
+      resolvePublicEvent: async (context, slug) => ({
+        eventId: slug,
+        organization:
+          context.organizationId === config.organizationId
+            ? orgOverrides
+            : null,
+        event:
+          context.organizationId === config.organizationId && slug === 'one'
+            ? eventOverrides
+            : null,
+      }),
+    };
+    const firstApp = createApp(firstOrg);
+    const secondOrgId = '10000000-0000-4000-8000-000000000002';
+    const secondOrg = deps();
+    secondOrg.config = { ...config, organizationId: secondOrgId };
+    secondOrg.publicRegistration = firstOrg.publicRegistration;
+    secondOrg.registrationRateLimiter = firstOrg.registrationRateLimiter;
+    secondOrg.publicRegistrationRateLimits =
+      firstOrg.publicRegistrationRateLimits;
+    const secondApp = createApp(secondOrg);
+    const request = (
+      app: ReturnType<typeof createApp>,
+      orgId: string,
+      slug: string,
+    ) =>
+      app.request(
+        `/public/organizations/${orgId}/events/${slug}/registration/submissions`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          // Client-supplied override-shaped data is not part of the policy path.
+          body: JSON.stringify({ eventSlug: slug, rateLimit: { limit: 1 } }),
+        },
+        { incoming: { socket: { remoteAddress: '192.0.2.44' } } },
+      );
+    expect((await request(firstApp, config.organizationId, 'one')).status).toBe(
+      400,
+    );
+    expect((await request(firstApp, config.organizationId, 'two')).status).toBe(
+      400,
+    );
+    expect((await request(secondApp, secondOrgId, 'one')).status).toBe(400);
+    expect(seen).toEqual([
+      {
+        organizationId: config.organizationId,
+        scopes: [
+          {
+            key: `organization:${config.organizationId}`,
+            limit: 21,
+            windowMs: 31_000,
+          },
+          {
+            key: `event:${config.organizationId}:one`,
+            limit: 3,
+            windowMs: 9_000,
+          },
+        ],
+      },
+      {
+        organizationId: config.organizationId,
+        scopes: [
+          {
+            key: `organization:${config.organizationId}`,
+            limit: 21,
+            windowMs: 31_000,
+          },
+          {
+            key: `event:${config.organizationId}:two`,
+            limit: 11,
+            windowMs: 31_000,
+          },
+        ],
+      },
+      {
+        organizationId: secondOrgId,
+        scopes: [
+          {
+            key: `organization:${secondOrgId}`,
+            limit: 60,
+            windowMs: 60_000,
+          },
+          {
+            key: `event:${secondOrgId}:one`,
+            limit: 8,
+            windowMs: 60_000,
+          },
+        ],
+      },
+    ]);
+  });
+
+  it('validates and tenant-scopes the rate-override management endpoints', async () => {
+    const api = deps();
+    api.memberships = {
+      resolvePermissions: async () =>
+        new Set([
+          'organization:read',
+          'organization:update',
+          'event:read',
+          'event:write',
+        ]),
+    };
+    const app = createApp(api);
+    const base = '/admin/organization/public-registration-rate-limits';
+    expect((await app.request(base)).status).toBe(200);
+    expect(
+      await app.request(base, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ organizationLimit: 0 }),
+      }),
+    ).toMatchObject({ status: 400 });
+    expect(
+      (
+        await app.request(
+          `/admin/events/${foreignEventId}/public-registration-rate-limits`,
+          {
+            method: 'PUT',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ eventLimit: 100_001 }),
+          },
+        )
+      ).status,
+    ).toBe(400);
+    const valid = await app.request(base, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ organizationLimit: 24, eventLimit: 6 }),
+    });
+    expect(valid.status).toBe(200);
+    expect(await valid.json()).toEqual({
+      organizationLimit: 24,
+      eventLimit: 6,
+    });
+    expect(
+      (
+        await app.request(
+          `/admin/events/${foreignEventId}/public-registration-rate-limits`,
+        )
+      ).status,
+    ).toBe(404);
   });
 
   it('uses generic public verification responses and rate-limits by IP and event', async () => {

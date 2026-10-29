@@ -11,6 +11,41 @@ export type RegistrationRateLimitResult = {
   retryAfterMs: number;
 };
 
+export type OrganizationRateLimitOverrides = {
+  organizationLimit?: number;
+  eventLimit?: number;
+  windowSeconds?: number;
+};
+
+export type EventRateLimitOverrides = {
+  eventLimit?: number;
+  windowSeconds?: number;
+};
+
+export function resolveRegistrationRateLimits(
+  defaults: {
+    organizationLimit: number;
+    eventLimit: number;
+    windowSeconds: number;
+  },
+  organization: OrganizationRateLimitOverrides | null | undefined,
+  event: EventRateLimitOverrides | null | undefined,
+) {
+  const organizationWindow =
+    organization?.windowSeconds ?? defaults.windowSeconds;
+  return {
+    organization: {
+      limit: organization?.organizationLimit ?? defaults.organizationLimit,
+      windowMs: organizationWindow * 1000,
+    },
+    event: {
+      limit:
+        event?.eventLimit ?? organization?.eventLimit ?? defaults.eventLimit,
+      windowMs: (event?.windowSeconds ?? organizationWindow) * 1000,
+    },
+  };
+}
+
 export type RegistrationRateLimiter = {
   persistence?: 'process' | 'shared';
   consume(
