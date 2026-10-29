@@ -516,6 +516,158 @@ export async function verifyObjectStorageContract(
 export type EntryVerificationStatus = 'unverified' | 'verified';
 export type EntryAcceptanceStatus =
   'pending' | 'accepted' | 'rejected' | 'waitlisted' | 'withdrawn';
+export const entryWorkflowCategories = [
+  'pending',
+  'accepted',
+  'rejected',
+  'waitlisted',
+  'withdrawn',
+] as const;
+export type EntryWorkflowCategory = (typeof entryWorkflowCategories)[number];
+export interface EntryWorkflowStatus {
+  readonly key: string;
+  readonly labels: { readonly de: string; readonly en: string };
+  readonly color: string;
+  readonly category: EntryWorkflowCategory;
+}
+export interface EntryWorkflowTransition {
+  readonly from: string;
+  readonly to: string;
+  readonly reasonRequired: boolean;
+}
+export interface EntryWorkflow {
+  readonly version: number;
+  readonly statuses: readonly EntryWorkflowStatus[];
+  readonly transitions: readonly EntryWorkflowTransition[];
+}
+export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
+  {
+    version: 1,
+    statuses: [
+      {
+        key: 'pending',
+        labels: { de: 'Ausstehend', en: 'Pending' },
+        color: '#64748b',
+        category: 'pending',
+      },
+      {
+        key: 'accepted',
+        labels: { de: 'Angenommen', en: 'Accepted' },
+        color: '#15803d',
+        category: 'accepted',
+      },
+      {
+        key: 'rejected',
+        labels: { de: 'Abgelehnt', en: 'Rejected' },
+        color: '#b91c1c',
+        category: 'rejected',
+      },
+      {
+        key: 'waitlisted',
+        labels: { de: 'Warteliste', en: 'Waitlisted' },
+        color: '#a16207',
+        category: 'waitlisted',
+      },
+      {
+        key: 'withdrawn',
+        labels: { de: 'Zurückgezogen', en: 'Withdrawn' },
+        color: '#475569',
+        category: 'withdrawn',
+      },
+    ],
+    transitions: [
+      ...['accepted', 'rejected', 'waitlisted', 'withdrawn'].map((to) => ({
+        from: 'pending',
+        to,
+        reasonRequired: false,
+      })),
+      ...['accepted', 'rejected'].map((from) => ({
+        from,
+        to: 'withdrawn',
+        reasonRequired: false,
+      })),
+      { from: 'waitlisted', to: 'accepted', reasonRequired: false },
+      { from: 'waitlisted', to: 'rejected', reasonRequired: false },
+      { from: 'waitlisted', to: 'withdrawn', reasonRequired: false },
+    ],
+  },
+);
+export function validateEntryWorkflow(workflow: EntryWorkflow): string[] {
+  const errors: string[] = [],
+    keys = new Set<string>(),
+    edges = new Map<string, string[]>(),
+    pairs = new Set<string>();
+  for (const status of workflow.statuses) {
+    if (!/^[a-z][a-z0-9_-]{0,63}$/.test(status.key) || keys.has(status.key))
+      errors.push(`Invalid or duplicate status key: ${status.key}`);
+    keys.add(status.key);
+    if (!entryWorkflowCategories.includes(status.category))
+      errors.push(`Invalid category: ${status.category}`);
+    if (!/^#[0-9a-f]{6}$/i.test(status.color))
+      errors.push(`Invalid color: ${status.key}`);
+    if (!status.labels.de.trim() || !status.labels.en.trim())
+      errors.push(`Missing localized label: ${status.key}`);
+  }
+  if (!Number.isInteger(workflow.version) || workflow.version < 1)
+    errors.push('Invalid workflow version');
+  for (const edge of workflow.transitions) {
+    if (!keys.has(edge.from) || !keys.has(edge.to))
+      errors.push(`Orphan transition: ${edge.from} -> ${edge.to}`);
+    const pair = `${edge.from}\0${edge.to}`;
+    if (pairs.has(pair))
+      errors.push(`Duplicate transition: ${edge.from} -> ${edge.to}`);
+    pairs.add(pair);
+    edges.set(edge.from, [...(edges.get(edge.from) ?? []), edge.to]);
+  }
+  const visiting = new Set<string>(),
+    visited = new Set<string>();
+  const visit = (key: string): void => {
+    if (visiting.has(key)) {
+      errors.push('Workflow transitions must be acyclic');
+      return;
+    }
+    if (visited.has(key)) return;
+    visiting.add(key);
+    for (const next of edges.get(key) ?? []) visit(next);
+    visiting.delete(key);
+    visited.add(key);
+  };
+  for (const key of keys) visit(key);
+  const start = workflow.statuses.find(
+    (status) => status.category === 'pending',
+  )?.key;
+  const reachable = new Set<string>();
+  const walk = (key: string): void => {
+    if (reachable.has(key)) return;
+    reachable.add(key);
+    for (const next of edges.get(key) ?? []) walk(next);
+  };
+  if (start) walk(start);
+  for (const category of entryWorkflowCategories)
+    if (
+      !workflow.statuses.some(
+        (status) => status.category === category && reachable.has(status.key),
+      )
+    )
+      errors.push(`Unreachable category: ${category}`);
+  if ([...keys].some((key) => !reachable.has(key)))
+    errors.push('Workflow contains unreachable statuses');
+  return [...new Set(errors)];
+}
+export function assertWorkflowTransition(
+  workflow: EntryWorkflow,
+  from: string,
+  to: string,
+  reason: string,
+): void {
+  const edge = workflow.transitions.find(
+    (item) => item.from === from && item.to === to,
+  );
+  if (!edge)
+    throw new Error(`Invalid entry acceptance transition: ${from} -> ${to}`);
+  if (edge.reasonRequired && !reason.trim())
+    throw new Error('Transition reason is required');
+}
 export interface Person {
   id: string;
   organizationId: OrganizationId;

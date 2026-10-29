@@ -4,6 +4,9 @@ import {
   normalizeEmail,
   normalizeRequestedStartNumber,
   transitionEntry,
+  defaultEntryWorkflow,
+  validateEntryWorkflow,
+  assertWorkflowTransition,
   organizationId,
   type Entry,
   type RequestContext,
@@ -33,6 +36,63 @@ const entry: Entry = {
   deletionReason: null,
 };
 describe('entry domain rules', () => {
+  it('preserves the legacy acceptance workflow as the default', () => {
+    expect(validateEntryWorkflow(defaultEntryWorkflow)).toEqual([]);
+    expect(
+      defaultEntryWorkflow.transitions.map(({ from, to }) => `${from}->${to}`),
+    ).toEqual([
+      'pending->accepted',
+      'pending->rejected',
+      'pending->waitlisted',
+      'pending->withdrawn',
+      'accepted->withdrawn',
+      'rejected->withdrawn',
+      'waitlisted->accepted',
+      'waitlisted->rejected',
+      'waitlisted->withdrawn',
+    ]);
+  });
+  it('rejects forbidden transitions and enforces configured reasons', () => {
+    expect(() =>
+      assertWorkflowTransition(defaultEntryWorkflow, 'accepted', 'pending', ''),
+    ).toThrow();
+    const workflow = {
+      ...defaultEntryWorkflow,
+      transitions: defaultEntryWorkflow.transitions.map((edge) =>
+        edge.from === 'pending' && edge.to === 'accepted'
+          ? { ...edge, reasonRequired: true }
+          : edge,
+      ),
+    };
+    expect(() =>
+      assertWorkflowTransition(workflow, 'pending', 'accepted', ''),
+    ).toThrow(/reason/);
+    expect(() =>
+      assertWorkflowTransition(workflow, 'pending', 'accepted', 'reviewed'),
+    ).not.toThrow();
+  });
+  it('validates reachability, orphan edges, and cycles', () => {
+    const cycle = {
+      ...defaultEntryWorkflow,
+      transitions: [
+        ...defaultEntryWorkflow.transitions,
+        { from: 'accepted', to: 'pending', reasonRequired: false },
+      ],
+    };
+    expect(validateEntryWorkflow(cycle)).toContain(
+      'Workflow transitions must be acyclic',
+    );
+    const orphan = {
+      ...defaultEntryWorkflow,
+      transitions: [
+        ...defaultEntryWorkflow.transitions,
+        { from: 'missing', to: 'accepted', reasonRequired: false },
+      ],
+    };
+    expect(
+      validateEntryWorkflow(orphan).some((error) => error.includes('Orphan')),
+    ).toBe(true);
+  });
   it('allows only unverified to verified', () => {
     expect(() =>
       assertEntryTransition('verification', 'unverified', 'verified'),
