@@ -124,6 +124,7 @@ export const ModuleViewSchema = z
       .nullable(),
     organizationEnabled: z.boolean().optional(),
     config: z.unknown(),
+    configSchema: z.unknown(),
     stateVersion: z.number().int().nullable(),
     updatedAt: z.string().nullable(),
     updatedBy: z.string().nullable(),

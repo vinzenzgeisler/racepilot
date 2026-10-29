@@ -27,6 +27,11 @@ const item = {
   status: 'available',
   unavailableReason: null,
   config: { label: 'default' },
+  configSchema: {
+    type: 'object',
+    properties: { label: { type: 'string', title: 'Label' } },
+    required: ['label'],
+  },
   stateVersion: null,
   updatedAt: null,
   updatedBy: null,
@@ -34,6 +39,9 @@ const item = {
 
 describe('AdminModules', () => {
   it('activates, configures and confirms a data-preserving deactivation', async () => {
+    (
+      globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+    ).IS_REACT_ACT_ENVIRONMENT = true;
     const originalFetch = globalThis.fetch;
     let current: Record<string, unknown> = { ...item };
     const fetch = vi.fn(
@@ -47,7 +55,6 @@ describe('AdminModules', () => {
           };
           current = {
             ...current,
-            ...body,
             enabled: body.enabled ?? current.enabled,
             config: body.config ?? current.config,
           };
@@ -65,8 +72,19 @@ describe('AdminModules', () => {
     try {
       await act(async () => {
         root.render(<AdminModules />);
-        await new Promise((resolve) => setTimeout(resolve, 10));
       });
+      for (
+        let i = 0;
+        i < 50 &&
+        ![...container.querySelectorAll('button')].some(
+          (button) => button.textContent === 'Activate',
+        );
+        i++
+      ) {
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+      }
       await act(async () => {
         [...container.querySelectorAll('button')]
           .find((button) => button.textContent === 'Activate')
@@ -80,18 +98,38 @@ describe('AdminModules', () => {
             String(init.body).includes('"enabled":true'),
         ),
       ).toBe(true);
+      for (
+        let i = 0;
+        i < 50 &&
+        ![...container.querySelectorAll('button')].some(
+          (button) => button.textContent === 'Details',
+        );
+        i++
+      ) {
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+      }
       await act(async () => {
         [...container.querySelectorAll('button')]
           .find((button) => button.textContent === 'Details')
           ?.click();
-        await new Promise((resolve) => setTimeout(resolve, 10));
       });
-      const textarea = container.querySelector('textarea')!;
+      for (
+        let i = 0;
+        i < 50 && !container.querySelector('input[type="text"]');
+        i++
+      ) {
+        await act(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        });
+      }
+      const textarea = container.querySelector('input[type="text"]')!;
       await act(async () => {
         Object.getOwnPropertyDescriptor(
-          textarea.ownerDocument.defaultView!.HTMLTextAreaElement.prototype,
+          textarea.ownerDocument.defaultView!.HTMLInputElement.prototype,
           'value',
-        )?.set?.call(textarea, '{"label":"changed"}');
+        )?.set?.call(textarea, 'changed');
         textarea.dispatchEvent(new Event('input', { bubbles: true }));
         textarea.dispatchEvent(new Event('change', { bubbles: true }));
       });
@@ -124,8 +162,11 @@ describe('AdminModules', () => {
         ),
       ).toBe(true);
     } finally {
-      root.unmount();
+      act(() => root.unmount());
       globalThis.fetch = originalFetch;
+      (
+        globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
+      ).IS_REACT_ACT_ENVIRONMENT = false;
       vi.restoreAllMocks();
     }
   });

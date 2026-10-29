@@ -15,7 +15,8 @@ const words = {
     event: 'Event',
     activate: 'Aktivieren',
     disable: 'Deaktivieren',
-    configure: 'Konfiguration (JSON)',
+    configure: 'Konfiguration',
+    close: 'Schließen',
     save: 'Speichern',
     details: 'Details',
     unavailable: 'Nicht verfügbar',
@@ -35,7 +36,8 @@ const words = {
     event: 'Event',
     activate: 'Activate',
     disable: 'Disable',
-    configure: 'Configuration (JSON)',
+    configure: 'Configuration',
+    close: 'Close',
     save: 'Save',
     details: 'Details',
     unavailable: 'Unavailable',
@@ -72,7 +74,8 @@ export function AdminModules({
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState('');
   const [selected, setSelected] = useState<Module | null>(null);
-  const [config, setConfig] = useState('{}');
+  const [config, setConfig] = useState<unknown>({});
+  const [configErrors, setConfigErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const base =
@@ -139,9 +142,23 @@ export function AdminModules({
           expectedVersion: module.stateVersion ?? 0,
         }),
       });
-      if (!response.ok) throw new Error(await response.text());
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as {
+          issues?: Array<{ path: string; message: string }>;
+        } | null;
+        if (payload.config !== undefined && body?.issues) {
+          setConfigErrors(
+            Object.fromEntries(
+              body.issues.map((issue) => [issue.path, issue.message]),
+            ),
+          );
+          return;
+        }
+        throw new Error(String(response.status));
+      }
       await load();
       setSelected(null);
+      setConfigErrors({});
     } catch {
       setError(t.error);
     }
@@ -212,7 +229,8 @@ export function AdminModules({
                 type="button"
                 onClick={() => {
                   setSelected(module);
-                  setConfig(JSON.stringify(module.config, null, 2));
+                  setConfig(module.config);
+                  setConfigErrors({});
                 }}
               >
                 {t.details}
@@ -260,31 +278,196 @@ export function AdminModules({
           {selected.gallery.screenshots?.map((src) => (
             <img key={src} src={src} alt="" />
           ))}
-          <label>
-            {t.configure}
-            <textarea
+          <fieldset>
+            <legend>{t.configure}</legend>
+            <SchemaFields
+              schema={selected.configSchema}
               value={config}
-              onChange={(e) => setConfig(e.target.value)}
+              path=""
+              errors={configErrors}
+              onChange={(path, value) => {
+                setConfig((previous: unknown) =>
+                  updatePath(previous, path, value),
+                );
+                setConfigErrors((previous) => {
+                  const next = { ...previous };
+                  delete next[path];
+                  return next;
+                });
+              }}
             />
-          </label>
+          </fieldset>
           <button
             type="button"
-            onClick={() => {
-              try {
-                void change(selected, { config: JSON.parse(config) });
-              } catch {
-                setError(t.error);
-              }
-            }}
+            onClick={() => void change(selected, { config })}
           >
             {t.save}
           </button>
           <button type="button" onClick={() => setSelected(null)}>
-            Close
+            {t.close}
           </button>
         </section>
       )}
       {error && !loading && <p role="alert">{error}</p>}
     </section>
+  );
+}
+
+type JsonSchema = {
+  type?: string;
+  title?: string;
+  description?: string;
+  enum?: unknown[];
+  properties?: Record<string, JsonSchema>;
+  required?: string[];
+  items?: JsonSchema;
+};
+
+function updatePath(root: unknown, path: string, value: unknown): unknown {
+  const keys = path.split('.').filter(Boolean);
+  if (keys.length === 0) return value;
+  const current =
+    root && typeof root === 'object' && !Array.isArray(root)
+      ? (root as Record<string, unknown>)
+      : {};
+  const [key, ...rest] = keys;
+  return {
+    ...current,
+    [key!]: rest.length
+      ? updatePath(current[key!], rest.join('.'), value)
+      : value,
+  };
+}
+
+function SchemaFields({
+  schema: rawSchema,
+  value,
+  path,
+  errors,
+  onChange,
+}: {
+  schema: unknown;
+  value: unknown;
+  path: string;
+  errors: Record<string, string>;
+  onChange: (path: string, value: unknown) => void;
+}) {
+  const schema =
+    rawSchema && typeof rawSchema === 'object' ? (rawSchema as JsonSchema) : {};
+  const objectValue =
+    value && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  if (schema.type === 'object' && schema.properties) {
+    return (
+      <div>
+        {Object.entries(schema.properties).map(([key, child]) => {
+          const fieldPath = path ? `${path}.${key}` : key;
+          return (
+            <SchemaFields
+              key={fieldPath}
+              schema={child}
+              value={objectValue[key]}
+              path={fieldPath}
+              errors={errors}
+              onChange={onChange}
+            />
+          );
+        })}
+      </div>
+    );
+  }
+  const id = `module-config-${path || 'root'}`;
+  const label = schema.title ?? path.split('.').at(-1) ?? 'Configuration';
+  const error = errors[path];
+  const errorNode = error ? (
+    <span id={`${id}-error`} role="alert">
+      {error}
+    </span>
+  ) : null;
+  const common = {
+    id,
+    'aria-describedby': error ? `${id}-error` : undefined,
+    'aria-invalid': error ? true : undefined,
+  };
+  if (schema.enum)
+    return (
+      <label>
+        {label}
+        <select
+          {...common}
+          value={String(value ?? '')}
+          onChange={(e) => onChange(path, e.target.value)}
+        >
+          <option value="" />
+          {schema.enum.map((option) => (
+            <option key={String(option)} value={String(option)}>
+              {String(option)}
+            </option>
+          ))}
+        </select>
+        {errorNode}
+      </label>
+    );
+  if (schema.type === 'boolean')
+    return (
+      <label>
+        {label}
+        <input
+          {...common}
+          type="checkbox"
+          checked={Boolean(value)}
+          onChange={(e) => onChange(path, e.target.checked)}
+        />
+        {errorNode}
+      </label>
+    );
+  if (schema.type === 'string')
+    return (
+      <label>
+        {label}
+        <input
+          {...common}
+          type="text"
+          value={String(value ?? '')}
+          onChange={(e) => onChange(path, e.target.value)}
+        />
+        {errorNode}
+      </label>
+    );
+  if (schema.type === 'number' || schema.type === 'integer')
+    return (
+      <label>
+        {label}
+        <input
+          {...common}
+          type="number"
+          value={typeof value === 'number' ? value : ''}
+          onChange={(e) =>
+            onChange(
+              path,
+              e.target.value === '' ? undefined : Number(e.target.value),
+            )
+          }
+        />
+        {errorNode}
+      </label>
+    );
+  return (
+    <label>
+      {label}
+      <textarea
+        {...common}
+        value={JSON.stringify(value ?? {}, null, 2)}
+        onChange={(e) => {
+          try {
+            onChange(path, JSON.parse(e.target.value));
+          } catch {
+            /* Keep server-side validation authoritative. */
+          }
+        }}
+      />
+      {errorNode}
+    </label>
   );
 }
