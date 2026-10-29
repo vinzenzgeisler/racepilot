@@ -20,13 +20,16 @@ export function ParticipantStatus({
 }) {
   const [token] = useState(() => {
     const url = new URL(window.location.href);
-    const accessToken = url.searchParams.get('token');
+    const fragment = new URLSearchParams(url.hash.slice(1));
+    const accessToken = fragment.get('token');
     if (accessToken) {
+      fragment.delete('token');
+      const remainingFragment = fragment.toString();
       url.searchParams.delete('token');
       window.history.replaceState(
         window.history.state,
         '',
-        `${url.pathname}${url.search}${url.hash}`,
+        `${url.pathname}${url.search}${remainingFragment ? `#${remainingFragment}` : ''}`,
       );
     }
     return accessToken;

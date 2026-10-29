@@ -98,11 +98,12 @@ describe('mail outbox worker', () => {
         'participant-status-access',
         {
           recipientName: 'Sam',
-          accessUrl: 'https://example.test/registration/status?token=secret',
+          accessUrl:
+            'https://example.test/registration/status#token=mail-test-token',
         },
       );
       expect(template.text).toContain(
-        'https://example.test/registration/status?token=secret',
+        'https://example.test/registration/status#token=mail-test-token',
       );
       expect(template.html).toContain(
         locale === 'en' ? 'one-time use' : 'einmalig verwendbar',

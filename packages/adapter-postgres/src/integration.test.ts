@@ -1868,9 +1868,11 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           .where(eq(emailOutbox.organizationId, org!.id))
       ).find((row) => row.templateKey === 'participant-status-access')!;
       expect(firstAccessMail.recipient).toBe('family@example.test');
-      const firstStatusToken = new URL(
-        firstAccessMail.variables.accessUrl!,
-      ).searchParams.get('token')!;
+      const firstAccessUrl = new URL(firstAccessMail.variables.accessUrl!);
+      expect(firstAccessUrl.search).toBe('');
+      const firstStatusToken = new URLSearchParams(
+        firstAccessUrl.hash.slice(1),
+      ).get('token')!;
       await service.requestStatusAccess(
         ctx,
         event!.slug,
@@ -1901,7 +1903,11 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       expect(englishAccessMails).toHaveLength(2);
       const accessUrl = new URL(accessMail.variables.accessUrl!);
       expect(accessUrl.origin).toBe('https://racepilot.example.test');
-      const statusToken = accessUrl.searchParams.get('token')!;
+      expect(accessUrl.pathname).toBe('/registration/status');
+      expect(accessUrl.search).toBe('');
+      const statusToken = new URLSearchParams(accessUrl.hash.slice(1)).get(
+        'token',
+      )!;
       const storedAccess = await db
         .select()
         .from(participantStatusAccessTokens)

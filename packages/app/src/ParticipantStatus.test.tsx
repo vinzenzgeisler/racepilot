@@ -14,22 +14,28 @@ describe('participant status view', () => {
     window.history.replaceState(
       {},
       '',
-      '/registration/status?token=one-time-secret',
+      '/registration/status#token=one-time-secret',
     );
-    const fetch = vi.fn(async () => ({
-      json: async () => ({
-        statuses: [
-          {
-            eventName: 'Demo',
-            driverName: 'A. E.',
-            className: 'Touring',
-            statusKey: 'waitlisted',
-            label: 'Warteliste',
-            color: '#a16207',
-          },
-        ],
-      }),
-    }));
+    const fetch = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        void input;
+        void init;
+        return {
+          json: async () => ({
+            statuses: [
+              {
+                eventName: 'Demo',
+                driverName: 'A. E.',
+                className: 'Touring',
+                statusKey: 'waitlisted',
+                label: 'Warteliste',
+                color: '#a16207',
+              },
+            ],
+          }),
+        };
+      },
+    );
     vi.stubGlobal('fetch', fetch);
     const container = document.createElement('div');
     const root = createRoot(container);
@@ -47,6 +53,15 @@ describe('participant status view', () => {
       expect(container.textContent).toContain('waitlisted');
       expect(container.textContent).not.toContain('one-time-secret');
       expect(window.location.search).toBe('');
+      expect(window.location.hash).toBe('');
+      expect(fetch).toHaveBeenCalledWith(
+        '/public/registration/status/redeem',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ token: 'one-time-secret' }),
+        }),
+      );
+      expect(fetch.mock.calls[0]?.[0]).not.toContain('one-time-secret');
       expect(container.textContent).toContain('A. E.');
       expect(container.textContent).toContain('Touring');
     } finally {
@@ -58,10 +73,11 @@ describe('participant status view', () => {
     window.history.replaceState(
       { marker: true },
       '',
-      '/registration/status?token=one-time-secret&view=compact#status',
+      '/registration/status?view=compact#token=one-time-secret&status',
     );
     const fetch = vi.fn(async () => {
       expect(window.location.search).toBe('?view=compact');
+      expect(window.location.hash).toBe('#status=');
       throw new Error('network failure');
     });
     vi.stubGlobal('fetch', fetch);
@@ -78,6 +94,7 @@ describe('participant status view', () => {
         'invalid, expired, or already used',
       );
       expect(window.location.search).not.toContain('token');
+      expect(window.location.hash).toBe('#status=');
     } finally {
       root.unmount();
     }

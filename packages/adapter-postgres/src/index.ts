@@ -3662,10 +3662,8 @@ export function createPublicRegistrationService(
               ),
             )
             .limit(1);
-          const url = new URL(
-            `/registration/status?token=${encodeURIComponent(accessToken)}`,
-            canonicalBase,
-          ).toString();
+          const url = new URL('/registration/status', canonicalBase);
+          url.hash = new URLSearchParams({ token: accessToken }).toString();
           await enqueueMailOutbox(
             db,
             ctx.organizationId,
@@ -3678,7 +3676,7 @@ export function createPublicRegistrationService(
               recipient: lockedGroup.contact,
               idempotencyKey: `participant-status-access:${randomUUID()}`,
               variables: {
-                accessUrl: url,
+                accessUrl: url.toString(),
                 recipientName:
                   `${person?.firstName ?? ''} ${person?.lastName ?? ''}`.trim(),
               },
