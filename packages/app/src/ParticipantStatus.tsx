@@ -5,6 +5,8 @@ type Status = {
   statusKey: string;
   label: string;
   color: string;
+  driverName: string;
+  className: string;
 };
 
 export function ParticipantStatus({
@@ -16,9 +18,19 @@ export function ParticipantStatus({
   locale: 'de' | 'en';
   eventSlug?: string;
 }) {
-  const [token] = useState(() =>
-    new URLSearchParams(window.location.search).get('token'),
-  );
+  const [token] = useState(() => {
+    const url = new URL(window.location.href);
+    const accessToken = url.searchParams.get('token');
+    if (accessToken) {
+      url.searchParams.delete('token');
+      window.history.replaceState(
+        window.history.state,
+        '',
+        `${url.pathname}${url.search}${url.hash}`,
+      );
+    }
+    return accessToken;
+  });
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [statuses, setStatuses] = useState<Status[] | null>(null);
@@ -36,7 +48,6 @@ export function ParticipantStatus({
         if (!current) return;
         if (body.statuses) setStatuses(body.statuses);
         else setInvalid(true);
-        window.history.replaceState({}, '', window.location.pathname);
       })
       .catch(() => current && setInvalid(true));
     return () => {
@@ -67,7 +78,7 @@ export function ParticipantStatus({
           <ul>
             {statuses.map((status, index) => (
               <li key={`${status.eventName}:${index}`}>
-                {status.eventName}:{' '}
+                {status.eventName} — {status.driverName} ({status.className}):{' '}
                 <span style={{ color: status.color }}>{status.label}</span>{' '}
                 <small>({status.statusKey})</small>
               </li>

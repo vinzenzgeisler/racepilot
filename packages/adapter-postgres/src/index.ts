@@ -3722,11 +3722,14 @@ export function createPublicRegistrationService(
           .returning({ id: participantStatusAccessTokens.id });
         if (!consumed.length) return null;
         const result = await tx.execute(sql`
-          select e.id, ev.name as event_name, e.acceptance_status, e.workflow_revision_id,
-                 r.workflow
+          select ev.name as event_name, e.acceptance_status,
+                 concat_ws(' ', driver.first_name, left(driver.last_name, 1) || '.') as driver_name,
+                 ec.name as class_name, r.workflow
           from entry e
           join event ev on ev.organization_id=e.organization_id and ev.id=e.event_id
           join entry_workflow_revision r on r.organization_id=e.organization_id and r.id=e.workflow_revision_id
+          join person driver on driver.organization_id=e.organization_id and driver.id=e.driver_person_id
+          join event_class ec on ec.organization_id=e.organization_id and ec.event_id=e.event_id and ec.id=e.class_id
           where e.organization_id=${ctx.organizationId} and e.event_id=${access.eventId}
             and e.registration_group_id=${access.registrationGroupId} and e.deleted_at is null
           order by e.created_at, e.id`);
@@ -3735,6 +3738,8 @@ export function createPublicRegistrationService(
             rows: Array<{
               event_name: string;
               acceptance_status: string;
+              driver_name: string;
+              class_name: string;
               workflow: {
                 statuses: Array<{
                   key: string;
@@ -3751,6 +3756,8 @@ export function createPublicRegistrationService(
           );
           return {
             eventName: row.event_name,
+            driverName: row.driver_name,
+            className: row.class_name,
             statusKey: row.acceptance_status,
             label:
               status?.labels[access.locale as 'de' | 'en'] ??

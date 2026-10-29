@@ -218,6 +218,8 @@ export interface ApiDeps {
       statusKey: string;
       label: string;
       color: string;
+      driverName: string;
+      className: string;
     }> | null>;
   };
   registrationRateLimiter?: {
@@ -1123,6 +1125,8 @@ export function createApp(deps: ApiDeps) {
     },
   );
   app.post('/public/registration/status/redeem', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    c.header('Referrer-Policy', 'no-referrer');
     const generic = {
       error: 'This status link is invalid, expired, or already used.',
     };

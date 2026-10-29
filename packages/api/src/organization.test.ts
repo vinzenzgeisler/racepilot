@@ -377,6 +377,8 @@ describe('registration administration and public endpoints', () => {
           ? [
               {
                 eventName: 'Event',
+                driverName: 'A. Example',
+                className: 'Touring',
                 statusKey: 'pending',
                 label: 'Pending',
                 color: '#123456',
@@ -407,6 +409,8 @@ describe('registration administration and public endpoints', () => {
       '/public/registration/status/redeem?entryId=20000000-0000-4000-8000-000000000001',
       { method: 'POST', body: '{}' },
     );
+    expect(byEntryId.headers.get('cache-control')).toBe('no-store');
+    expect(byEntryId.headers.get('referrer-policy')).toBe('no-referrer');
     expect(await byEntryId.json()).toEqual({
       error: 'This status link is invalid, expired, or already used.',
     });
@@ -415,10 +419,14 @@ describe('registration administration and public endpoints', () => {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ token: 'a'.repeat(64) }),
     });
+    expect(redeemed.headers.get('cache-control')).toBe('no-store');
+    expect(redeemed.headers.get('referrer-policy')).toBe('no-referrer');
     expect(await redeemed.json()).toEqual({
       statuses: [
         {
           eventName: 'Event',
+          driverName: 'A. Example',
+          className: 'Touring',
           statusKey: 'pending',
           label: 'Pending',
           color: '#123456',

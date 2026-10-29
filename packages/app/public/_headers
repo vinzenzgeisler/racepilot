@@ -1,0 +1,6 @@
+/registration/status
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer
+/events/*/status
+  Cache-Control: no-store
+  Referrer-Policy: no-referrer

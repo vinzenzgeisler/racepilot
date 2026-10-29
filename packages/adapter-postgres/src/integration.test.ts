@@ -1912,7 +1912,10 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       expect(
         participantView?.every(
           (item) =>
-            item.statusKey === 'pending' && item.label === pinnedEnglishLabel,
+            item.statusKey === 'pending' &&
+            item.label === pinnedEnglishLabel &&
+            item.driverName.length > 0 &&
+            item.className.length > 0,
         ),
       ).toBe(true);
       expect(await service.redeemStatusAccess(ctx, statusToken)).toBeNull();
