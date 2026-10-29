@@ -3,6 +3,7 @@
 export const TIMING_RULE_VERSION = 1 as const;
 export type TimingScoringMethod = 'fastest-run' | 'sum' | 'target-deviation';
 export type TimingExclusion = 'DNF' | 'DNS' | 'DSQ';
+export type TimingCompletionPolicy = 'all-runs' | 'available-runs';
 
 export interface TimingRun {
   readonly run: number;
@@ -23,6 +24,8 @@ export interface TimingRule {
   readonly targetMs?: number;
   /** Number of configured runs included in the score. */
   readonly runCount: number;
+  /** Whether partial runs can be scored. */
+  readonly completionPolicy?: TimingCompletionPolicy;
 }
 export interface TimingRankedResult {
   readonly entryId: string;
@@ -54,6 +57,11 @@ export function calculateTimingResults(
     throw new Error(`Unsupported timing rule version: ${rule.version}`);
   if (!Number.isInteger(rule.runCount) || rule.runCount < 1)
     throw new Error('Invalid run count');
+  if (
+    rule.completionPolicy !== undefined &&
+    !['all-runs', 'available-runs'].includes(rule.completionPolicy)
+  )
+    throw new Error('Invalid completion policy');
   if (
     rule.method === 'target-deviation' &&
     (!Number.isFinite(rule.targetMs) || rule.targetMs! < 0)

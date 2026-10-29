@@ -13,7 +13,11 @@ import type {
 import { createApp } from './index.js';
 import { ModuleManifestSchema } from '@racepilot/contracts';
 import type { ModuleApiDeps } from './modules.js';
-import { timingModule, defaultTimingConfig } from './timing-module.js';
+import {
+  timingModule,
+  defaultTimingConfig,
+  TimingConfigSchema,
+} from './timing-module.js';
 import { installTimingRoutes, safeCSVCell } from './timing.js';
 
 const org = '10000000-0000-4000-8000-000000000001';
@@ -32,11 +36,16 @@ function build() {
   const measurements: TimingMeasurementRecord[] = [];
   const versions: TimingResultVersion[] = [];
   const entries = new Map(ids.map((id, i) => [id, names[i]!]));
+  const entryCategories = new Map(ids.map((id) => [id, 'accepted']));
   let next = 1;
   const repo: TimingRepository = {
     listEntries: async (ctx, eventId) =>
       ctx.organizationId === org && eventId === event
-        ? ids.map((entryId, i) => ({ entryId, startNumber: names[i]! }))
+        ? ids.map((entryId, i) => ({
+            entryId,
+            startNumber: names[i]!,
+            statusCategory: entryCategories.get(entryId) ?? null,
+          }))
         : [],
     resolveEntry: async (_ctx, _event, lookup) => {
       const found = lookup.entryId
@@ -172,7 +181,7 @@ function build() {
     },
     modules,
   });
-  return { app, activation, repo, measurements, versions };
+  return { app, activation, repo, measurements, versions, entryCategories };
 }
 const perms =
   'organization:read,organization:update,event:read,event:write,timing:record,timing:correct,timing:publish,timing:read';
@@ -223,6 +232,19 @@ describe('timing module backend', () => {
       entitlement: 'included',
     });
     expect(defaultTimingConfig.runStructure.runCount).toBeGreaterThan(0);
+    expect(
+      TimingConfigSchema.parse(defaultTimingConfig).eligibleEntryCategories,
+    ).toEqual(['accepted']);
+    expect(
+      TimingConfigSchema.safeParse({
+        ...defaultTimingConfig,
+        scoringRule: {
+          version: 1,
+          method: 'sum',
+          completionPolicy: 'available-runs',
+        },
+      }).success,
+    ).toBe(false);
   });
   it('keeps an event without the module unchanged and denies all timing actions', async () => {
     const { app, measurements } = build();
@@ -495,7 +517,137 @@ describe('timing module backend', () => {
     );
     expect(foreignOrg.status).toBe(404);
   });
-  it('includes registered starters without measurements as DNF in drafts, never as partial sum scores', async () => {
+  it('defaults eligibility to accepted workflow categories; pending/rejected/withdrawn entries are omitted', async () => {
+    const { app, entryCategories } = build();
+    await activate(app);
+    entryCategories.set(ids[1]!, 'pending');
+    entryCategories.set(ids[2]!, 'withdrawn');
+    const draft = await send(
+      app,
+      `/admin/events/${event}/modules/timing/results/drafts`,
+      'POST',
+      {},
+    );
+    expect(draft.status).toBe(201);
+    const results = (
+      (await draft.json()) as { results: { entryId: string; status: string }[] }
+    ).results;
+    expect(results.map((x) => x.entryId)).toEqual([ids[0]]);
+    expect(results[0]?.status).toBe('DNS');
+  });
+  it('scores fastest-run partial runs by default while zero runs are DNS; sum still requires all runs', async () => {
+    const { app } = build();
+    await activate(app);
+    await send(
+      app,
+      `/admin/events/${event}/modules/timing/measurements`,
+      'POST',
+      {
+        entryId: ids[0],
+        run: 1,
+        timeMs: 500,
+        source: 'manual',
+        recordedAt: '2026-10-29T10:00:00Z',
+      },
+    );
+    const fastest = await send(
+      app,
+      `/admin/events/${event}/modules/timing/results/drafts`,
+      'POST',
+      {},
+    );
+    const fastResults = (
+      (await fastest.json()) as {
+        results: { entryId: string; status: string; scoreMs: number | null }[];
+      }
+    ).results;
+    expect(fastResults.find((x) => x.entryId === ids[0])).toMatchObject({
+      status: 'classified',
+      scoreMs: 500,
+    });
+    expect(fastResults.filter((x) => x.status === 'DNS')).toHaveLength(2);
+    await send(app, `/admin/events/${event}/modules/timing`, 'PATCH', {
+      config: {
+        version: 1,
+        runStructure: { runCount: 3, label: 'Run' },
+        scoringRule: {
+          version: 1,
+          method: 'fastest-run',
+          completionPolicy: 'all-runs',
+        },
+      },
+    });
+    const strictFastest = await send(
+      app,
+      `/admin/events/${event}/modules/timing/results/drafts`,
+      'POST',
+      {},
+    );
+    const strictResults = (
+      (await strictFastest.json()) as {
+        results: { entryId: string; status: string }[];
+      }
+    ).results;
+    expect(strictResults.find((x) => x.entryId === ids[0])?.status).toBe('DNF');
+    await send(app, `/admin/events/${event}/modules/timing`, 'PATCH', {
+      config: {
+        version: 1,
+        runStructure: { runCount: 3, label: 'Run' },
+        scoringRule: { version: 1, method: 'sum' },
+      },
+    });
+    const sum = await send(
+      app,
+      `/admin/events/${event}/modules/timing/results/drafts`,
+      'POST',
+      {},
+    );
+    const sumResults = (
+      (await sum.json()) as {
+        results: { status: string; scoreMs: number | null }[];
+      }
+    ).results;
+    expect(
+      sumResults.some((x) => x.status === 'DNF' && x.scoreMs === null),
+    ).toBe(true);
+    expect(
+      sumResults.filter((x) => x.status === 'DNS' && x.scoreMs === null),
+    ).toHaveLength(2);
+  });
+  it('returns a validated conflict when runCount is reduced below existing measurements', async () => {
+    const { app } = build();
+    await activate(app);
+    await send(
+      app,
+      `/admin/events/${event}/modules/timing/measurements`,
+      'POST',
+      {
+        entryId: ids[0],
+        run: 3,
+        timeMs: 500,
+        source: 'manual',
+        recordedAt: '2026-10-29T10:00:00Z',
+      },
+    );
+    await send(app, `/admin/events/${event}/modules/timing`, 'PATCH', {
+      config: {
+        version: 1,
+        runStructure: { runCount: 2, label: 'Run' },
+        scoringRule: { version: 1, method: 'fastest-run' },
+      },
+    });
+    const response = await send(
+      app,
+      `/admin/events/${event}/modules/timing/results/drafts`,
+      'POST',
+      {},
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: 'Configured run count is lower than existing measurements',
+    });
+  });
+  it('includes accepted starters without measurements as DNS in drafts, never as partial sum scores', async () => {
     const { app } = build();
     await activate(app);
     await send(
@@ -532,9 +684,14 @@ describe('timing module backend', () => {
     expect(results).toHaveLength(3);
     expect(
       results.filter(
+        (result) => result.status === 'DNS' && result.scoreMs === null,
+      ),
+    ).toHaveLength(2);
+    expect(
+      results.find(
         (result) => result.status === 'DNF' && result.scoreMs === null,
       ),
-    ).toHaveLength(3);
+    ).toBeTruthy();
   });
   it('exposes only published results through the public module guard', async () => {
     const { app } = build();

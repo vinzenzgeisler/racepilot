@@ -365,6 +365,13 @@ export function installTimingRoutes(
     );
     const byEntry = new Map<string, TimingCompetitor>();
     for (const entry of await repository.listEntries(m.context, m.eventId)) {
+      if (
+        !entry.statusCategory ||
+        !parsed.data.eligibleEntryCategories.some(
+          (category) => category === entry.statusCategory,
+        )
+      )
+        continue;
       byEntry.set(entry.entryId, {
         entryId: entry.entryId,
         startNumber: entry.startNumber,
@@ -388,15 +395,28 @@ export function installTimingRoutes(
       };
       byEntry.set(item.entryId, updated);
     }
+    const scoringRule = parsed.data.scoringRule;
+    const completionPolicy =
+      scoringRule.completionPolicy ??
+      (scoringRule.method === 'fastest-run' ? 'available-runs' : 'all-runs');
     const rule = {
-      ...parsed.data.scoringRule,
+      ...scoringRule,
+      completionPolicy,
       runCount: parsed.data.runStructure.runCount,
     };
+    if (active.some((measurement) => measurement.run > rule.runCount))
+      return c.json(
+        { error: 'Configured run count is lower than existing measurements' },
+        409,
+      );
     const results = calculateTimingResults(
       [...byEntry.values()].map((competitor) =>
-        competitor.runs.length < rule.runCount
-          ? { ...competitor, exclusion: parsed.data.incompleteRunStatus }
-          : competitor,
+        competitor.runs.length === 0
+          ? { ...competitor, exclusion: parsed.data.zeroRunStatus }
+          : competitor.runs.length < rule.runCount &&
+              completionPolicy === 'all-runs'
+            ? { ...competitor, exclusion: parsed.data.incompleteRunStatus }
+            : competitor,
       ),
       rule,
     );

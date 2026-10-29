@@ -114,7 +114,7 @@ describe.skipIf(!url)('PostgreSQL timing adapter', () => {
       const ctxB = { ...ctxA, organizationId: organizationId(orgB!.id) };
       const repo = createTimingRepository(db);
       expect(await repo.listEntries(ctxA, eventA!.id)).toEqual([
-        { entryId: entryA!.id, startNumber: '7' },
+        { entryId: entryA!.id, startNumber: '7', statusCategory: 'pending' },
       ]);
       expect(
         await repo.resolveEntry(ctxA, eventA!.id, { startNumber: '7' }),

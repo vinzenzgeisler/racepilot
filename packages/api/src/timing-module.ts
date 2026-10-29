@@ -10,32 +10,59 @@ export const TimingConfigSchema = z
         label: z.string().trim().min(1).max(100).default('Run'),
       })
       .strict(),
+    eligibleEntryCategories: z
+      .array(
+        z.enum(['pending', 'accepted', 'rejected', 'waitlisted', 'withdrawn']),
+      )
+      .min(1)
+      .default(['accepted']),
     incompleteRunStatus: z.enum(['DNF', 'DNS']).default('DNF'),
+    zeroRunStatus: z.enum(['DNF', 'DNS']).default('DNS'),
     scoringRule: z.discriminatedUnion('method', [
       z
         .object({
           version: z.number().int().min(1),
           method: z.literal('fastest-run'),
+          completionPolicy: z.enum(['all-runs', 'available-runs']).optional(),
         })
         .strict(),
       z
-        .object({ version: z.number().int().min(1), method: z.literal('sum') })
+        .object({
+          version: z.number().int().min(1),
+          method: z.literal('sum'),
+          completionPolicy: z.enum(['all-runs', 'available-runs']).optional(),
+        })
         .strict(),
       z
         .object({
           version: z.number().int().min(1),
           method: z.literal('target-deviation'),
           targetMs: z.number().finite().nonnegative(),
+          completionPolicy: z.enum(['all-runs', 'available-runs']).optional(),
         })
         .strict(),
     ]),
   })
-  .strict();
+  .strict()
+  .superRefine((config, ctx) => {
+    if (
+      config.scoringRule.method !== 'fastest-run' &&
+      config.scoringRule.completionPolicy === 'available-runs'
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['scoringRule', 'completionPolicy'],
+        message: 'available-runs is only valid for fastest-run scoring',
+      });
+    }
+  });
 export type TimingConfig = z.infer<typeof TimingConfigSchema>;
 export const defaultTimingConfig: TimingConfig = {
   version: 1,
   runStructure: { runCount: 3, label: 'Run' },
+  eligibleEntryCategories: ['accepted'],
   incompleteRunStatus: 'DNF',
+  zeroRunStatus: 'DNS',
   scoringRule: { version: 1, method: 'fastest-run' },
 };
 
