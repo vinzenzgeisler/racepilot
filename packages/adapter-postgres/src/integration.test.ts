@@ -1045,7 +1045,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           },
         ],
       };
-      await workflows.setEvent(
+      const activeRevision = await workflows.setEvent(
         ctxA,
         eventA!.id,
         customWorkflow,
@@ -1064,6 +1064,8 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         ctxA,
         entryAfterChange!.id,
       );
+      expect(entryAfterChange?.acceptanceStatus).toBe('pending');
+      expect(newPinned?.id).toBe(activeRevision?.id);
       expect(oldPinned?.id).toBe(beforeWorkflow!.id);
       expect(newPinned?.id).not.toBe(beforeWorkflow!.id);
       expect(oldPinned?.workflow.statuses.map(({ key }) => key)).not.toContain(

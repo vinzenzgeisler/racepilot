@@ -98,6 +98,23 @@ describe('entry domain rules', () => {
       validateEntryWorkflow(orphan).some((error) => error.includes('Orphan')),
     ).toBe(true);
   });
+  it('requires the stable pending system key as the workflow start status', () => {
+    const renamedStart = {
+      ...defaultEntryWorkflow,
+      statuses: defaultEntryWorkflow.statuses.map((status) =>
+        status.key === 'pending'
+          ? { ...status, key: 'awaiting_review' }
+          : status,
+      ),
+      transitions: defaultEntryWorkflow.transitions.map((edge) => ({
+        ...edge,
+        from: edge.from === 'pending' ? 'awaiting_review' : edge.from,
+      })),
+    };
+    expect(validateEntryWorkflow(renamedStart)).toContain(
+      'Workflow must include the pending system status',
+    );
+  });
   it('allows only unverified to verified', () => {
     expect(() =>
       assertEntryTransition('verification', 'unverified', 'verified'),

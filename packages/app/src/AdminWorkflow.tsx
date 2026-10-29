@@ -162,7 +162,7 @@ export function AdminWorkflow({
           <section aria-label="Workflow statuses">
             <h3>Statuses</h3>
             {workflow.statuses.map((status, index) => (
-              <fieldset key={`${index}-${status.key}`}>
+              <fieldset key={index}>
                 <legend>Status {index + 1}</legend>
                 <label>
                   Status key

@@ -642,6 +642,12 @@ export function validateEntryWorkflow(workflow: EntryWorkflow): string[] {
     if (!status.labels.de.trim() || !status.labels.en.trim())
       errors.push(`Missing localized label: ${status.key}`);
   }
+  if (
+    !workflow.statuses.some(
+      (status) => status.key === 'pending' && status.category === 'pending',
+    )
+  )
+    errors.push('Workflow must include the pending system status');
   if (!Number.isInteger(workflow.version) || workflow.version < 1)
     errors.push('Invalid workflow version');
   for (const edge of workflow.transitions) {
@@ -675,9 +681,7 @@ export function validateEntryWorkflow(workflow: EntryWorkflow): string[] {
     visited.add(key);
   };
   for (const key of keys) visit(key);
-  const start = workflow.statuses.find(
-    (status) => status.category === 'pending',
-  )?.key;
+  const start = 'pending';
   const reachable = new Set<string>();
   const walk = (key: string): void => {
     if (reachable.has(key)) return;

@@ -2076,6 +2076,7 @@ export function createEntryRepository(
           registrationGroupId: input.registrationGroupId,
           driverPersonId: input.driverPersonId,
           vehicleId: input.vehicleId,
+          acceptanceStatus: 'pending',
           requestedStartNumber: normalizeRequestedStartNumber(
             input.requestedStartNumber,
           ),
