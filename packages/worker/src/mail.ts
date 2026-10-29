@@ -7,6 +7,7 @@ export const mailTemplateContracts = {
   'entry-received': ['recipientName', 'eventName'],
   accepted: ['recipientName', 'eventName'],
   rejected: ['recipientName', 'eventName'],
+  'participant-status-access': ['recipientName', 'accessUrl'],
   'status-change': [
     'recipientName',
     'eventName',
@@ -33,6 +34,18 @@ const defaultCopy: Record<MailTemplateKey, Record<MailLocale, MailTemplate>> = {
       subject: 'Verify your email address',
       text: 'Hello {{recipientName}}, verify your email address: {{verificationUrl}}',
       html: '<p>Hello {{recipientName}},</p><p><a href="{{verificationUrl}}">Verify your email address</a></p>',
+    },
+  },
+  'participant-status-access': {
+    de: {
+      subject: 'Dein Zugriffslink zum Nennungsstatus',
+      text: 'Hallo {{recipientName}}, öffne innerhalb von 30 Minuten deinen einmaligen Statuslink: {{accessUrl}}',
+      html: '<p>Hallo {{recipientName}},</p><p><a href="{{accessUrl}}">Nennungsstatus ansehen</a> (30 Minuten gültig, einmalig verwendbar).</p>',
+    },
+    en: {
+      subject: 'Your entry status access link',
+      text: 'Hello {{recipientName}}, use your one-time status link within 30 minutes: {{accessUrl}}',
+      html: '<p>Hello {{recipientName}},</p><p><a href="{{accessUrl}}">View entry status</a> (valid for 30 minutes, one-time use).</p>',
     },
   },
   'entry-received': {

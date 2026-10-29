@@ -45,6 +45,7 @@ import {
   registrationSettingsAudit,
   eventConsentTermsAudit,
   groupEmailVerifications,
+  participantStatusAccessTokens,
   saveMailTemplateVersion,
   emailOutbox,
   consentEvidence,
@@ -1796,7 +1797,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           .select()
           .from(emailOutbox)
           .where(eq(emailOutbox.organizationId, org!.id))
-      )[0]!;
+      ).find((row) => row.templateKey === 'verification')!;
       const verificationUrl = outbox.variables.verificationUrl!;
       const token = new URL(verificationUrl).searchParams.get('token')!;
       expect(new URL(verificationUrl).origin).toBe(
@@ -1830,6 +1831,185 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
             .where(eq(entries.organizationId, org!.id))
         ).every((entry) => entry.verificationStatus === 'verified'),
       ).toBe(true);
+      const secondGroup = (
+        await db
+          .insert(registrationGroups)
+          .values({
+            organizationId: org!.id,
+            eventId: event!.id,
+            personId: groups[0]!.personId,
+            contactEmail: 'family@example.test',
+          })
+          .returning()
+      )[0]!;
+      await db.insert(groupEmailVerifications).values({
+        organizationId: org!.id,
+        eventId: event!.id,
+        registrationGroupId: secondGroup.id,
+        tokenHash: createHash('sha256')
+          .update('second-group-verified')
+          .digest('hex'),
+        expiresAt: new Date(Date.now() + 60_000),
+        consumedAt: new Date(),
+      });
+      await db
+        .update(entries)
+        .set({ registrationGroupId: secondGroup.id })
+        .where(eq(entries.id, savedEntries[1]!.id));
+      // Every verified group remains reachable, including groups beyond the
+      // former ten-link truncation boundary.
+      for (let index = 0; index < 10; index += 1) {
+        const [additionalGroup] = await db
+          .insert(registrationGroups)
+          .values({
+            organizationId: org!.id,
+            eventId: event!.id,
+            personId: groups[0]!.personId,
+            contactEmail: 'family@example.test',
+          })
+          .returning();
+        await db.insert(groupEmailVerifications).values({
+          organizationId: org!.id,
+          eventId: event!.id,
+          registrationGroupId: additionalGroup!.id,
+          tokenHash: createHash('sha256')
+            .update(`additional-group-verified-${index}`)
+            .digest('hex'),
+          expiresAt: new Date(Date.now() + 60_000),
+          consumedAt: new Date(),
+        });
+        await db.insert(entries).values({
+          ...savedEntries[0]!,
+          id: undefined,
+          registrationGroupId: additionalGroup!.id,
+          requestedStartNumber: null,
+        });
+      }
+      await service.requestStatusAccess(
+        ctx,
+        event!.slug,
+        'family@example.test',
+      );
+      const firstAccessMail = (
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, org!.id))
+      ).find((row) => row.templateKey === 'participant-status-access')!;
+      expect(firstAccessMail.recipient).toBe('family@example.test');
+      const firstAccessUrl = new URL(firstAccessMail.variables.accessUrl!);
+      expect(firstAccessUrl.search).toBe('');
+      const firstStatusToken = new URLSearchParams(
+        firstAccessUrl.hash.slice(1),
+      ).get('token')!;
+      await service.requestStatusAccess(
+        ctx,
+        event!.slug,
+        'family@example.test',
+        'en',
+      );
+      const accessMail = (
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, org!.id))
+      ).find(
+        (row) =>
+          row.templateKey === 'participant-status-access' &&
+          row.locale === 'en',
+      )!;
+      expect(accessMail.locale).toBe('en');
+      const englishAccessMails = (
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, org!.id))
+      ).filter(
+        (row) =>
+          row.templateKey === 'participant-status-access' &&
+          row.locale === 'en',
+      );
+      expect(englishAccessMails).toHaveLength(12);
+      const accessUrl = new URL(accessMail.variables.accessUrl!);
+      expect(accessUrl.origin).toBe('https://racepilot.example.test');
+      expect(accessUrl.pathname).toBe('/registration/status');
+      expect(accessUrl.search).toBe('');
+      const statusToken = new URLSearchParams(accessUrl.hash.slice(1)).get(
+        'token',
+      )!;
+      const storedAccess = await db
+        .select()
+        .from(participantStatusAccessTokens)
+        .where(eq(participantStatusAccessTokens.organizationId, org!.id));
+      expect(
+        storedAccess.some(
+          (row) =>
+            row.tokenHash ===
+            createHash('sha256').update(statusToken).digest('hex'),
+        ),
+      ).toBe(true);
+      expect(storedAccess.some((row) => row.revokedAt !== null)).toBe(true);
+      expect(
+        await service.redeemStatusAccess(ctx, firstStatusToken),
+      ).toBeNull();
+      const workflowRepository = createEntryWorkflowRepository(db);
+      const pinned = await workflowRepository.getPinnedForEntry(
+        ctx,
+        savedEntries[0]!.id,
+      );
+      expect(pinned).not.toBeNull();
+      const pinnedEnglishLabel = pinned!.workflow.statuses.find(
+        (status) => status.key === 'pending',
+      )!.labels.en;
+      const changedWorkflow = {
+        ...pinned!.workflow,
+        statuses: pinned!.workflow.statuses.map((status) =>
+          status.key === 'pending'
+            ? { ...status, labels: { ...status.labels, en: 'Changed' } }
+            : status,
+        ),
+      };
+      await workflowRepository.setOrganization(
+        ctx,
+        changedWorkflow,
+        'test',
+        'change current workflow',
+      );
+      const participantView = await service.redeemStatusAccess(
+        ctx,
+        statusToken,
+      );
+      expect(participantView).toHaveLength(1);
+      expect(
+        participantView?.every(
+          (item) =>
+            item.statusKey === 'pending' &&
+            item.label === pinnedEnglishLabel &&
+            item.driverName.length > 0 &&
+            item.className.length > 0,
+        ),
+      ).toBe(true);
+      expect(await service.redeemStatusAccess(ctx, statusToken)).toBeNull();
+      const expiredStatusToken =
+        'expired-participant-status-token-00000000000000000000000000000000';
+      await db.insert(participantStatusAccessTokens).values({
+        organizationId: org!.id,
+        eventId: event!.id,
+        registrationGroupId: groups[0]!.id,
+        tokenHash: createHash('sha256')
+          .update(expiredStatusToken)
+          .digest('hex'),
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      expect(
+        await service.redeemStatusAccess(ctx, expiredStatusToken),
+      ).toBeNull();
+      expect(
+        await service.redeemStatusAccess(
+          { ...ctx, organizationId: organizationId(foreignOrg!.id) },
+          expiredStatusToken,
+        ),
+      ).toBeNull();
       expect(
         await db
           .select()

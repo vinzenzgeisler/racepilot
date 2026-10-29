@@ -7,6 +7,7 @@ import './styles.css';
 import { Registration, RegistrationVerification } from './Registration.js';
 import { AdminEntries } from './AdminEntries.js';
 import { AdminModules } from './AdminModules.js';
+import { ParticipantStatus } from './ParticipantStatus.js';
 
 type State =
   | { kind: 'loading' }
@@ -76,6 +77,21 @@ export function App({ renderContribution }: AppProps = {}) {
     );
 
   const { config } = state;
+  const statusPage = window.location.pathname.match(
+    /^\/events\/([^/]+)\/status\/?$/,
+  );
+  if (window.location.pathname === '/registration/status' || statusPage)
+    return (
+      <main className="shell">
+        <ParticipantStatus
+          organizationId={config.organization.id}
+          locale={config.locale === 'en' ? 'en' : 'de'}
+          {...(statusPage
+            ? { eventSlug: decodeURIComponent(statusPage[1]!) }
+            : {})}
+        />
+      </main>
+    );
   if (window.location.pathname === '/registration/verify')
     return (
       <main className="shell">

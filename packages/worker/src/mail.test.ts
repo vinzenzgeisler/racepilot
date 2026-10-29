@@ -3,6 +3,7 @@ import {
   createMailOutboxTask,
   processMailOutboxJob,
   renderMailTemplate,
+  defaultMailTemplate,
   type MailOutboxRepository,
 } from './mail.js';
 import type { JobContext } from '@racepilot/core';
@@ -89,6 +90,25 @@ describe('mail outbox worker', () => {
         { recipientName: 'x', verificationUrl: 'u' },
       ),
     ).toThrow('Unknown');
+  });
+  it('renders the one-time participant status link mail in both locales', () => {
+    for (const locale of ['de', 'en'] as const) {
+      const template = renderMailTemplate(
+        defaultMailTemplate('participant-status-access', locale),
+        'participant-status-access',
+        {
+          recipientName: 'Sam',
+          accessUrl:
+            'https://example.test/registration/status#token=mail-test-token',
+        },
+      );
+      expect(template.text).toContain(
+        'https://example.test/registration/status#token=mail-test-token',
+      );
+      expect(template.html).toContain(
+        locale === 'en' ? 'one-time use' : 'einmalig verwendbar',
+      );
+    }
   });
   it('retries with exponential backoff and marks final failure', async () => {
     const h = setup();
