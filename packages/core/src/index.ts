@@ -1012,11 +1012,9 @@ export async function transitionEntry(
   reason: string,
   deps: { entries: EntryRepository; workflows?: EntryWorkflowRepository },
 ): Promise<Entry | null> {
-  if (
-    !ctx.permissions.has('entry:write') &&
-    (kind !== 'acceptance' || !deps.workflows)
-  )
-    throw new Error('Forbidden');
+  // Workflow role claims may further restrict entry writers, but must never
+  // grant tenant-wide write access to entries.
+  if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
   if (!actor.trim()) throw new Error('Transition actor is required');
   const current = await deps.entries.getById(ctx, id);
   if (!current) return null;
@@ -1037,8 +1035,8 @@ export async function transitionEntry(
       (edge) => edge.from === from && edge.to === to,
     )!;
     if (
-      !ctx.permissions.has('entry:write') &&
-      !workflowEdge.roles?.some((role) => ctx.permissions.has(`role:${role}`))
+      workflowEdge.roles?.length &&
+      !workflowEdge.roles.some((role) => ctx.permissions.has(`role:${role}`))
     )
       throw new Error('Forbidden');
     if (

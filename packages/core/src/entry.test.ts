@@ -155,7 +155,7 @@ describe('entry domain rules', () => {
     expect(() => assertEntryTransition('acceptance', from, to)).toThrow(),
   );
 
-  it('allows server-resolved workflow roles only when the edge permits them and derives notification labels', async () => {
+  it('requires entry:write before applying workflow role restrictions and derives notification labels', async () => {
     const memberContext: RequestContext = {
       ...ctx,
       permissions: new Set(['role:member']),
@@ -189,6 +189,17 @@ describe('entry domain rules', () => {
     await expect(
       transitionEntry(
         memberContext,
+        'foreign-entry',
+        'acceptance',
+        'accepted',
+        'member',
+        '',
+        { entries, workflows: workflows as never },
+      ),
+    ).rejects.toThrow(/Forbidden/);
+    await expect(
+      transitionEntry(
+        { ...memberContext, permissions: new Set(['entry:write', 'role:member']) },
         'e',
         'acceptance',
         'accepted',
