@@ -724,6 +724,66 @@
           "name": "isolates modules, configuration and events between organizations"
         }
       ]
+    },
+    {
+      "id": "timing-measurement",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + entry_id",
+      "isolation": "Unique active entry/run row; composite event and entry foreign keys; corrections mark prior version inactive and insert a superseding version.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/timing.integration.test.ts",
+          "name": "records, corrects, versions and publishes only within the owning tenant/event"
+        }
+      ]
+    },
+    {
+      "id": "timing-result-version",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + version",
+      "isolation": "Draft/published status and rule/results snapshot; publication is explicit and immutable to readers.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/timing.integration.test.ts",
+          "name": "records, corrects, versions and publishes only within the owning tenant/event"
+        }
+      ]
+    },
+    {
+      "id": "timing-audit",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id",
+      "isolation": "Append-only actor/action audit references the scoped measurement or result version.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/timing.integration.test.ts",
+          "name": "records, corrects, versions and publishes only within the owning tenant/event"
+        }
+      ]
+    },
+    {
+      "id": "timing-module-routes",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId",
+      "isolation": "Every route is manifest-declared and module-guarded; writes require timing permissions; only published results are public.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/timing.test.ts",
+          "name": "rejects malformed CSV, foreign events, and client capability forgery"
+        }
+      ]
+    },
+    {
+      "id": "timing-event-opt-in",
+      "kind": "config",
+      "tenantKey": "organization_id + event_id",
+      "isolation": "Absent or disabled timing configuration has no effect on entries; the module is optional and capability-gated.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/timing.test.ts",
+          "name": "keeps an event without the module unchanged and denies all timing actions"
+        }
+      ]
     }
   ]
 }
