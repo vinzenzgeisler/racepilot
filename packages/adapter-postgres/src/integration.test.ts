@@ -1798,6 +1798,35 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         .update(entries)
         .set({ registrationGroupId: secondGroup.id })
         .where(eq(entries.id, savedEntries[1]!.id));
+      // Every verified group remains reachable, including groups beyond the
+      // former ten-link truncation boundary.
+      for (let index = 0; index < 10; index += 1) {
+        const [additionalGroup] = await db
+          .insert(registrationGroups)
+          .values({
+            organizationId: org!.id,
+            eventId: event!.id,
+            personId: groups[0]!.personId,
+            contactEmail: 'family@example.test',
+          })
+          .returning();
+        await db.insert(groupEmailVerifications).values({
+          organizationId: org!.id,
+          eventId: event!.id,
+          registrationGroupId: additionalGroup!.id,
+          tokenHash: createHash('sha256')
+            .update(`additional-group-verified-${index}`)
+            .digest('hex'),
+          expiresAt: new Date(Date.now() + 60_000),
+          consumedAt: new Date(),
+        });
+        await db.insert(entries).values({
+          ...savedEntries[0]!,
+          id: undefined,
+          registrationGroupId: additionalGroup!.id,
+          requestedStartNumber: null,
+        });
+      }
       expect(
         savedEntries.every(
           (entry) =>
@@ -1900,7 +1929,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           row.templateKey === 'participant-status-access' &&
           row.locale === 'en',
       );
-      expect(englishAccessMails).toHaveLength(2);
+      expect(englishAccessMails).toHaveLength(12);
       const accessUrl = new URL(accessMail.variables.accessUrl!);
       expect(accessUrl.origin).toBe('https://racepilot.example.test');
       expect(accessUrl.pathname).toBe('/registration/status');

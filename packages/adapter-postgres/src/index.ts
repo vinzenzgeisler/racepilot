@@ -3605,8 +3605,7 @@ export function createPublicRegistrationService(
             sql`exists (select 1 from entry e where e.organization_id = ${registrationGroups.organizationId} and e.event_id = ${registrationGroups.eventId} and e.registration_group_id = ${registrationGroups.id} and e.deleted_at is null)`,
           ),
         )
-        // One request can deliver at most 10 status links to the verified contact.
-        .limit(10);
+        .orderBy(registrationGroups.id);
       for (const group of matches) {
         if (!group.contact) continue;
         const accessToken = randomBytes(32).toString('base64url');
