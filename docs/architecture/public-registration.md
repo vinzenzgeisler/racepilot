@@ -35,10 +35,31 @@ an audit event in the same transaction. Unknown, expired, consumed, manipulated,
 and foreign-organization tokens all return the same negative result.
 
 The public API accepts an injectable `RegistrationRateLimiter`; the Community
-runtime uses an in-memory per-IP/per-organization/per-event window implementation.
-The port can be replaced by shared Postgres-backed storage for multi-process or
-Cloud deployments. Public endpoint errors are intentionally generic for event and
-person eligibility checks.
+runtime uses the Postgres-backed implementation so limits are shared by multiple
+API processes. Atomic token buckets are keyed by a hash of the client identity and
+server-derived organization/event scopes. Organization and event budgets are
+checked and consumed together; a rejected event bucket does not spend the
+organization budget. Storage errors fail closed. Defaults are 60 requests per
+minute per client/organization and 8 per minute per client/organization/event;
+`PUBLIC_REGISTRATION_ORG_LIMIT`, `PUBLIC_REGISTRATION_EVENT_LIMIT`, and
+`PUBLIC_REGISTRATION_WINDOW_SECONDS` configure them.
+Application startup rejects public registration without a limiter, and Cloud mode
+also rejects any limiter not explicitly marked as shared persistence.
+
+The client identity is the TCP peer address supplied by the Node server adapter.
+`X-Forwarded-For` is ignored unless `TRUSTED_PROXIES` explicitly lists trusted
+proxy IPs/CIDRs. When enabled, the forwarded chain is walked from the actual peer
+inward and stops at the first untrusted address. The trusted proxy must append the
+address of its actual upstream peer; never trust a forwarding header merely
+because it is present. `X-Real-IP` and provider-specific headers are not used.
+Without trusted proxy configuration, clients are identified only by the direct
+connection address.
+
+Rate-limit state stores SHA-256 hashes of client and scope keys, not raw IPs or
+event slugs. Public registration returns 429 with `Retry-After` when over budget;
+limiter/database failures return the generic unavailable response rather than
+silently disabling protection. Public endpoint errors are intentionally generic
+for event and person eligibility checks.
 
 Consent configuration is managed through the permission-gated event consents API;
 there is no consent text or event-specific legal content embedded in the product

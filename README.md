@@ -72,4 +72,14 @@ pin and verify the full source commit before rebuilding this pack set. See the
 
 Local development PostgreSQL is available through `docker compose -f compose.dev.yaml up -d` (Docker is optional; tests can use any PostgreSQL 16 instance). Configure `DATABASE_URL`, `DEPLOYMENT_MODE=community`, `COMMUNITY_ORGANIZATION_SLUG`, `COMMUNITY_ORGANIZATION_NAME`, `COMMUNITY_ORGANIZATION_TIMEZONE`, and `COMMUNITY_ORGANIZATION_LOCALE`; `PORT` defaults to 3000. Mail delivery is disabled by default. Enable it with `MAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, optional paired `SMTP_USER`/`SMTP_PASSWORD`, and `CANONICAL_BASE_URL` (HTTPS outside localhost). Configure each organization’s validated `mail_from` and optional `mail_reply_to` before delivery. The worker uses a 30-second SMTP timeout and a configurable `MAIL_OUTBOX_LEASE_MS` (default 300000; must exceed 90000). Delivery is at-least-once: if a worker crashes after the SMTP server accepts a message but before the database records success, the expired lease can cause a duplicate send; providers should honor the stable idempotency key where supported. The development Compose stack exposes Mailpit SMTP on `127.0.0.1:1025` and its UI on `http://127.0.0.1:8025`. Run `npm run db:migrate` and `npm run db:seed`. Integration tests use `RACEPILOT_TEST_DATABASE_URL`.
 
+Public registration is rate-limited through PostgreSQL so multiple API processes
+share the same budgets. Defaults are 60 requests/minute per client and organization
+and 8 requests/minute per client, organization, and event. Configure these with
+`PUBLIC_REGISTRATION_ORG_LIMIT`, `PUBLIC_REGISTRATION_EVENT_LIMIT`, and
+`PUBLIC_REGISTRATION_WINDOW_SECONDS`. Direct connection addresses are used by
+default; configure `TRUSTED_PROXIES` with a comma-separated list of proxy IPs/CIDRs
+only when the API is reachable exclusively through those proxies and they append
+the actual upstream address to `X-Forwarded-For`. Other client-supplied address
+headers are ignored. See the [public registration security notes](docs/architecture/public-registration.md).
+
 To enable Community OIDC, set `OIDC_PROVIDER=oidc`, `OIDC_ISSUER_URL`, `OIDC_AUDIENCE`, `OIDC_CLIENT_ID`, and `OIDC_REDIRECT_URI`. Configure exactly one initial-admin selector: `OIDC_BOOTSTRAP_SUBJECT` (matched together with the configured issuer) or `OIDC_BOOTSTRAP_EMAIL` (matched only to a verified email from that issuer). `/auth/config` exposes only the public web-client settings. The API verifies bearer tokens against issuer discovery/JWKS and grants admin permissions only from an active database membership; provider role/group claims are ignored. Leave `OIDC_PROVIDER` unset to keep authentication disabled.

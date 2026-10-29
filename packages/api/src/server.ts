@@ -22,11 +22,12 @@ import {
   getOrganizationMailConfiguration,
   createModuleActivationRepository,
   createTimingRepository,
+  createPostgresRegistrationRateLimiter,
 } from '@racepilot/adapter-postgres';
 import { createModuleRegistry } from '@racepilot/core';
 import { timingModule } from './timing-module.js';
 import { installTimingRoutes } from './timing.js';
-import { createApp, createInMemoryRegistrationRateLimiter } from './index.js';
+import { createApp } from './index.js';
 import { createOIDCIdentityProvider } from '@racepilot/adapter-oidc';
 import { createLocalObjectStorage } from '@racepilot/adapter-local-storage';
 import { createS3ObjectStorage } from '@racepilot/adapter-s3';
@@ -80,7 +81,15 @@ const identityProvider =
     : undefined;
 serve({
   fetch: createApp({
-    config: { deploymentMode: 'community', organizationId: org.id },
+    config: {
+      deploymentMode: 'community',
+      organizationId: org.id,
+      TRUSTED_PROXIES: config.TRUSTED_PROXIES,
+      PUBLIC_REGISTRATION_ORG_LIMIT: config.PUBLIC_REGISTRATION_ORG_LIMIT,
+      PUBLIC_REGISTRATION_EVENT_LIMIT: config.PUBLIC_REGISTRATION_EVENT_LIMIT,
+      PUBLIC_REGISTRATION_WINDOW_SECONDS:
+        config.PUBLIC_REGISTRATION_WINDOW_SECONDS,
+    },
     organizations: createOrganizationRepository(db),
     events: createEventRepository(db),
     entryExports: createEntryExportRepository(db),
@@ -94,7 +103,7 @@ serve({
     ...(publicRegistration
       ? {
           publicRegistration,
-          registrationRateLimiter: createInMemoryRegistrationRateLimiter(),
+          registrationRateLimiter: createPostgresRegistrationRateLimiter(db),
         }
       : {}),
     ...(config.CANONICAL_BASE_URL

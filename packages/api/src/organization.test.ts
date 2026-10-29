@@ -307,21 +307,92 @@ describe('registration administration and public endpoints', () => {
     };
     const observed: string[] = [];
     api.registrationRateLimiter = {
-      consume: async (ip) => {
-        observed.push(ip);
-        return true;
+      consume: async (clientIdentity, scopes) => {
+        observed.push(
+          `${clientIdentity}:${scopes.map((scope) => scope.key).join(',')}`,
+        );
+        return { allowed: true, retryAfterMs: 0 };
       },
     };
     const app = createApp(api);
     const path = `/public/organizations/${config.organizationId}/events/event/registration/submissions`;
     for (const value of ['192.0.2.1', '198.51.100.2', '203.0.113.3']) {
-      const response = await app.request(path, {
+      const response = await app.request(
+        path,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            'cf-connecting-ip': value,
+            'x-real-ip': value,
+            'x-forwarded-for': value,
+          },
+          body: JSON.stringify({
+            submissionId: '10000000-0000-4000-8000-000000000099',
+            formVersion: '1.0',
+            language: 'en',
+            eventSlug: 'event',
+            person: {
+              firstName: 'Test',
+              lastName: 'Driver',
+              email: 'test@example.test',
+              dateOfBirth: '2000-01-01',
+            },
+            entries: [
+              {
+                classId: '20000000-0000-4000-8000-000000000099',
+                vehicle: {
+                  make: 'Maker',
+                  model: 'Model',
+                  year: 2020,
+                  registration: null,
+                },
+              },
+            ],
+            consents: [
+              {
+                key: 'terms',
+                version: 'v1',
+                hash: 'a'.repeat(64),
+                accepted: true,
+              },
+            ],
+          }),
+        },
+        { incoming: { socket: { remoteAddress: '203.0.113.10' } } },
+      );
+      expect(response.status).toBe(202);
+    }
+    expect(observed).toEqual(
+      Array(3).fill(
+        `203.0.113.10:organization:${config.organizationId},event:${config.organizationId}:event`,
+      ),
+    );
+  });
+
+  it('uses forwarded identities only behind a configured trusted proxy', async () => {
+    const api = deps();
+    api.config = { ...config, TRUSTED_PROXIES: ['10.0.0.0/8'] };
+    api.publicRegistration = {
+      getForm: async () => ({ event: { name: 'Demo' } }),
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    const observed: string[] = [];
+    api.registrationRateLimiter = {
+      consume: async (clientIdentity) => {
+        observed.push(clientIdentity);
+        return { allowed: true, retryAfterMs: 0 };
+      },
+    };
+    const app = createApp(api);
+    await app.request(
+      `/public/organizations/${config.organizationId}/events/event/registration/submissions`,
+      {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
-          'cf-connecting-ip': value,
-          'x-real-ip': value,
-          'x-forwarded-for': value,
+          'x-forwarded-for': '203.0.113.99, 198.51.100.1, 10.0.0.2',
         },
         body: JSON.stringify({
           submissionId: '10000000-0000-4000-8000-000000000099',
@@ -354,10 +425,135 @@ describe('registration administration and public endpoints', () => {
             },
           ],
         }),
-      });
-      expect(response.status).toBe(202);
-    }
-    expect(observed).toEqual(['unknown', 'unknown', 'unknown']);
+      },
+      { incoming: { socket: { remoteAddress: '10.0.0.8' } } },
+    );
+    expect(observed).toEqual(['198.51.100.1']);
+  });
+
+  it('fails closed without a connection identity and requires shared storage in Cloud', async () => {
+    const api = deps();
+    api.publicRegistration = {
+      getForm: async () => ({ event: { name: 'Demo' } }),
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    const app = createApp(api);
+    const response = await app.request(
+      `/public/organizations/${config.organizationId}/events/event/registration/submissions`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    expect(response.status).toBe(503);
+
+    api.config = { deploymentMode: 'cloud' };
+    expect(() => createApp(api)).toThrow(
+      /shared persistent rate-limit storage/,
+    );
+  });
+
+  it('separates organization and event budgets across clients and tenants with retry guidance', async () => {
+    let now = 1_000;
+    const limiter = createInMemoryRegistrationRateLimiter({ now: () => now });
+    const firstTenant = deps();
+    firstTenant.config = {
+      ...config,
+      PUBLIC_REGISTRATION_ORG_LIMIT: 2,
+      PUBLIC_REGISTRATION_EVENT_LIMIT: 1,
+      PUBLIC_REGISTRATION_WINDOW_SECONDS: 60,
+    };
+    firstTenant.registrationRateLimiter = limiter;
+    firstTenant.publicRegistration = {
+      getForm: async () => ({ event: { name: 'Demo' } }),
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    const secondOrgId = '10000000-0000-4000-8000-000000000002';
+    const secondTenant = {
+      ...firstTenant,
+      config: { ...firstTenant.config, organizationId: secondOrgId },
+    };
+    const firstApp = createApp(firstTenant);
+    const secondApp = createApp(secondTenant);
+    let submissionId = 0;
+    const submit = (
+      app: ReturnType<typeof createApp>,
+      orgId: string,
+      slug: string,
+      remoteAddress: string,
+    ) =>
+      app.request(
+        `/public/organizations/${orgId}/events/${slug}/registration/submissions`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            submissionId: `10000000-0000-4000-8000-${String(++submissionId).padStart(12, '0')}`,
+            formVersion: '1.0',
+            language: 'en',
+            eventSlug: slug,
+            person: {
+              firstName: 'Test',
+              lastName: 'Driver',
+              email: 'test@example.test',
+              dateOfBirth: '2000-01-01',
+            },
+            entries: [
+              {
+                classId: '20000000-0000-4000-8000-000000000099',
+                vehicle: {
+                  make: 'Maker',
+                  model: 'Model',
+                  year: 2020,
+                  registration: null,
+                },
+              },
+            ],
+            consents: [
+              {
+                key: 'terms',
+                version: 'v1',
+                hash: 'a'.repeat(64),
+                accepted: true,
+              },
+            ],
+          }),
+        },
+        { incoming: { socket: { remoteAddress } } },
+      );
+    const clientA = '192.0.2.1';
+    const clientB = '192.0.2.2';
+    expect(
+      (await submit(firstApp, config.organizationId, 'event', clientA)).status,
+    ).toBe(202);
+    const eventBurst = await submit(
+      firstApp,
+      config.organizationId,
+      'event',
+      clientA,
+    );
+    expect(eventBurst.status).toBe(429);
+    expect(eventBurst.headers.get('retry-after')).toBe('60');
+    expect(
+      (await submit(firstApp, config.organizationId, 'other', clientA)).status,
+    ).toBe(202);
+    expect(
+      (await submit(firstApp, config.organizationId, 'third', clientA)).status,
+    ).toBe(429);
+    expect(
+      (await submit(firstApp, config.organizationId, 'event', clientB)).status,
+    ).toBe(202);
+    expect(
+      (await submit(secondApp, secondOrgId, 'event', clientA)).status,
+    ).toBe(202);
+    now += 60_001;
+    expect(
+      (await submit(firstApp, config.organizationId, 'event', clientA)).status,
+    ).toBe(202);
   });
 
   it('uses generic public verification responses and rate-limits by IP and event', async () => {
@@ -368,8 +564,7 @@ describe('registration administration and public endpoints', () => {
       verify: async () => false,
     };
     api.registrationRateLimiter = {
-      consume: async (ip, event) =>
-        ip !== '192.0.2.1' || !event.endsWith(':event'),
+      consume: async () => ({ allowed: true, retryAfterMs: 0 }),
     };
     const app = createApp(api);
     const form = await app.request(
@@ -410,6 +605,7 @@ describe('registration administration and public endpoints', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(registration),
       },
+      { incoming: { socket: { remoteAddress: '192.0.2.1' } } },
     );
     expect(submitted.status).toBe(202);
     expect(await submitted.json()).toEqual({ accepted: true });
@@ -430,19 +626,33 @@ describe('registration administration and public endpoints', () => {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ unexpected: true }),
       },
+      { incoming: { socket: { remoteAddress: '192.0.2.1' } } },
     );
-    expect(invalidPayload.status).toBe(400);
+    expect(invalidPayload.status, await invalidPayload.clone().text()).toBe(
+      400,
+    );
     let now = 1000;
     const limiter = createInMemoryRegistrationRateLimiter({
       limit: 1,
       windowMs: 100,
       now: () => now,
     });
-    expect(await limiter.consume('192.0.2.5', 'org:event')).toBe(true);
-    expect(await limiter.consume('192.0.2.5', 'org:event')).toBe(false);
-    expect(await limiter.consume('192.0.2.5', 'org:other')).toBe(true);
+    const scopes = [
+      { key: 'organization:org', limit: 2, windowMs: 100 },
+      { key: 'event:org:event', limit: 1, windowMs: 100 },
+    ];
+    expect((await limiter.consume('192.0.2.5', scopes)).allowed).toBe(true);
+    expect((await limiter.consume('192.0.2.5', scopes)).allowed).toBe(false);
+    expect(
+      (
+        await limiter.consume('192.0.2.5', [
+          scopes[0]!,
+          { ...scopes[1]!, key: 'event:org:other' },
+        ])
+      ).allowed,
+    ).toBe(true);
     now += 101;
-    expect(await limiter.consume('192.0.2.5', 'org:event')).toBe(true);
+    expect((await limiter.consume('192.0.2.5', scopes)).allowed).toBe(true);
   });
 
   it('requires event:write to change versioned event consent text and rejects wrong hashes', async () => {
