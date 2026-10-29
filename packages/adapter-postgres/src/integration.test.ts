@@ -61,7 +61,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
   it('persists organization and event workflow revisions with Cloud tenant isolation', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();
-    let createdEventId: string | undefined;
+    const createdEventIds: string[] = [];
     try {
       const [org] = await db
         .insert(organizations)
@@ -91,7 +91,18 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           endsOn: '2030-01-02',
         })
         .returning();
-      createdEventId = event!.id;
+      createdEventIds.push(event!.id);
+      const [secondEvent] = await db
+        .insert(events)
+        .values({
+          organizationId: org!.id,
+          slug: 'second-event',
+          name: 'Second event',
+          startsOn: '2030-02-01',
+          endsOn: '2030-02-02',
+        })
+        .returning();
+      createdEventIds.push(secondEvent!.id);
       const context = (id: string) =>
         createRequestContext({
           deploymentMode: 'cloud',
@@ -118,14 +129,31 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         event!.id,
       );
       expect(effective?.eventId).toBe(event!.id);
+      const customEventWorkflow = {
+        ...orgWorkflow,
+        statuses: orgWorkflow.statuses.map((status) =>
+          status.key === 'pending'
+            ? { ...status, labels: { ...status.labels, en: 'Custom pending' } }
+            : status,
+        ),
+      };
       const override = await repository.setEvent(
         context(org!.id),
         event!.id,
-        orgWorkflow,
+        customEventWorkflow,
         'test-admin',
         'event override',
       );
       expect(override?.version).toBe(2);
+      const siblingWorkflow = await repository.getEffective(
+        context(org!.id),
+        secondEvent!.id,
+      );
+      expect(
+        siblingWorkflow?.workflow.statuses.find(
+          (status) => status.key === 'pending',
+        )?.labels.en,
+      ).not.toBe('Custom pending');
       expect(
         await repository.getEffective(context(foreign!.id), event!.id),
       ).toBeNull();
@@ -139,8 +167,8 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         ),
       ).toBeNull();
     } finally {
-      if (createdEventId)
-        await db.delete(events).where(eq(events.id, createdEventId));
+      if (createdEventIds.length)
+        await db.delete(events).where(inArray(events.id, createdEventIds));
       await db
         .delete(organizations)
         .where(
@@ -853,6 +881,30 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         .where(eq(entries.id, foreignEntryId!));
       expect(
         await createEntryRepository(db).getById(ctxA, foreignEntryId!),
+      ).toBeNull();
+      const foreignScopeRepository = createEntryRepository(db);
+      expect(
+        await foreignScopeRepository.listAdmin!(ctxA, {
+          page: 1,
+          pageSize: 100,
+          eventId: eventB!.id,
+          sort: 'createdAt',
+          direction: 'desc',
+        }),
+      ).toMatchObject({ items: [], total: 0 });
+      expect(
+        await transitionEntry(
+          ctxA,
+          foreignEntryId!,
+          'acceptance',
+          'accepted',
+          'admin',
+          'cross-tenant attempt',
+          {
+            entries: foreignScopeRepository,
+            workflows: createEntryWorkflowRepository(db),
+          },
+        ),
       ).toBeNull();
 
       const adminEntries = createEntryRepository(db);
