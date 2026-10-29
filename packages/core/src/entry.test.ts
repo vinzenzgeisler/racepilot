@@ -199,7 +199,10 @@ describe('entry domain rules', () => {
     ).rejects.toThrow(/Forbidden/);
     await expect(
       transitionEntry(
-        { ...memberContext, permissions: new Set(['entry:write', 'role:member']) },
+        {
+          ...memberContext,
+          permissions: new Set(['entry:write', 'role:member']),
+        },
         'e',
         'acceptance',
         'accepted',
