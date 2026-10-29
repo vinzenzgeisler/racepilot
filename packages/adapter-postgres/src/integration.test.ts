@@ -9,6 +9,7 @@ import {
   resolveEventModuleAccess,
   setEventModule,
   setOrganizationModule,
+  defaultEntryWorkflow,
 } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
 import {
@@ -38,6 +39,7 @@ import {
   createInvoiceRepository,
   createPublicRegistrationService,
   createRegistrationSettingsRepository,
+  createEntryWorkflowRepository,
   createEventConsentRepository,
   registrationSettingsAudit,
   eventConsentTermsAudit,
@@ -55,6 +57,100 @@ import {
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
+  it('persists organization and event workflow revisions with Cloud tenant isolation', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    let createdEventId: string | undefined;
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          slug: `workflow-${suffix}`,
+          name: 'Workflow',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [foreign] = await db
+        .insert(organizations)
+        .values({
+          slug: `workflow-foreign-${suffix}`,
+          name: 'Foreign',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const [event] = await db
+        .insert(events)
+        .values({
+          organizationId: org!.id,
+          slug: 'event',
+          name: 'Event',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-02',
+        })
+        .returning();
+      createdEventId = event!.id;
+      const context = (id: string) =>
+        createRequestContext({
+          deploymentMode: 'cloud',
+          organizationId: organizationId(id),
+          permissions: new Set(),
+          capabilities: new Set(),
+          correlationId: 'workflow-test',
+        });
+      const repository = createEntryWorkflowRepository(db);
+      const orgWorkflow = { ...defaultEntryWorkflow, version: 1 };
+      const storedOrg = await repository.getOrganization(context(org!.id));
+      expect(storedOrg?.workflow.statuses.map((s) => s.key)).toContain(
+        'pending',
+      );
+      const updatedOrg = await repository.setOrganization(
+        context(org!.id),
+        orgWorkflow,
+        'test-admin',
+        'organization change',
+      );
+      expect(updatedOrg.version).toBe(2);
+      const effective = await repository.getEffective(
+        context(org!.id),
+        event!.id,
+      );
+      expect(effective?.eventId).toBe(event!.id);
+      const override = await repository.setEvent(
+        context(org!.id),
+        event!.id,
+        orgWorkflow,
+        'test-admin',
+        'event override',
+      );
+      expect(override?.version).toBe(2);
+      expect(
+        await repository.getEffective(context(foreign!.id), event!.id),
+      ).toBeNull();
+      expect(
+        await repository.setEvent(
+          context(foreign!.id),
+          event!.id,
+          orgWorkflow,
+          'foreign-admin',
+          'forbidden',
+        ),
+      ).toBeNull();
+    } finally {
+      if (createdEventId)
+        await db.delete(events).where(eq(events.id, createdEventId));
+      await db
+        .delete(organizations)
+        .where(
+          inArray(organizations.slug, [
+            `workflow-${suffix}`,
+            `workflow-foreign-${suffix}`,
+          ]),
+        );
+      await pool.end();
+    }
+  });
   it('keeps identities issuer-scoped, bootstraps admin idempotently, and revokes disabled membership', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();

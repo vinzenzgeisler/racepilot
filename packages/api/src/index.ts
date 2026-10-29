@@ -31,6 +31,8 @@ import {
   type PaymentRecipientRepository,
   type InvoicePaymentRepository,
   type EntryRepository,
+  type EntryWorkflowRepository,
+  validateEntryWorkflow,
   type EntryListQuery,
   type EntryExportRepository,
   type EntryConfirmationRepository,
@@ -177,6 +179,7 @@ export interface ApiDeps {
   payments?: InvoicePaymentRepository;
   paymentRecipients?: PaymentRecipientRepository;
   pricing?: EventClassPricingRepository;
+  entryWorkflows?: EntryWorkflowRepository;
   registrationSettings?: {
     get(
       context: import('@racepilot/core').RequestContext,
@@ -1133,6 +1136,129 @@ export function createApp(deps: ApiDeps) {
       actor,
     );
     return terms ? c.json({ terms }) : c.json({ error: 'Not found' }, 404);
+  });
+  app.get('/admin/organization/registration-workflow', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entryWorkflows) return c.json({ error: 'Not found' }, 404);
+    const revision = await deps.entryWorkflows.getOrganization(context);
+    return revision ? c.json(revision) : c.json({ error: 'Not found' }, 404);
+  });
+  app.put('/admin/organization/registration-workflow', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:update'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entryWorkflows) return c.json({ error: 'Not found' }, 404);
+    const body = (await c.req.json().catch(() => null)) as {
+      workflow?: unknown;
+      reason?: unknown;
+    } | null;
+    if (
+      !body ||
+      typeof body.reason !== 'string' ||
+      !body.reason.trim() ||
+      !body.workflow ||
+      typeof body.workflow !== 'object'
+    )
+      return c.json({ error: 'Invalid request' }, 400);
+    const candidate = body.workflow as {
+      version?: unknown;
+      statuses?: unknown;
+      transitions?: unknown;
+    };
+    if (
+      !Number.isInteger(candidate.version) ||
+      !Array.isArray(candidate.statuses) ||
+      !Array.isArray(candidate.transitions)
+    )
+      return c.json({ error: 'Invalid workflow' }, 400);
+    let errors: string[];
+    try {
+      errors = validateEntryWorkflow(
+        candidate as import('@racepilot/core').EntryWorkflow,
+      );
+    } catch {
+      return c.json({ error: 'Invalid workflow' }, 400);
+    }
+    if (errors.length)
+      return c.json({ error: 'Invalid workflow', details: errors }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : 'unknown';
+    return c.json(
+      await deps.entryWorkflows.setOrganization(
+        context,
+        candidate as import('@racepilot/core').EntryWorkflow,
+        actor,
+        body.reason,
+      ),
+    );
+  });
+  app.get('/admin/events/:eventId/registration-workflow', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entryWorkflows) return c.json({ error: 'Not found' }, 404);
+    const revision = await deps.entryWorkflows.getEffective(
+      context,
+      c.req.param('eventId'),
+    );
+    return revision ? c.json(revision) : c.json({ error: 'Not found' }, 404);
+  });
+  app.put('/admin/events/:eventId/registration-workflow', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entryWorkflows) return c.json({ error: 'Not found' }, 404);
+    const body = (await c.req.json().catch(() => null)) as {
+      workflow?: unknown;
+      reason?: unknown;
+    } | null;
+    if (
+      !body ||
+      typeof body.reason !== 'string' ||
+      !body.reason.trim() ||
+      !body.workflow ||
+      typeof body.workflow !== 'object'
+    )
+      return c.json({ error: 'Invalid request' }, 400);
+    const candidate = body.workflow as {
+      version?: unknown;
+      statuses?: unknown;
+      transitions?: unknown;
+    };
+    if (
+      !Number.isInteger(candidate.version) ||
+      !Array.isArray(candidate.statuses) ||
+      !Array.isArray(candidate.transitions)
+    )
+      return c.json({ error: 'Invalid workflow' }, 400);
+    let errors: string[];
+    try {
+      errors = validateEntryWorkflow(
+        candidate as import('@racepilot/core').EntryWorkflow,
+      );
+    } catch {
+      return c.json({ error: 'Invalid workflow' }, 400);
+    }
+    if (errors.length)
+      return c.json({ error: 'Invalid workflow', details: errors }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : 'unknown';
+    const revision = await deps.entryWorkflows.setEvent(
+      context,
+      c.req.param('eventId'),
+      candidate as import('@racepilot/core').EntryWorkflow,
+      actor,
+      body.reason,
+    );
+    return revision ? c.json(revision) : c.json({ error: 'Not found' }, 404);
   });
   app.get('/admin/organization/registration-settings', async (c) => {
     const context = await resolveMemberContext(c.req.raw);

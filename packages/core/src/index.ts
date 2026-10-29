@@ -540,6 +540,33 @@ export interface EntryWorkflow {
   readonly statuses: readonly EntryWorkflowStatus[];
   readonly transitions: readonly EntryWorkflowTransition[];
 }
+export interface EntryWorkflowRevision {
+  readonly id: string;
+  readonly organizationId: OrganizationId;
+  readonly eventId: string | null;
+  readonly workflow: EntryWorkflow;
+  readonly version: number;
+}
+export interface EntryWorkflowRepository {
+  getOrganization(ctx: RequestContext): Promise<EntryWorkflowRevision | null>;
+  getEffective(
+    ctx: RequestContext,
+    eventId: string,
+  ): Promise<EntryWorkflowRevision | null>;
+  setOrganization(
+    ctx: RequestContext,
+    workflow: EntryWorkflow,
+    actor: string,
+    reason: string,
+  ): Promise<EntryWorkflowRevision>;
+  setEvent(
+    ctx: RequestContext,
+    eventId: string,
+    workflow: EntryWorkflow,
+    actor: string,
+    reason: string,
+  ): Promise<EntryWorkflowRevision | null>;
+}
 export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
   {
     version: 1,
