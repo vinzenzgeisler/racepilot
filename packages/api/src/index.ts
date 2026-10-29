@@ -1293,7 +1293,13 @@ export function createApp(deps: ApiDeps) {
       await deps.registrationSettings.update(context, parsed.data, actor),
     );
   });
-  if (deps.modules) installModules(app, deps.modules, resolveMemberContext);
+  if (deps.modules)
+    installModules(
+      app,
+      deps.modules,
+      resolveMemberContext,
+      resolvePublicContext,
+    );
   deps.mountAdditionalRoutes?.(app, {
     public: resolvePublicContext,
     member: resolveMemberContext,

@@ -31,6 +31,13 @@ export type ModuleRouter = Hono<ModuleEnv>;
 export interface ModuleApiDeps extends ModuleDeps {
   /** Trusted route installers keyed by module id; paths must match the manifest. */
   routes?: Readonly<Record<string, (router: ModuleRouter) => void>>;
+  /** Public read implementations are still availability-checked by the module guard. */
+  publicReads?: Readonly<
+    Record<
+      string,
+      (context: RequestContext, eventId: string) => Promise<unknown | null>
+    >
+  >;
 }
 type ContextResolver = (request: Request) => Promise<RequestContext | null>;
 
@@ -58,6 +65,7 @@ export function installModules(
   app: Hono,
   deps: ModuleApiDeps,
   resolveMemberContext: ContextResolver,
+  resolvePublicContext: ContextResolver = resolveMemberContext,
 ) {
   const respond = async <T>(
     c: Context,
@@ -171,6 +179,37 @@ export function installModules(
         );
     const base = `/admin/events/:eventId/modules/${manifest.id}`;
     for (const route of manifest.routes) {
+      if (route.publicPath) {
+        const publicRead = deps.publicReads?.[manifest.id];
+        if (!publicRead)
+          throw new Error(
+            `Module ${manifest.id} declares a public route without a handler`,
+          );
+        app.get(route.publicPath, async (c) => {
+          const context = await resolvePublicContext(c.req.raw);
+          if (!context) return c.json({ error: 'Not found' }, 404);
+          const eventId = c.req.param('eventId') ?? '';
+          const access = await resolveEventModuleAccess(
+            context,
+            deps,
+            eventId,
+            manifest.id,
+          ).catch(() => null);
+          if (
+            !access ||
+            !(
+              access.access === 'active' ||
+              (access.access === 'archived' && route.archivedRead)
+            )
+          )
+            return c.json({ error: 'Not found' }, 404);
+          const result = await publicRead(context, eventId).catch(() => null);
+          return result === null
+            ? c.json({ error: 'Not found' }, 404)
+            : c.json(result);
+        });
+        continue;
+      }
       app.on(route.method, `${base}${route.path}`, async (c, next) => {
         const context = await resolveMemberContext(c.req.raw);
         if (!context) return c.json({ error: 'Unauthorized' }, 401);

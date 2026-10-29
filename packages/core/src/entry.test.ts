@@ -40,6 +40,14 @@ describe('entry domain rules', () => {
   it('exposes workflow role claims without granting members global entry write', () => {
     expect(permissionsForRole('member')).toEqual(new Set(['role:member']));
     expect(permissionsForRole('admin').has('role:admin')).toBe(true);
+    expect([...permissionsForRole('admin')]).toEqual(
+      expect.arrayContaining([
+        'timing:record',
+        'timing:correct',
+        'timing:publish',
+        'timing:read',
+      ]),
+    );
   });
   it('preserves the legacy acceptance workflow as the default', () => {
     expect(validateEntryWorkflow(defaultEntryWorkflow)).toEqual([]);

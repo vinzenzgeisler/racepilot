@@ -1,10 +1,7 @@
 /** Versioned, deterministic timing rules. No discipline-specific scoring is implied. */
 
 export const TIMING_RULE_VERSION = 1 as const;
-export type TimingScoringMethod =
-  | 'fastest-run'
-  | 'sum'
-  | 'target-deviation';
+export type TimingScoringMethod = 'fastest-run' | 'sum' | 'target-deviation';
 export type TimingExclusion = 'DNF' | 'DNS' | 'DSQ';
 
 export interface TimingRun {
@@ -53,6 +50,8 @@ export function calculateTimingResults(
 ): TimingRankedResult[] {
   if (!Number.isInteger(rule.version) || rule.version < 1)
     throw new Error('Invalid timing rule version');
+  if (rule.version !== TIMING_RULE_VERSION)
+    throw new Error(`Unsupported timing rule version: ${rule.version}`);
   if (!Number.isInteger(rule.runCount) || rule.runCount < 1)
     throw new Error('Invalid run count');
   if (
@@ -113,7 +112,8 @@ export function calculateTimingResults(
     if (a.exclusion || b.exclusion) {
       if (!a.exclusion) return -1;
       if (!b.exclusion) return 1;
-      const statusOrder = exclusionOrder[a.exclusion] - exclusionOrder[b.exclusion];
+      const statusOrder =
+        exclusionOrder[a.exclusion] - exclusionOrder[b.exclusion];
       if (statusOrder !== 0) return statusOrder;
     }
     if (a.scoreMs !== null && b.scoreMs !== null && a.scoreMs !== b.scoreMs)
@@ -131,7 +131,8 @@ export function calculateTimingResults(
   let priorScore: number | null | undefined;
   return prepared.map((item, index) => {
     const status = item.exclusion ?? 'classified';
-    if (status === 'classified' && item.scoreMs !== priorScore) rank = index + 1;
+    if (status === 'classified' && item.scoreMs !== priorScore)
+      rank = index + 1;
     if (status === 'classified') priorScore = item.scoreMs;
     return {
       entryId: item.entryId,

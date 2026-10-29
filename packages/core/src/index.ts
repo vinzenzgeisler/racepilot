@@ -430,6 +430,10 @@ export function permissionsForRole(role: MembershipRole): ReadonlySet<string> {
         'entry:write',
         'payment:read',
         'payment:write',
+        'timing:record',
+        'timing:correct',
+        'timing:publish',
+        'timing:read',
         'role:admin',
       ])
     : new Set(['role:member']);
