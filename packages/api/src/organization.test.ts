@@ -304,6 +304,8 @@ describe('registration administration and public endpoints', () => {
       getForm: async () => ({ event: { name: 'Demo' } }),
       submit: async () => ({ accepted: true }),
       verify: async () => false,
+      requestStatusAccess: async () => {},
+      redeemStatusAccess: async () => null,
     };
     const observed: string[] = [];
     api.registrationRateLimiter = {
@@ -360,12 +362,79 @@ describe('registration administration and public endpoints', () => {
     expect(observed).toEqual(['unknown', 'unknown', 'unknown']);
   });
 
+  it('returns neutral participant-link responses and exposes status only through token redemption', async () => {
+    const api = deps();
+    const issued: string[] = [];
+    api.publicRegistration = {
+      getForm: async () => null,
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+      requestStatusAccess: async (_context, slug, email) => {
+        issued.push(`${slug}:${email}`);
+      },
+      redeemStatusAccess: async (_context, token) =>
+        token === 'a'.repeat(64)
+          ? [
+              {
+                eventName: 'Event',
+                statusKey: 'pending',
+                label: 'Pending',
+                color: '#123456',
+              },
+            ]
+          : null,
+    };
+    const app = createApp(api);
+    const request = (email: string) =>
+      app.request(
+        `/public/organizations/${config.organizationId}/events/event/registration/status-link`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email }),
+        },
+      );
+    const known = await request('verified@example.test');
+    const unknown = await request('unknown@example.test');
+    expect(known.status).toBe(202);
+    expect(unknown.status).toBe(202);
+    expect(await known.json()).toEqual(await unknown.json());
+    expect(issued).toEqual([
+      'event:verified@example.test',
+      'event:unknown@example.test',
+    ]);
+    const byEntryId = await app.request(
+      '/public/registration/status/redeem?entryId=20000000-0000-4000-8000-000000000001',
+      { method: 'POST', body: '{}' },
+    );
+    expect(await byEntryId.json()).toEqual({
+      error: 'This status link is invalid, expired, or already used.',
+    });
+    const redeemed = await app.request('/public/registration/status/redeem', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: 'a'.repeat(64) }),
+    });
+    expect(await redeemed.json()).toEqual({
+      statuses: [
+        {
+          eventName: 'Event',
+          statusKey: 'pending',
+          label: 'Pending',
+          color: '#123456',
+        },
+      ],
+    });
+  });
+
   it('uses generic public verification responses and rate-limits by IP and event', async () => {
     const api = deps();
     api.publicRegistration = {
       getForm: async () => ({ event: { name: 'Demo' } }),
       submit: async () => ({ accepted: true }),
       verify: async () => false,
+      requestStatusAccess: async () => {},
+      redeemStatusAccess: async () => null,
     };
     api.registrationRateLimiter = {
       consume: async (ip, event) =>

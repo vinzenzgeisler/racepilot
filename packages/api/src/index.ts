@@ -204,6 +204,21 @@ export interface ApiDeps {
       context: import('@racepilot/core').RequestContext,
       token: string,
     ): Promise<boolean>;
+    requestStatusAccess(
+      context: import('@racepilot/core').RequestContext,
+      eventSlug: string,
+      email: string,
+      locale: 'de' | 'en',
+    ): Promise<void>;
+    redeemStatusAccess(
+      context: import('@racepilot/core').RequestContext,
+      token: string,
+    ): Promise<Array<{
+      eventName: string;
+      statusKey: string;
+      label: string;
+      color: string;
+    }> | null>;
   };
   registrationRateLimiter?: {
     consume(ip: string, eventKey: string): Promise<boolean>;
@@ -1071,6 +1086,64 @@ export function createApp(deps: ApiDeps) {
       }
     },
   );
+  app.post(
+    '/public/organizations/:organizationId/events/:slug/registration/status-link',
+    async (c) => {
+      const orgId = c.req.param('organizationId');
+      const context = await resolvePublicContext(c.req.raw);
+      const generic = {
+        message: 'If a verified contact matches, a status link will be sent.',
+      };
+      if (
+        !context ||
+        context.organizationId !== orgId ||
+        !deps.publicRegistration
+      )
+        return c.json(generic, 202);
+      const ip = 'unknown';
+      const eventKey = `${orgId}:${c.req.param('slug')}:status`;
+      if (
+        deps.registrationRateLimiter &&
+        !(await deps.registrationRateLimiter.consume(ip, eventKey))
+      )
+        return c.json(generic, 202);
+      const body = await c.req.json().catch(() => null);
+      const email = z.string().trim().email().max(320).safeParse(body?.email);
+      const locale = z.enum(['de', 'en']).catch('de').parse(body?.locale);
+      if (!email.success) return c.json(generic, 202);
+      if (deps.registrationRateLimiter) {
+        const emailKey = `${eventKey}:${createHash('sha256').update(email.data.toLowerCase()).digest('hex')}`;
+        if (!(await deps.registrationRateLimiter.consume(ip, emailKey)))
+          return c.json(generic, 202);
+      }
+      await deps.publicRegistration
+        .requestStatusAccess(context, c.req.param('slug'), email.data, locale)
+        .catch(() => undefined);
+      return c.json(generic, 202);
+    },
+  );
+  app.post('/public/registration/status/redeem', async (c) => {
+    const generic = {
+      error: 'This status link is invalid, expired, or already used.',
+    };
+    const context = await resolvePublicContext(c.req.raw);
+    if (!context || !deps.publicRegistration) return c.json(generic, 200);
+    if (
+      deps.registrationRateLimiter &&
+      !(await deps.registrationRateLimiter.consume(
+        'unknown',
+        `${context.organizationId}:status-redeem`,
+      ))
+    )
+      return c.json(generic, 200);
+    const body = await c.req.json().catch(() => null);
+    const token = z.string().min(40).max(128).safeParse(body?.token);
+    if (!token.success) return c.json(generic, 200);
+    const statuses = await deps.publicRegistration
+      .redeemStatusAccess(context, token.data)
+      .catch(() => null);
+    return statuses ? c.json({ statuses }, 200) : c.json(generic, 200);
+  });
   app.post('/public/registration/verify', async (c) => {
     const body = await c.req.json().catch(() => null);
     const token = z.string().min(1).max(512).safeParse(body?.token);

@@ -707,6 +707,37 @@ export const groupEmailVerifications = pgTable(
       .where(sql`${t.consumedAt} is null`),
   ],
 );
+export const participantStatusAccessTokens = pgTable(
+  'participant_status_access_token',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    registrationGroupId: uuid('registration_group_id').notNull(),
+    tokenHash: text('token_hash').notNull().unique(),
+    locale: text('locale').notNull().default('de'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'participant_status_access_group_fk',
+    }).onDelete('cascade'),
+    index('participant_status_access_expiry_idx')
+      .on(t.expiresAt)
+      .where(sql`${t.consumedAt} is null and ${t.revokedAt} is null`),
+  ],
+);
 export const consentEvidence = pgTable(
   'consent_evidence',
   {
@@ -1437,7 +1468,7 @@ export const emailTemplateVersions = pgTable(
     }).onDelete('cascade'),
     check(
       'email_template_version_key_check',
-      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected','status-change')`,
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected','status-change','participant-status-access')`,
     ),
     check('email_template_version_version_check', sql`${t.version} > 0`),
     check(
@@ -1511,7 +1542,7 @@ export const emailOutbox = pgTable(
     check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
     check(
       'email_outbox_template_key_check',
-      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected','status-change')`,
+      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected','status-change','participant-status-access')`,
     ),
     check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
     check(
@@ -2784,7 +2815,8 @@ export function createMailOutboxRepository(
       | 'entry-received'
       | 'accepted'
       | 'rejected'
-      | 'status-change',
+      | 'status-change'
+      | 'participant-status-access',
     templateVersion: row.templateVersion,
     locale: row.locale as 'de' | 'en',
     recipient: row.recipient,
@@ -3524,6 +3556,209 @@ export function createPublicRegistrationService(
         return response;
       });
     },
+    requestStatusAccess: async (
+      ctx: RequestContext,
+      eventSlug: string,
+      email: string,
+      locale: 'de' | 'en' = 'de',
+    ) => {
+      const normalized = email.trim().toLowerCase();
+      const eventRows = await db
+        .select({ id: events.id, name: events.name })
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.slug, eventSlug),
+          ),
+        )
+        .limit(1);
+      const event = eventRows[0];
+      if (!event) return;
+      const matches = await db
+        .select({
+          groupId: registrationGroups.id,
+          personId: registrationGroups.personId,
+          contact: registrationGroups.contactEmail,
+        })
+        .from(registrationGroups)
+        .innerJoin(
+          groupEmailVerifications,
+          and(
+            eq(
+              groupEmailVerifications.organizationId,
+              registrationGroups.organizationId,
+            ),
+            eq(groupEmailVerifications.eventId, registrationGroups.eventId),
+            eq(
+              groupEmailVerifications.registrationGroupId,
+              registrationGroups.id,
+            ),
+            sql`${groupEmailVerifications.consumedAt} is not null`,
+          ),
+        )
+        .where(
+          and(
+            eq(registrationGroups.organizationId, ctx.organizationId),
+            eq(registrationGroups.eventId, event.id),
+            sql`lower(${registrationGroups.contactEmail}) = ${normalized}`,
+            sql`exists (select 1 from entry e where e.organization_id = ${registrationGroups.organizationId} and e.event_id = ${registrationGroups.eventId} and e.registration_group_id = ${registrationGroups.id} and e.deleted_at is null)`,
+          ),
+        )
+        .limit(1);
+      const group = matches[0];
+      if (!group?.contact) return;
+      const accessToken = randomBytes(32).toString('base64url');
+      const now = new Date();
+      await db.transaction(async (tx) => {
+        const [lockedGroup] = await tx
+          .select({ contact: registrationGroups.contactEmail })
+          .from(registrationGroups)
+          .where(
+            and(
+              eq(registrationGroups.organizationId, ctx.organizationId),
+              eq(registrationGroups.eventId, event.id),
+              eq(registrationGroups.id, group.groupId),
+              sql`lower(${registrationGroups.contactEmail}) = ${normalized}`,
+              sql`exists (select 1 from registration_group_email_verification v where v.organization_id = ${registrationGroups.organizationId} and v.event_id = ${registrationGroups.eventId} and v.registration_group_id = ${registrationGroups.id} and v.consumed_at is not null)`,
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!lockedGroup?.contact) return;
+        await tx
+          .update(participantStatusAccessTokens)
+          .set({ revokedAt: now })
+          .where(
+            and(
+              eq(
+                participantStatusAccessTokens.organizationId,
+                ctx.organizationId,
+              ),
+              eq(
+                participantStatusAccessTokens.registrationGroupId,
+                group.groupId,
+              ),
+              sql`${participantStatusAccessTokens.consumedAt} is null`,
+              sql`${participantStatusAccessTokens.revokedAt} is null`,
+            ),
+          );
+        await tx.insert(participantStatusAccessTokens).values({
+          organizationId: ctx.organizationId,
+          eventId: event.id,
+          registrationGroupId: group.groupId,
+          tokenHash: hashToken(accessToken),
+          locale,
+          expiresAt: new Date(now.getTime() + 30 * 60_000),
+        });
+        const [person] = await tx
+          .select({ firstName: people.firstName, lastName: people.lastName })
+          .from(people)
+          .where(
+            and(
+              eq(people.organizationId, ctx.organizationId),
+              eq(people.id, group.personId),
+            ),
+          )
+          .limit(1);
+        const url = new URL(
+          `/registration/status?token=${encodeURIComponent(accessToken)}`,
+          canonicalBase,
+        ).toString();
+        await enqueueMailOutbox(
+          db,
+          ctx.organizationId,
+          {
+            eventId: event.id,
+            templateKey: 'participant-status-access',
+            templateVersion: 1,
+            templateVersionId: null,
+            locale,
+            recipient: lockedGroup.contact,
+            idempotencyKey: `participant-status-access:${randomUUID()}`,
+            variables: {
+              accessUrl: url,
+              recipientName:
+                `${person?.firstName ?? ''} ${person?.lastName ?? ''}`.trim(),
+            },
+            correlationId: ctx.correlationId,
+          },
+          tx,
+        );
+      });
+    },
+    redeemStatusAccess: async (ctx: RequestContext, token: string) =>
+      db.transaction(async (tx) => {
+        const now = new Date();
+        const [access] = await tx
+          .select()
+          .from(participantStatusAccessTokens)
+          .where(
+            and(
+              eq(
+                participantStatusAccessTokens.organizationId,
+                ctx.organizationId,
+              ),
+              eq(participantStatusAccessTokens.tokenHash, hashToken(token)),
+              sql`${participantStatusAccessTokens.consumedAt} is null`,
+              sql`${participantStatusAccessTokens.revokedAt} is null`,
+              sql`${participantStatusAccessTokens.expiresAt} > ${now}`,
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!access) return null;
+        const consumed = await tx
+          .update(participantStatusAccessTokens)
+          .set({ consumedAt: now })
+          .where(
+            and(
+              eq(participantStatusAccessTokens.id, access.id),
+              sql`${participantStatusAccessTokens.consumedAt} is null`,
+              sql`${participantStatusAccessTokens.revokedAt} is null`,
+              sql`${participantStatusAccessTokens.expiresAt} > ${now}`,
+            ),
+          )
+          .returning({ id: participantStatusAccessTokens.id });
+        if (!consumed.length) return null;
+        const result = await tx.execute(sql`
+          select e.id, ev.name as event_name, e.acceptance_status, e.workflow_revision_id,
+                 r.workflow
+          from entry e
+          join event ev on ev.organization_id=e.organization_id and ev.id=e.event_id
+          join entry_workflow_revision r on r.organization_id=e.organization_id and r.id=e.workflow_revision_id
+          where e.organization_id=${ctx.organizationId} and e.event_id=${access.eventId}
+            and e.registration_group_id=${access.registrationGroupId} and e.deleted_at is null
+          order by e.created_at, e.id`);
+        const rows = (
+          result as unknown as {
+            rows: Array<{
+              event_name: string;
+              acceptance_status: string;
+              workflow: {
+                statuses: Array<{
+                  key: string;
+                  labels: { de: string; en: string };
+                  color: string;
+                }>;
+              };
+            }>;
+          }
+        ).rows;
+        return rows.map((row) => {
+          const status = row.workflow.statuses.find(
+            (item) => item.key === row.acceptance_status,
+          );
+          return {
+            eventName: row.event_name,
+            statusKey: row.acceptance_status,
+            label:
+              status?.labels[access.locale as 'de' | 'en'] ??
+              row.acceptance_status,
+            color: status?.color ?? '#64748b',
+          };
+        });
+      }),
     verify: async (ctx: RequestContext, token: string) =>
       db.transaction(async (tx) => {
         const now = new Date();

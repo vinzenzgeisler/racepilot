@@ -45,6 +45,7 @@ import {
   registrationSettingsAudit,
   eventConsentTermsAudit,
   groupEmailVerifications,
+  participantStatusAccessTokens,
   saveMailTemplateVersion,
   emailOutbox,
   consentEvidence,
@@ -1796,7 +1797,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           .select()
           .from(emailOutbox)
           .where(eq(emailOutbox.organizationId, org!.id))
-      )[0]!;
+      ).find((row) => row.templateKey === 'verification')!;
       const verificationUrl = outbox.variables.verificationUrl!;
       const token = new URL(verificationUrl).searchParams.get('token')!;
       expect(new URL(verificationUrl).origin).toBe(
@@ -1830,6 +1831,111 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
             .where(eq(entries.organizationId, org!.id))
         ).every((entry) => entry.verificationStatus === 'verified'),
       ).toBe(true);
+      await service.requestStatusAccess(
+        ctx,
+        event!.slug,
+        'family@example.test',
+      );
+      const firstAccessMail = (
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, org!.id))
+      ).find((row) => row.templateKey === 'participant-status-access')!;
+      expect(firstAccessMail.recipient).toBe('family@example.test');
+      const firstStatusToken = new URL(
+        firstAccessMail.variables.accessUrl!,
+      ).searchParams.get('token')!;
+      await service.requestStatusAccess(
+        ctx,
+        event!.slug,
+        'family@example.test',
+        'en',
+      );
+      const accessMail = (
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, org!.id))
+      ).find(
+        (row) =>
+          row.templateKey === 'participant-status-access' &&
+          row.locale === 'en',
+      )!;
+      expect(accessMail.locale).toBe('en');
+      const accessUrl = new URL(accessMail.variables.accessUrl!);
+      expect(accessUrl.origin).toBe('https://racepilot.example.test');
+      const statusToken = accessUrl.searchParams.get('token')!;
+      const storedAccess = await db
+        .select()
+        .from(participantStatusAccessTokens)
+        .where(eq(participantStatusAccessTokens.organizationId, org!.id));
+      expect(
+        storedAccess.some(
+          (row) =>
+            row.tokenHash ===
+            createHash('sha256').update(statusToken).digest('hex'),
+        ),
+      ).toBe(true);
+      expect(storedAccess.some((row) => row.revokedAt !== null)).toBe(true);
+      expect(
+        await service.redeemStatusAccess(ctx, firstStatusToken),
+      ).toBeNull();
+      const workflowRepository = createEntryWorkflowRepository(db);
+      const pinned = await workflowRepository.getPinnedForEntry(
+        ctx,
+        savedEntries[0]!.id,
+      );
+      expect(pinned).not.toBeNull();
+      const pinnedEnglishLabel = pinned!.workflow.statuses.find(
+        (status) => status.key === 'pending',
+      )!.labels.en;
+      const changedWorkflow = {
+        ...pinned!.workflow,
+        statuses: pinned!.workflow.statuses.map((status) =>
+          status.key === 'pending'
+            ? { ...status, labels: { ...status.labels, en: 'Changed' } }
+            : status,
+        ),
+      };
+      await workflowRepository.setOrganization(
+        ctx,
+        changedWorkflow,
+        'test',
+        'change current workflow',
+      );
+      const participantView = await service.redeemStatusAccess(
+        ctx,
+        statusToken,
+      );
+      expect(participantView).toHaveLength(2);
+      expect(
+        participantView?.every(
+          (item) =>
+            item.statusKey === 'pending' && item.label === pinnedEnglishLabel,
+        ),
+      ).toBe(true);
+      expect(await service.redeemStatusAccess(ctx, statusToken)).toBeNull();
+      const expiredStatusToken =
+        'expired-participant-status-token-00000000000000000000000000000000';
+      await db.insert(participantStatusAccessTokens).values({
+        organizationId: org!.id,
+        eventId: event!.id,
+        registrationGroupId: groups[0]!.id,
+        tokenHash: createHash('sha256')
+          .update(expiredStatusToken)
+          .digest('hex'),
+        expiresAt: new Date(Date.now() - 1000),
+      });
+      expect(
+        await service.redeemStatusAccess(ctx, expiredStatusToken),
+      ).toBeNull();
+      expect(
+        await service.redeemStatusAccess(
+          { ...ctx, organizationId: organizationId(foreignOrg!.id) },
+          expiredStatusToken,
+        ),
+      ).toBeNull();
       expect(
         await db
           .select()
