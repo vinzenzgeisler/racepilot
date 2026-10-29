@@ -1773,60 +1773,6 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         .from(entries)
         .where(eq(entries.organizationId, org!.id));
       expect(savedEntries).toHaveLength(2);
-      const secondGroup = (
-        await db
-          .insert(registrationGroups)
-          .values({
-            organizationId: org!.id,
-            eventId: event!.id,
-            personId: groups[0]!.personId,
-            contactEmail: 'family@example.test',
-          })
-          .returning()
-      )[0]!;
-      await db.insert(groupEmailVerifications).values({
-        organizationId: org!.id,
-        eventId: event!.id,
-        registrationGroupId: secondGroup.id,
-        tokenHash: createHash('sha256')
-          .update('second-group-verified')
-          .digest('hex'),
-        expiresAt: new Date(Date.now() + 60_000),
-        consumedAt: new Date(),
-      });
-      await db
-        .update(entries)
-        .set({ registrationGroupId: secondGroup.id })
-        .where(eq(entries.id, savedEntries[1]!.id));
-      // Every verified group remains reachable, including groups beyond the
-      // former ten-link truncation boundary.
-      for (let index = 0; index < 10; index += 1) {
-        const [additionalGroup] = await db
-          .insert(registrationGroups)
-          .values({
-            organizationId: org!.id,
-            eventId: event!.id,
-            personId: groups[0]!.personId,
-            contactEmail: 'family@example.test',
-          })
-          .returning();
-        await db.insert(groupEmailVerifications).values({
-          organizationId: org!.id,
-          eventId: event!.id,
-          registrationGroupId: additionalGroup!.id,
-          tokenHash: createHash('sha256')
-            .update(`additional-group-verified-${index}`)
-            .digest('hex'),
-          expiresAt: new Date(Date.now() + 60_000),
-          consumedAt: new Date(),
-        });
-        await db.insert(entries).values({
-          ...savedEntries[0]!,
-          id: undefined,
-          registrationGroupId: additionalGroup!.id,
-          requestedStartNumber: null,
-        });
-      }
       expect(
         savedEntries.every(
           (entry) =>
@@ -1885,6 +1831,60 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
             .where(eq(entries.organizationId, org!.id))
         ).every((entry) => entry.verificationStatus === 'verified'),
       ).toBe(true);
+      const secondGroup = (
+        await db
+          .insert(registrationGroups)
+          .values({
+            organizationId: org!.id,
+            eventId: event!.id,
+            personId: groups[0]!.personId,
+            contactEmail: 'family@example.test',
+          })
+          .returning()
+      )[0]!;
+      await db.insert(groupEmailVerifications).values({
+        organizationId: org!.id,
+        eventId: event!.id,
+        registrationGroupId: secondGroup.id,
+        tokenHash: createHash('sha256')
+          .update('second-group-verified')
+          .digest('hex'),
+        expiresAt: new Date(Date.now() + 60_000),
+        consumedAt: new Date(),
+      });
+      await db
+        .update(entries)
+        .set({ registrationGroupId: secondGroup.id })
+        .where(eq(entries.id, savedEntries[1]!.id));
+      // Every verified group remains reachable, including groups beyond the
+      // former ten-link truncation boundary.
+      for (let index = 0; index < 10; index += 1) {
+        const [additionalGroup] = await db
+          .insert(registrationGroups)
+          .values({
+            organizationId: org!.id,
+            eventId: event!.id,
+            personId: groups[0]!.personId,
+            contactEmail: 'family@example.test',
+          })
+          .returning();
+        await db.insert(groupEmailVerifications).values({
+          organizationId: org!.id,
+          eventId: event!.id,
+          registrationGroupId: additionalGroup!.id,
+          tokenHash: createHash('sha256')
+            .update(`additional-group-verified-${index}`)
+            .digest('hex'),
+          expiresAt: new Date(Date.now() + 60_000),
+          consumedAt: new Date(),
+        });
+        await db.insert(entries).values({
+          ...savedEntries[0]!,
+          id: undefined,
+          registrationGroupId: additionalGroup!.id,
+          requestedStartNumber: null,
+        });
+      }
       await service.requestStatusAccess(
         ctx,
         event!.slug,
