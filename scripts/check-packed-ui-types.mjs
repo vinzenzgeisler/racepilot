@@ -41,6 +41,7 @@ try {
       '--package-lock=false',
       archive('@racepilot/contracts'),
       archive('@racepilot/app'),
+      archive('@racepilot/ui'),
       'typescript@^5.9.3',
       '@types/react@^19.2.0',
     ],

@@ -1,6 +1,12 @@
 module.exports = {
   forbidden: [
     {
+      name: 'ui-only-imported-by-app',
+      severity: 'error',
+      from: { path: '^packages/(?!app/|ui/)' },
+      to: { path: '^packages/ui/' },
+    },
+    {
       name: 'no-product-imports-in-core-contracts',
       severity: 'error',
       from: { path: '^packages/(core|contracts)/' },

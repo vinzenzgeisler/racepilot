@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@racepilot/contracts": "*",
+    "@racepilot/ui": "*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"
   },
