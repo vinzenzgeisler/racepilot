@@ -1,4 +1,4 @@
-import React, { useEffect, useId, useState } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
 import { Signet } from './brand/Signet.js';
 
 export type ButtonVariant =
@@ -7,49 +7,143 @@ export type ButtonSize = 56 | 48 | 40 | 32;
 export function Button({
   variant = 'primary',
   size = 40,
-  confirmText,
+  confirmText = 'Diese Aktion kann nicht automatisch rückgängig gemacht werden.',
   children,
   className = '',
   onClick,
+  onDangerConfirm,
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ButtonVariant;
   size?: ButtonSize;
   confirmText?: string;
+  onDangerConfirm?: (reason: string) => void;
 }) {
-  return (
-    <button
-      {...props}
-      className={`nb-button nb-${variant} nb-size-${size} ${className}`}
-      onClick={(event) => {
-        if (
-          variant === 'danger' &&
-          confirmText &&
-          !window.confirm(confirmText)
-        ) {
+  const [confirming, setConfirming] = useState(false);
+  const [reason, setReason] = useState('');
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!confirming) return;
+    cancelRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setConfirming(false);
+        setReason('');
+        triggerRef.current?.focus();
+      }
+      if (event.key === 'Tab') {
+        const focusable = Array.from(
+          dialogRef.current?.querySelectorAll<HTMLElement>(
+            'button, textarea',
+          ) ?? [],
+        ).filter((element) => !element.hasAttribute('disabled'));
+        const first = focusable[0];
+        const last = focusable.at(-1);
+        if (event.shiftKey && document.activeElement === first) {
           event.preventDefault();
-          return;
+          last?.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first?.focus();
         }
-        onClick?.(event);
-      }}
-    >
-      {variant.startsWith('primary') && (
-        <i aria-hidden="true" className="nb-button-signal" />
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [confirming]);
+  const isDanger = variant === 'danger';
+  const closeDialog = () => {
+    setConfirming(false);
+    setReason('');
+    requestAnimationFrame(() => triggerRef.current?.focus());
+  };
+  return (
+    <>
+      <button
+        {...props}
+        ref={triggerRef}
+        type={props.type ?? 'button'}
+        className={`nb-button nb-${variant} nb-size-${size} ${className}`}
+        onClick={(event) => {
+          if (isDanger) {
+            event.preventDefault();
+            if (!props.disabled) setConfirming(true);
+            return;
+          }
+          onClick?.(event);
+        }}
+      >
+        {children}
+        {variant.startsWith('primary') && (
+          <i aria-hidden="true" className="nb-button-signal" />
+        )}
+      </button>
+      {confirming && (
+        <div className="nb-confirm-backdrop">
+          <section
+            ref={dialogRef}
+            className="nb-confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="nb-confirm-title"
+            aria-describedby="nb-confirm-message"
+          >
+            <h2 id="nb-confirm-title">Aktion bestätigen</h2>
+            <p id="nb-confirm-message">{confirmText}</p>
+            <label htmlFor="nb-confirm-reason">Grund (erforderlich)</label>
+            <textarea
+              id="nb-confirm-reason"
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              required
+            />
+            <div className="nb-confirm-actions">
+              <button ref={cancelRef} type="button" onClick={closeDialog}>
+                Abbrechen
+              </button>
+              <button
+                type="button"
+                className="nb-confirm-danger"
+                disabled={!reason.trim()}
+                onClick={() => {
+                  const value = reason.trim();
+                  closeDialog();
+                  onDangerConfirm?.(value);
+                  if (!onDangerConfirm && onClick) {
+                    const nativeEvent = new MouseEvent('click', {
+                      bubbles: true,
+                      cancelable: true,
+                    });
+                    Object.defineProperty(nativeEvent, 'currentTarget', {
+                      value: triggerRef.current,
+                    });
+                    onClick(
+                      nativeEvent as unknown as React.MouseEvent<HTMLButtonElement>,
+                    );
+                  }
+                }}
+              >
+                Bestätigen
+              </button>
+            </div>
+          </section>
+        </div>
       )}
-      {children}
-    </button>
+    </>
   );
 }
 
 export type Status =
   'new' | 'in_progress' | 'missing' | 'done' | 'rejected' | 'not_relevant';
-const statusInfo: Record<Status, { label: string; icon: string }> = {
-  new: { label: 'Neu', icon: '' },
-  in_progress: { label: 'In Arbeit', icon: '●' },
-  missing: { label: 'Fehlt', icon: '!' },
-  done: { label: 'Erledigt', icon: '✓' },
-  rejected: { label: 'Abgelehnt', icon: '×' },
-  not_relevant: { label: 'Nicht relevant', icon: '–' },
+const statusInfo: Record<Status, { label: string; mark: string }> = {
+  new: { label: 'Neu', mark: 'square' },
+  in_progress: { label: 'In Arbeit', mark: 'square' },
+  missing: { label: 'Fehlt', mark: 'square' },
+  done: { label: 'Erledigt', mark: 'square' },
+  rejected: { label: 'Abgelehnt', mark: '×' },
+  not_relevant: { label: 'Nicht relevant', mark: '–' },
 };
 export function StatusLabel({
   status,
@@ -61,7 +155,13 @@ export function StatusLabel({
   const info = statusInfo[status];
   return (
     <span className={`nb-status nb-status-${status}`}>
-      <span aria-hidden="true">{info.icon}</span>
+      {info.mark === 'square' ? (
+        <i className="nb-status-mark" aria-hidden="true" />
+      ) : (
+        <span className="nb-status-mark-text" aria-hidden="true">
+          {info.mark}
+        </span>
+      )}
       {children ?? info.label}
     </span>
   );
@@ -166,46 +266,36 @@ export type IconName =
   | 'more'
   | 'next';
 const paths: Record<IconName, React.ReactNode> = {
-  list: (
-    <>
-      <path d="M9 6h12M9 12h12M9 18h12" />
-      <path d="M4 6h.01M4 12h.01M4 18h.01" />
-    </>
-  ),
+  list: <path d="M4 6h16M4 12h16M4 18h10" />,
   document: (
     <>
-      <path d="M6 3h8l4 4v14H6z" />
-      <path d="M14 3v5h5M9 12h6M9 16h6" />
+      <path d="M6 3h9l4 4v14H6z" />
+      <path d="M15 3v4h4" />
     </>
   ),
   mail: (
     <>
-      <rect x="3" y="5" width="18" height="14" />
-      <path d="m3 7 9 7 9-7" />
+      <path d="M3 6h18v12H3zM3 6l9 7 9-7" />
     </>
   ),
   calendar: (
     <>
-      <rect x="3" y="5" width="18" height="16" />
-      <path d="M7 3v4m10-4v4M3 10h18" />
+      <path d="M4 5h16v15H4zM4 10h16M9 3v4M15 3v4" />
     </>
   ),
   approval: (
     <>
-      <path d="m4 12 5 5L20 6" />
-      <path d="M21 12v8H3V4h12" />
+      <path d="M8 3h8v4H8zM5 5H3v16h16V5h-3M9 13l2 2 4-4" />
     </>
   ),
   info: (
     <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 11v6m0-10h.01" />
+      <path d="M12 3l9 17H3zM12 10v4M12 16.5v1" />
     </>
   ),
   search: (
     <>
-      <circle cx="10.5" cy="10.5" r="6.5" />
-      <path d="m16 16 5 5" />
+      <path d="M4 4h10v10H4zM14 14l6 6" />
     </>
   ),
   filter: (
@@ -215,12 +305,10 @@ const paths: Record<IconName, React.ReactNode> = {
   ),
   more: (
     <>
-      <circle cx="5" cy="12" r="1" />
-      <circle cx="12" cy="12" r="1" />
-      <circle cx="19" cy="12" r="1" />
+      <path d="M5 11h2v2H5zM11 11h2v2h-2zM17 11h2v2h-2z" fill="currentColor" />
     </>
   ),
-  next: <path d="M4 12h16m-7-7 7 7-7 7" />,
+  next: <path d="M4 12h16M14 6l6 6-6 6" />,
 };
 export function Icon({ name, label }: { name: IconName; label?: string }) {
   return (
@@ -376,8 +464,36 @@ export function SelectionBar({
   onAction?: () => void;
   onClear?: () => void;
 }) {
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.style.getPropertyValue('--nb-selection-height');
+    root.dataset.nbSelectionBar = 'visible';
+    const measure = () =>
+      root.style.setProperty(
+        '--nb-selection-height',
+        `${barRef.current?.getBoundingClientRect().height ?? 72}px`,
+      );
+    measure();
+    const observer =
+      typeof ResizeObserver === 'undefined'
+        ? undefined
+        : new ResizeObserver(measure);
+    if (barRef.current) observer?.observe(barRef.current);
+    return () => {
+      observer?.disconnect();
+      delete root.dataset.nbSelectionBar;
+      if (previous) root.style.setProperty('--nb-selection-height', previous);
+      else root.style.removeProperty('--nb-selection-height');
+    };
+  }, []);
   return (
-    <div className="nb-selection" role="region" aria-label="Auswahlaktionen">
+    <div
+      ref={barRef}
+      className="nb-selection"
+      role="region"
+      aria-label="Auswahlaktionen"
+    >
       <strong>{count} ausgewählt</strong>
       <button type="button" onClick={onAction}>
         {action} ({count} von {total})
@@ -421,12 +537,37 @@ export function Menu({
   label?: string;
   children: React.ReactNode;
 }) {
+  const detailsRef = useRef<HTMLDetailsElement>(null);
+  const summaryRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && detailsRef.current?.open) {
+        detailsRef.current.open = false;
+        summaryRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, []);
   return (
-    <details className="nb-menu">
-      <summary aria-label={label}>
+    <details ref={detailsRef} className="nb-menu">
+      <summary ref={summaryRef} aria-label={label}>
         <Icon name="more" />
       </summary>
-      <div role="menu">{children}</div>
+      <div
+        className="nb-menu-disclosure"
+        onClick={(event) => {
+          if (
+            event.target instanceof Element &&
+            event.target.closest('button, a')
+          ) {
+            detailsRef.current!.open = false;
+            summaryRef.current?.focus();
+          }
+        }}
+      >
+        {children}
+      </div>
     </details>
   );
 }
@@ -438,7 +579,7 @@ export function MenuItem({
   onClick?: () => void;
 }) {
   return (
-    <button type="button" role="menuitem" onClick={onClick}>
+    <button type="button" onClick={onClick}>
       {children}
     </button>
   );

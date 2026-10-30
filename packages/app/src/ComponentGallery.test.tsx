@@ -55,4 +55,41 @@ describe('component review gallery', () => {
     act(() => (dismiss as HTMLButtonElement).click());
     expect(container.textContent).not.toContain('Nr. 42 ist zugelassen.');
   });
+  it('uses disclosure semantics and closes on Escape after moving focus back to its trigger', () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    act(() => root!.render(<ComponentGallery />));
+    const details =
+      container.querySelector<HTMLDetailsElement>('details.nb-menu')!;
+    const summary = details.querySelector('summary')!;
+    act(() => {
+      details.open = true;
+    });
+    const menuItem = details.querySelector('button')!;
+    expect(menuItem.hasAttribute('role')).toBe(false);
+    act(() => menuItem.focus());
+    act(() =>
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      ),
+    );
+    expect(details.open).toBe(false);
+    expect(document.activeElement).toBe(summary);
+  });
+  it('closes the disclosure after activating an item and restores trigger focus', () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    act(() => root!.render(<ComponentGallery />));
+    const details =
+      container.querySelector<HTMLDetailsElement>('details.nb-menu')!;
+    const summary = details.querySelector('summary')!;
+    act(() => {
+      details.open = true;
+    });
+    act(() => details.querySelector('button')!.click());
+    expect(details.open).toBe(false);
+    expect(document.activeElement).toBe(summary);
+  });
 });

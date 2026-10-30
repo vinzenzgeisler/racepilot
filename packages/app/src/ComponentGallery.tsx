@@ -40,11 +40,68 @@ export function ComponentGallery() {
           <Button size={56}>Groß · 56</Button>
           <Button size={48}>Mittel · 48</Button>
           <Button size={40}>Primär · 40</Button>
+          <span className="nb-gallery-dark">
+            <Button variant="primary-dark" size={40}>
+              Primär dunkel · 40
+            </Button>
+          </span>
           <Button size={32}>Kompakt · 32</Button>
+          <Button size={40} disabled>
+            Inaktiv · 40
+          </Button>
           <Button variant="secondary">Sekundär</Button>
           <Button variant="text">Details →</Button>
-          <Button variant="danger" confirmText="Aktion bestätigen?">
-            Gefahr
+          <Button
+            variant="danger"
+            confirmText="Nennung Nr. 42 ablehnen? Tom Probe erhält eine E-Mail mit dem Grund."
+            onDangerConfirm={() => setToast(true)}
+          >
+            Ablehnen …
+          </Button>
+        </div>
+      </section>
+      <section>
+        <h2>Button-Zustände</h2>
+        <div className="nb-gallery-row">
+          <Button>Standard</Button>
+          <Button className="nb-state-hover">Hover</Button>
+          <Button className="nb-state-pressed">Gedrückt</Button>
+          <Button className="nb-state-focus">Fokus</Button>
+          <Button disabled>Inaktiv</Button>
+          <span className="nb-gallery-dark">
+            <Button variant="primary-dark">Dunkel · Standard</Button>
+          </span>
+          <span className="nb-gallery-dark">
+            <Button variant="primary-dark" className="nb-state-hover">
+              Dunkel · Hover
+            </Button>
+          </span>
+          <span className="nb-gallery-dark">
+            <Button variant="primary-dark" className="nb-state-pressed">
+              Dunkel · Gedrückt
+            </Button>
+          </span>
+          <span className="nb-gallery-dark">
+            <Button variant="primary-dark" className="nb-state-focus">
+              Dunkel · Fokus
+            </Button>
+          </span>
+          <span className="nb-gallery-dark">
+            <Button variant="primary-dark" disabled>
+              Dunkel · Inaktiv
+            </Button>
+          </span>
+          <Button variant="secondary" className="nb-state-hover">
+            Sekundär · Hover
+          </Button>
+          <Button variant="secondary" className="nb-state-pressed">
+            Sekundär · Gedrückt
+          </Button>
+          <Button variant="secondary" className="nb-state-focus">
+            Sekundär · Fokus
+          </Button>
+          <Button variant="secondary" disabled>
+            Sekundär · Inaktiv
           </Button>
         </div>
       </section>
