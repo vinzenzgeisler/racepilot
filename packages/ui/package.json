@@ -5,7 +5,8 @@
   "exports": {
     ".": "./dist/index.js",
     "./tokens.css": "./src/tokens.css",
-    "./base.css": "./src/base.css"
+    "./base.css": "./src/base.css",
+    "./components.css": "./src/components.css"
   },
   "scripts": {
     "test": "vitest run"
@@ -25,6 +26,7 @@
     "licenses",
     "src/tokens.css",
     "src/base.css",
+    "src/components.css",
     "src/brand/signet.svg",
     "src/brand/app-icon.svg",
     "TRADEMARKS.md"

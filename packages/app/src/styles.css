@@ -257,3 +257,81 @@ section[aria-labelledby='modules-title'] select {
   width: 100%;
   font-family: ui-monospace, monospace;
 }
+.nb-gallery {
+  max-width: 1120px;
+}
+.nb-gallery section {
+  padding: 24px 0;
+  border-top: 2px solid var(--color-ink);
+}
+.nb-gallery section h2 {
+  font-family: var(--font-archivo);
+  font-size: 22px;
+}
+.nb-gallery-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.nb-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+.nb-icon-sample {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 64px;
+}
+.nb-gallery .nb-table {
+  margin-top: 12px;
+}
+
+.nb-gallery-grid {
+  align-items: start;
+}
+.nb-gallery-grid .nb-field {
+  width: 100%;
+}
+.nb-gallery-grid > div {
+  align-self: start;
+}
+.nb-gallery-dark {
+  display: inline-flex;
+  align-items: center;
+  min-height: 72px;
+  padding: 12px;
+  background: var(--color-green);
+}
+.nb-state-hover::before {
+  transform: scaleX(1);
+  background: var(--color-night);
+}
+.nb-state-hover .nb-button-signal {
+  background: var(--color-signal);
+}
+.nb-state-pressed {
+  box-shadow: inset 0 3px 0 rgb(0 0 0 / 35%);
+}
+.nb-state-focus {
+  outline: 3px solid var(--color-marshal) !important;
+  outline-offset: 3px !important;
+}
+.nb-state-hover.nb-primary-dark::before {
+  background: var(--color-ivory);
+}
+.nb-state-hover.nb-secondary::before {
+  background: var(--color-sage);
+}
+.nb-state-hover.nb-primary-dark {
+  color: var(--color-night);
+}
+
+.nb-state-pressed.nb-primary-dark {
+  background: #ddefe5;
+}
+.nb-state-pressed.nb-secondary {
+  background: #d3dcd3;
+}
