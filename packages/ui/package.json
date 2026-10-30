@@ -19,5 +19,12 @@
   "devDependencies": {
     "vitest": "^3.2.4"
   },
-  "private": true
+  "private": true,
+  "files": [
+    "dist",
+    "licenses",
+    "src/tokens.css",
+    "src/base.css",
+    "src/brand/signet.svg"
+  ]
 }

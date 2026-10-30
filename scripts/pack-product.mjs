@@ -84,8 +84,12 @@ try {
     );
     for (const entry of [
       'dist',
+      'src/tokens.css',
+      'src/base.css',
+      'src/brand/signet.svg',
       'migrations',
       'fonts',
+      'licenses',
       'README.md',
       'LICENSE',
     ]) {
@@ -112,8 +116,12 @@ try {
         file === 'README.md' ||
         file === 'LICENSE' ||
         file.startsWith('dist/') ||
+        file === 'src/tokens.css' ||
+        file === 'src/base.css' ||
+        file === 'src/brand/signet.svg' ||
         file.startsWith('migrations/') ||
-        file.startsWith('fonts/'),
+        file.startsWith('fonts/') ||
+        file.startsWith('licenses/'),
     );
     if (!allowed) {
       throw new Error(
