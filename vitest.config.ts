@@ -9,6 +9,7 @@ export default defineConfig({
     // Tests run against package sources so they do not depend on a prior build.
     alias: {
       '@racepilot/core': source('core'),
+      '@racepilot/ui': source('ui'),
       '@racepilot/contracts': source('contracts'),
       '@racepilot/adapter-postgres': source('adapter-postgres'),
       '@racepilot/artifacts/pdf': fileURLToPath(
