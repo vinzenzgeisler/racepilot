@@ -42,22 +42,11 @@
   transform-origin: left;
   transition: transform 240ms var(--ease-launch);
 }
-.nb-button:hover::before,
-.nb-button:focus-visible::before {
-  transform: scaleX(1);
-}
-.nb-button:hover,
-.nb-button:focus-visible {
-  color: var(--color-ivory);
-}
 .nb-button-signal {
   width: 8px;
   height: 8px;
   background: var(--color-green);
   transition: background 120ms;
-}
-.nb-button:hover .nb-button-signal {
-  background: var(--color-signal);
 }
 .nb-primary,
 .nb-primary-dark {
@@ -67,15 +56,8 @@
 .nb-primary::before {
   background: var(--color-ivory);
 }
-.nb-primary:hover,
-.nb-primary:focus-visible {
-  color: var(--color-green);
-}
 .nb-primary .nb-button-signal {
   background: var(--color-ivory);
-}
-.nb-primary:hover .nb-button-signal {
-  background: var(--color-signal);
 }
 .nb-primary-dark {
   background: var(--color-night);
@@ -92,10 +74,6 @@
 .nb-text::before {
   display: none;
 }
-.nb-text:hover {
-  background: var(--color-sage);
-  color: var(--color-green);
-}
 .nb-danger {
   border-color: var(--color-marshal-text);
   color: var(--color-marshal-text);
@@ -103,7 +81,7 @@
 .nb-danger::before {
   background: var(--color-marshal);
 }
-.nb-danger:hover {
+.nb-danger:enabled:hover {
   color: var(--color-ink);
 }
 .nb-confirm-actions {
@@ -486,10 +464,6 @@
 .nb-primary .nb-button-signal {
   background: var(--color-mint);
 }
-.nb-primary:hover .nb-button-signal,
-.nb-primary:active .nb-button-signal {
-  background: var(--color-signal);
-}
 .nb-primary-dark {
   background: var(--color-mint);
   color: var(--color-night);
@@ -501,15 +475,42 @@
 .nb-primary-dark .nb-button-signal {
   background: var(--color-green);
 }
-.nb-primary-dark:hover .nb-button-signal,
-.nb-primary-dark:active .nb-button-signal {
-  background: var(--color-signal);
-}
 .nb-secondary {
   box-shadow: inset 0 0 0 1px var(--color-green);
 }
 .nb-secondary::before {
   background: var(--color-sage);
+}
+.nb-button:enabled:hover::before,
+.nb-button:enabled:focus-visible::before {
+  transform: scaleX(1);
+}
+.nb-primary:enabled:hover,
+.nb-primary:enabled:focus-visible {
+  color: var(--color-ivory);
+}
+.nb-primary-dark:enabled:hover,
+.nb-primary-dark:enabled:focus-visible {
+  color: var(--color-night);
+}
+.nb-secondary:enabled:hover,
+.nb-secondary:enabled:focus-visible,
+.nb-text:enabled:hover,
+.nb-text:enabled:focus-visible {
+  color: var(--color-green);
+  background: var(--color-sage);
+}
+.nb-danger:enabled:hover,
+.nb-danger:enabled:focus-visible {
+  color: var(--color-ink);
+}
+.nb-primary:enabled:hover .nb-button-signal,
+.nb-primary:enabled:focus-visible .nb-button-signal,
+.nb-primary:enabled:active .nb-button-signal,
+.nb-primary-dark:enabled:hover .nb-button-signal,
+.nb-primary-dark:enabled:focus-visible .nb-button-signal,
+.nb-primary-dark:enabled:active .nb-button-signal {
+  background: var(--color-signal);
 }
 .nb-button:focus-visible,
 .nb-menu summary:focus-visible,
@@ -523,13 +524,13 @@
   outline-offset: 3px;
   z-index: 2;
 }
-.nb-button:active {
+.nb-button:enabled:active {
   box-shadow: inset 0 3px 0 rgb(0 0 0 / 35%);
 }
-.nb-primary:active {
+.nb-primary:enabled:active {
   background: #0a1812;
 }
-.nb-primary-dark:active {
+.nb-primary-dark:enabled:active {
   background: #ddefe5;
 }
 .nb-button:disabled {
@@ -779,18 +780,6 @@ html[data-nb-selection-bar='visible'] {
   }
 }
 
-.nb-primary:hover,
-.nb-primary:focus-visible {
-  color: var(--color-ivory);
-}
-.nb-primary-dark:hover,
-.nb-primary-dark:focus-visible {
-  color: var(--color-night);
-}
-.nb-secondary:hover {
-  color: var(--color-green);
-  background: var(--color-sage);
-}
 body:has(.nb-selection) {
   padding-bottom: var(--nb-selection-height, 72px);
 }

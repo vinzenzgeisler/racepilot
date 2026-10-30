@@ -285,7 +285,7 @@ const paths: Record<IconName, React.ReactNode> = {
   ),
   approval: (
     <>
-      <path d="M8 3h8v4H8zM5 5H3v16h16V5h-3M9 13l2 2 4-4" />
+      <path d="M5 5h3M16 5h3v16H5V5M9 13l2 2 4-4" />
     </>
   ),
   info: (

@@ -36,6 +36,18 @@ describe('component review gallery', () => {
     ])
       expect(container.textContent).toContain(text);
   });
+  it('uses the M6 approval icon path', () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    act(() => root!.render(<ComponentGallery />));
+    const icon = container.querySelector<SVGSVGElement>(
+      '.nb-icon[aria-label="approval"]',
+    );
+    expect(icon?.querySelector('path')?.getAttribute('d')).toBe(
+      'M5 5h3M16 5h3v16H5V5M9 13l2 2 4-4',
+    );
+  });
   it('opens the menu and can trigger and dismiss a confirmation toast', () => {
     container = document.createElement('div');
     document.body.append(container);
