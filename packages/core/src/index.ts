@@ -529,17 +529,6 @@ export const entryStatusMeanings = [
   'not_relevant',
 ] as const;
 export type EntryStatusMeaning = (typeof entryStatusMeanings)[number];
-/** Stable semantic colors. Presentation clients should choose color by meaning, never by a tenant value. */
-export const entryStatusMeaningColors: Readonly<
-  Record<EntryStatusMeaning, string>
-> = Object.freeze({
-  new: '#4f5a54',
-  in_progress: '#91b6a0',
-  missing: '#b8400f',
-  done: '#3fb97a',
-  rejected: '#b8400f',
-  not_relevant: '#9aa49f',
-});
 export const entryWorkflowCategories = [
   'pending',
   'accepted',
@@ -628,6 +617,17 @@ export interface EntryStatusDimensionRepository {
     reason: string,
   ): Promise<boolean>;
 }
+export class EntryStatusInUseError extends Error {
+  readonly dimension: EntryStatusDimensionKey;
+  readonly status: string;
+
+  constructor(dimension: EntryStatusDimensionKey, status: string) {
+    super(`Cannot remove in-use status ${dimension}.${status}`);
+    this.name = 'EntryStatusInUseError';
+    this.dimension = dimension;
+    this.status = status;
+  }
+}
 export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
   {
     version: 1,
@@ -635,35 +635,35 @@ export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
       {
         key: 'pending',
         labels: { de: 'Ausstehend', en: 'Pending' },
-        color: entryStatusMeaningColors.new,
+        color: '#64748b',
         category: 'pending',
         meaning: 'new',
       },
       {
         key: 'accepted',
         labels: { de: 'Angenommen', en: 'Accepted' },
-        color: entryStatusMeaningColors.done,
+        color: '#15803d',
         category: 'accepted',
         meaning: 'done',
       },
       {
         key: 'rejected',
         labels: { de: 'Abgelehnt', en: 'Rejected' },
-        color: entryStatusMeaningColors.rejected,
+        color: '#b91c1c',
         category: 'rejected',
         meaning: 'rejected',
       },
       {
         key: 'waitlisted',
         labels: { de: 'Warteliste', en: 'Waitlisted' },
-        color: entryStatusMeaningColors.in_progress,
+        color: '#a16207',
         category: 'waitlisted',
         meaning: 'in_progress',
       },
       {
         key: 'withdrawn',
         labels: { de: 'Zurückgezogen', en: 'Withdrawn' },
-        color: entryStatusMeaningColors.not_relevant,
+        color: '#475569',
         category: 'withdrawn',
         meaning: 'not_relevant',
       },
@@ -696,7 +696,7 @@ const defaultMeaningByCategory: Readonly<
   withdrawn: 'not_relevant',
 });
 
-/** Normalize legacy revisions and discard arbitrary colors in favor of meaning-bound tokens. */
+/** Add stable semantics to legacy revisions while preserving their legacy color field. */
 export function normalizeEntryWorkflow(workflow: EntryWorkflow): EntryWorkflow {
   return {
     ...workflow,
@@ -706,7 +706,6 @@ export function normalizeEntryWorkflow(workflow: EntryWorkflow): EntryWorkflow {
       return {
         ...status,
         meaning,
-        color: entryStatusMeaningColors[meaning],
       };
     }),
   };

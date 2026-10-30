@@ -76,6 +76,7 @@ import {
   projectEntryStatuses,
   defaultEntryStatusDimensionConfig,
   validateEntryStatusDimensionConfig,
+  EntryStatusInUseError,
   ProviderError,
 } from '@racepilot/core';
 import type { Pool } from 'pg';
@@ -4586,8 +4587,9 @@ export function createEntryStatusDimensionRepository(
             (item) => item.key === state.dimension,
           );
           if (!dimension?.values.some((item) => item.key === state.value))
-            throw new Error(
-              `Cannot remove in-use status ${state.dimension}.${state.value}`,
+            throw new EntryStatusInUseError(
+              state.dimension as import('@racepilot/core').EntryStatusDimensionKey,
+              state.value,
             );
         }
         await tx
@@ -4627,12 +4629,39 @@ export function createEntryStatusDimensionRepository(
       if (!actor.trim() || !reason.trim())
         throw new Error('Actor and reason are required');
       return db.transaction(async (tx) => {
+        // Match setEvent's lock order: serialize on the event, then lock the entry.
+        // event_id is immutable; this unlocked lookup only discovers the lock key.
+        const [identity] = await tx
+          .select({ eventId: entries.eventId })
+          .from(entries)
+          .where(
+            and(
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.id, entryId),
+              sql`${entries.deletedAt} is null`,
+            ),
+          )
+          .limit(1);
+        if (!identity) return null;
+        const [event] = await tx
+          .select({ id: events.id })
+          .from(events)
+          .where(
+            and(
+              eq(events.organizationId, ctx.organizationId),
+              eq(events.id, identity.eventId),
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!event) return null;
         const [entry] = await tx
           .select({ eventId: entries.eventId })
           .from(entries)
           .where(
             and(
               eq(entries.organizationId, ctx.organizationId),
+              eq(entries.eventId, event.id),
               eq(entries.id, entryId),
               sql`${entries.deletedAt} is null`,
             ),

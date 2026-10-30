@@ -824,6 +824,122 @@
           "name": "keeps an event without the module unchanged and denies all timing actions"
         }
       ]
+    },
+    {
+      "id": "event_entry_status_dimension_config",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id",
+      "isolation": "Composite event foreign key; repository scopes reads and writes to RequestContext.organizationId and locks the event before configuration changes.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates status configuration, transitions, and audits by event and organization"
+        }
+      ]
+    },
+    {
+      "id": "event_entry_status_dimension_config_audit",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id",
+      "isolation": "Append-only configuration audit has a composite event foreign key; writes share the scoped event transaction.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates status configuration, transitions, and audits by event and organization"
+        }
+      ]
+    },
+    {
+      "id": "entry_status_dimension_value",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + entry_id",
+      "isolation": "Composite FK binds each value to an entry in the same tenant and event; transition resolves the entry and event under server context.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates status configuration, transitions, and audits by event and organization"
+        }
+      ]
+    },
+    {
+      "id": "entry_status_dimension_audit",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + entry_id",
+      "isolation": "Append-only transition audit uses a composite entry/event FK and is inserted atomically with the tenant-scoped transition.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates status configuration, transitions, and audits by event and organization"
+        }
+      ]
+    },
+    {
+      "id": "entry_status_hints_audit",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + entry_id",
+      "isolation": "Append-only hint audit uses a composite entry/event FK; hint mutation filters by RequestContext.organizationId and entry ID.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates status configuration, transitions, and audits by event and organization"
+        }
+      ]
+    },
+    {
+      "id": "admin-event-status-dimensions-get",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + path eventId",
+      "isolation": "Requires event:read; repository verifies both event ID and RequestContext.organizationId and returns not-found for foreign events.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "rejects foreign tenant identifiers and events on status dimension routes"
+        }
+      ]
+    },
+    {
+      "id": "admin-event-status-dimensions-put",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + path eventId",
+      "isolation": "Requires event:write; strict body schema rejects client tenant IDs; adapter locks and validates only the event in the resolved tenant.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "rejects foreign tenant identifiers and events on status dimension routes"
+        }
+      ]
+    },
+    {
+      "id": "admin-entry-status-dimension-transition",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + path entryId (event resolved from entry)",
+      "isolation": "Requires entry:write; strict body schema accepts no tenant/event identity; repository locks the owning event before the entry and returns not-found for foreign IDs.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "rejects foreign tenant identifiers and events on status dimension routes"
+        },
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates status configuration, transitions, and audits by event and organization"
+        }
+      ]
+    },
+    {
+      "id": "admin-entry-status-hints-put",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + path entryId (event resolved from entry)",
+      "isolation": "Requires entry:write; strict body schema rejects client tenant IDs; repository merges hints only into the entry in the resolved tenant.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/index.test.ts",
+          "name": "rejects foreign tenant identifiers and events on status dimension routes"
+        },
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "isolates status configuration, transitions, and audits by event and organization"
+        }
+      ]
     }
   ]
 }

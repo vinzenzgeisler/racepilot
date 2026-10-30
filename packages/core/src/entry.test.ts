@@ -13,7 +13,6 @@ import {
   permissionsForRole,
   defaultEntryStatusDimensionConfig,
   entryStatusMeanings,
-  entryStatusMeaningColors,
   normalizeEntryWorkflow,
   projectEntryStatuses,
   validateEntryStatusDimensionConfig,
@@ -71,7 +70,7 @@ describe('entry domain rules', () => {
       'waitlisted->withdrawn',
     ]);
   });
-  it('normalizes legacy workflows to fixed status meanings and meaning-bound colors', () => {
+  it('normalizes legacy meanings without making legacy colors semantic tokens', () => {
     const legacy = {
       ...defaultEntryWorkflow,
       statuses: defaultEntryWorkflow.statuses.map((status) => {
@@ -89,7 +88,7 @@ describe('entry domain rules', () => {
       'not_relevant',
     ]);
     for (const status of normalized.statuses)
-      expect(status.color).toBe(entryStatusMeaningColors[status.meaning!]);
+      expect(status.color).toBe('#010203');
     expect(entryStatusMeanings).toHaveLength(6);
   });
   it('validates tenant-editable event status dimensions', () => {

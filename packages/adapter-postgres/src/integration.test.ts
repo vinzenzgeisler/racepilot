@@ -11,6 +11,7 @@ import {
   setOrganizationModule,
   defaultEntryWorkflow,
   defaultEntryStatusDimensionConfig,
+  EntryStatusInUseError,
   transitionEntry,
 } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
@@ -61,10 +62,11 @@ import {
   eventEntryStatusDimensionConfigAudit,
   entryStatusDimensionValues,
   entryStatusDimensionAudit,
+  entryStatusHintsAudit,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
-  it('isolates status-dimension configuration by event and organization', async () => {
+  it('isolates status configuration, transitions, and audits by event and organization', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();
     const createdOrganizationIds: string[] = [];
@@ -220,6 +222,15 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         ),
       ).toBeNull();
       expect(
+        await repository.updateHints(
+          ctx(orgB!.id),
+          entry!.id,
+          { passenger: true },
+          'admin-b',
+          'foreign entry',
+        ),
+      ).toBe(false);
+      expect(
         await repository.transition(
           ctx(orgA!.id),
           entry!.id,
@@ -253,6 +264,109 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           ({ key }) => key === 'passenger',
         )?.present,
       ).toBe(true);
+
+      // Hold the event row while both operations enter the database. Once both
+      // transactions are queued on that same row lock, releasing it lets PG
+      // choose either serial order without permitting a stale config write.
+      const technical = eventConfig.dimensions.find(
+        ({ key }) => key === 'technical_inspection',
+      )!;
+      const targetKey = 'race_target';
+      const configWithTarget = {
+        ...eventConfig,
+        dimensions: eventConfig.dimensions.map((dimension) =>
+          dimension.key === 'technical_inspection'
+            ? {
+                ...dimension,
+                values: [
+                  ...dimension.values,
+                  {
+                    key: targetKey,
+                    labels: { de: 'Race target', en: 'Race target' },
+                    meaning: 'done' as const,
+                  },
+                ],
+                transitions: [
+                  ...dimension.transitions,
+                  { from: 'reinspection', to: targetKey },
+                ],
+              }
+            : dimension,
+        ),
+      };
+      expect(technical.values.some(({ key }) => key === targetKey)).toBe(false);
+      await repository.setEvent(
+        ctx(orgA!.id),
+        eventA1!.id,
+        configWithTarget,
+        'admin-a',
+        'enable race target',
+      );
+      const barrier = await pool.connect();
+      await barrier.query('BEGIN');
+      await barrier.query(
+        'SELECT id FROM event WHERE organization_id = $1 AND id = $2 FOR UPDATE',
+        [orgA!.id, eventA1!.id],
+      );
+      const transition = repository.transition(
+        ctx(orgA!.id),
+        entry!.id,
+        'technical_inspection',
+        targetKey,
+        'status-race',
+        'race test',
+      );
+      const removeTarget = repository.setEvent(
+        ctx(orgA!.id),
+        eventA1!.id,
+        eventConfig,
+        'status-race',
+        'remove race target',
+      );
+      const outcomes = Promise.allSettled([transition, removeTarget]);
+      let lockHeld = true;
+      try {
+        let waiters = 0;
+        for (let attempt = 0; attempt < 100 && waiters < 2; attempt++) {
+          const result = await pool.query<{ waiters: string }>(
+            `SELECT count(*)::text AS waiters FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`,
+          );
+          waiters = Number(result.rows[0]?.waiters ?? 0);
+          if (waiters < 2)
+            await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        expect(waiters).toBeGreaterThanOrEqual(2);
+        await barrier.query('COMMIT');
+        lockHeld = false;
+      } finally {
+        if (lockHeld) await barrier.query('ROLLBACK');
+        barrier.release();
+      }
+      const [transitionOutcome, configOutcome] = await outcomes;
+      const finalConfig = (await repository.getEvent(
+        ctx(orgA!.id),
+        eventA1!.id,
+      ))!;
+      const finalEntry = await createEntryRepository(db).getById(
+        ctx(orgA!.id),
+        entry!.id,
+      );
+      const finalStatus = finalEntry!.statusProjection!.dimensions.find(
+        ({ key }) => key === 'technical_inspection',
+      )!.value;
+      const targetRemainsConfigured = finalConfig.dimensions
+        .find(({ key }) => key === 'technical_inspection')!
+        .values.some(({ key }) => key === targetKey);
+      expect(targetRemainsConfigured).toBe(finalStatus === targetKey);
+      if (transitionOutcome.status === 'fulfilled') {
+        expect(transitionOutcome.value).toBe(true);
+        expect(configOutcome.status).toBe('rejected');
+        if (configOutcome.status === 'rejected')
+          expect(configOutcome.reason).toBeInstanceOf(EntryStatusInUseError);
+      } else {
+        expect(configOutcome.status).toBe('fulfilled');
+        expect(finalStatus).toBe('reinspection');
+      }
       expect(
         await db
           .select()
@@ -264,7 +378,13 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           .select()
           .from(entryStatusDimensionAudit)
           .where(eq(entryStatusDimensionAudit.entryId, entry!.id)),
-      ).toHaveLength(1);
+      ).toHaveLength(transitionOutcome.status === 'fulfilled' ? 2 : 1);
+      expect(
+        await db
+          .select()
+          .from(entryStatusHintsAudit)
+          .where(eq(entryStatusHintsAudit.organizationId, orgB!.id)),
+      ).toHaveLength(0);
       expect(
         await db
           .select()
@@ -278,7 +398,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           .where(
             eq(eventEntryStatusDimensionConfigAudit.organizationId, orgA!.id),
           ),
-      ).toHaveLength(1);
+      ).toHaveLength(configOutcome.status === 'fulfilled' ? 3 : 2);
     } finally {
       if (createdEventIds.length)
         await db.delete(events).where(inArray(events.id, createdEventIds));

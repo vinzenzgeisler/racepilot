@@ -49,6 +49,7 @@ import {
   validateEntryWorkflow,
   normalizeEntryWorkflow,
   validateEntryStatusDimensionConfig,
+  EntryStatusInUseError,
   type EntryListQuery,
   type EntryStatusDimensionRepository,
   type EntryStatusHintKey,
@@ -1543,14 +1544,27 @@ export function createApp(deps: ApiDeps) {
     const actor = context.subject
       ? `${context.subject.issuer}|${context.subject.subject}`
       : 'unknown';
-    const config = await deps.entryStatusDimensions.setEvent(
-      context,
-      c.req.param('eventId'),
-      parsed.data.config,
-      actor,
-      parsed.data.reason,
-    );
-    return config ? c.json(config) : c.json({ error: 'Not found' }, 404);
+    try {
+      const config = await deps.entryStatusDimensions.setEvent(
+        context,
+        c.req.param('eventId'),
+        parsed.data.config,
+        actor,
+        parsed.data.reason,
+      );
+      return config ? c.json(config) : c.json({ error: 'Not found' }, 404);
+    } catch (error) {
+      if (error instanceof EntryStatusInUseError)
+        return c.json(
+          {
+            error: 'Status is in use',
+            dimension: error.dimension,
+            status: error.status,
+          },
+          409,
+        );
+      throw error;
+    }
   });
   app.post(
     '/admin/entries/:entryId/status-dimensions/:dimension/transitions',
