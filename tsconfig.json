@@ -20,6 +20,9 @@
       "path": "./packages/adapter-oidc"
     },
     {
+      "path": "./packages/ui"
+    },
+    {
       "path": "./packages/app"
     },
     {

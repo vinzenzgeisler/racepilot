@@ -14,7 +14,7 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "build": "tsc -b && npm run build --workspace @racepilot/app",
+    "build": "tsc -b && npm run build --workspace @racepilot/app && node scripts/check-self-hosted-fonts.mjs",
     "check:boundaries": "depcruise --config .dependency-cruiser.cjs packages && node scripts/check-boundaries.mjs",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:seed": "tsx scripts/db-seed.ts",
