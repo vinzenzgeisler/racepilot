@@ -9,6 +9,8 @@ import {
   createRequestContext,
   organizationId,
   defaultEntryWorkflow,
+  defaultEntryStatusDimensionConfig,
+  EntryStatusInUseError,
 } from '@racepilot/core';
 
 describe('api entry', () => {
@@ -589,6 +591,172 @@ describe('api entry', () => {
     );
     expect(response.status).toBe(403);
     expect(called).toBe(false);
+  });
+
+  it('rejects foreign tenant identifiers and events on status dimension routes', async () => {
+    const org = organizationId('11111111-1111-4111-8111-111111111111');
+    let stored: unknown;
+    let repositoryError: Error | null = null;
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: org },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'admin',
+        }),
+      },
+      memberships: {
+        resolvePermissions: async () =>
+          new Set(['event:read', 'event:write', 'entry:write']),
+      },
+      entryStatusDimensions: {
+        getEvent: async (ctx, eventId) => {
+          expect(ctx.organizationId).toBe(org);
+          return eventId === 'event-1'
+            ? defaultEntryStatusDimensionConfig
+            : null;
+        },
+        setEvent: async (ctx, eventId, config, actor, reason) => {
+          if (repositoryError) throw repositoryError;
+          expect(ctx.organizationId).toBe(org);
+          expect(eventId).toBe('event-1');
+          expect(actor).toBe('https://id.example|admin');
+          expect(reason).toBe('event setup');
+          stored = config;
+          return config;
+        },
+        transition: async (ctx, entryId, dimension, status, actor, reason) => {
+          expect(ctx.organizationId).toBe(org);
+          expect(entryId).toBe('entry-1');
+          expect(dimension).toBe('technical_inspection');
+          expect(status).toBe('reinspection');
+          expect(actor).toBe('https://id.example|admin');
+          expect(reason).toBe('checked');
+          return true;
+        },
+        updateHints: async (ctx, entryId, hints, actor, reason) => {
+          expect(ctx.organizationId).toBe(org);
+          expect(entryId).toBe('entry-1');
+          expect(hints).toEqual({ passenger: true });
+          expect(actor).toBe('https://id.example|admin');
+          expect(reason).toBe('verified passenger');
+          return true;
+        },
+      },
+    });
+    expect(
+      (await app.request('/admin/events/event-1/status-dimensions')).status,
+    ).toBe(200);
+    expect(
+      (await app.request('/admin/events/foreign-event/status-dimensions'))
+        .status,
+    ).toBe(404);
+    const response = await app.request(
+      '/admin/events/event-1/status-dimensions',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          config: defaultEntryStatusDimensionConfig,
+          reason: 'event setup',
+          organizationId: '22222222-2222-4222-8222-222222222222',
+        }),
+      },
+    );
+    expect(response.status).toBe(400);
+    const spoofedTransition = await app.request(
+      '/admin/entries/entry-1/status-dimensions/technical_inspection/transitions',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          status: 'reinspection',
+          reason: 'checked',
+          organizationId: '22222222-2222-4222-8222-222222222222',
+        }),
+      },
+    );
+    expect(spoofedTransition.status).toBe(400);
+    const spoofedHints = await app.request(
+      '/admin/entries/entry-1/status-hints',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          hints: { passenger: true },
+          reason: 'verified passenger',
+          organizationId: '22222222-2222-4222-8222-222222222222',
+        }),
+      },
+    );
+    expect(spoofedHints.status).toBe(400);
+    const transition = await app.request(
+      '/admin/entries/entry-1/status-dimensions/technical_inspection/transitions',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'reinspection', reason: 'checked' }),
+      },
+    );
+    expect(transition.status).toBe(200);
+    const hintUpdate = await app.request(
+      '/admin/entries/entry-1/status-hints',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          hints: { passenger: true },
+          reason: 'verified passenger',
+        }),
+      },
+    );
+    expect(hintUpdate.status).toBe(200);
+    const valid = await app.request('/admin/events/event-1/status-dimensions', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        config: defaultEntryStatusDimensionConfig,
+        reason: 'event setup',
+      }),
+    });
+    expect(valid.status).toBe(200);
+    expect(stored).toEqual(defaultEntryStatusDimensionConfig);
+    repositoryError = new EntryStatusInUseError(
+      'technical_inspection',
+      'reinspection',
+    );
+    const conflict = await app.request(
+      '/admin/events/event-1/status-dimensions',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          config: defaultEntryStatusDimensionConfig,
+          reason: 'remove active status',
+        }),
+      },
+    );
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toEqual({
+      error: 'Status is in use',
+      dimension: 'technical_inspection',
+      status: 'reinspection',
+    });
+    repositoryError = new Error('database unavailable');
+    const failure = await app.request(
+      '/admin/events/event-1/status-dimensions',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          config: defaultEntryStatusDimensionConfig,
+          reason: 'database write',
+        }),
+      },
+    );
+    expect(failure.status).toBe(500);
   });
 });
 

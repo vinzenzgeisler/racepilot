@@ -10,6 +10,8 @@ import {
   setEventModule,
   setOrganizationModule,
   defaultEntryWorkflow,
+  defaultEntryStatusDimensionConfig,
+  EntryStatusInUseError,
   transitionEntry,
 } from '@racepilot/core';
 import { describe, it, expect } from 'vitest';
@@ -41,6 +43,7 @@ import {
   createPublicRegistrationService,
   createRegistrationSettingsRepository,
   createEntryWorkflowRepository,
+  createEntryStatusDimensionRepository,
   createEventConsentRepository,
   registrationSettingsAudit,
   eventConsentTermsAudit,
@@ -55,9 +58,358 @@ import {
   createModuleActivationRepository,
   moduleActivationAudit,
   eventModules,
+  eventEntryStatusDimensionConfigs,
+  eventEntryStatusDimensionConfigAudit,
+  entryStatusDimensionValues,
+  entryStatusDimensionAudit,
+  entryStatusHintsAudit,
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
+  it('isolates status configuration, transitions, and audits by event and organization', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    const createdOrganizationIds: string[] = [];
+    const createdEventIds: string[] = [];
+    try {
+      const [orgA, orgB] = await db
+        .insert(organizations)
+        .values([
+          {
+            slug: `status-a-${suffix}`,
+            name: 'Status A',
+            timezone: 'UTC',
+            locale: 'en',
+          },
+          {
+            slug: `status-b-${suffix}`,
+            name: 'Status B',
+            timezone: 'UTC',
+            locale: 'en',
+          },
+        ])
+        .returning();
+      createdOrganizationIds.push(orgA!.id, orgB!.id);
+      const [eventA1, eventA2, eventB] = await db
+        .insert(events)
+        .values([
+          {
+            organizationId: orgA!.id,
+            slug: 'one',
+            name: 'One',
+            startsOn: '2030-01-01',
+            endsOn: '2030-01-02',
+          },
+          {
+            organizationId: orgA!.id,
+            slug: 'two',
+            name: 'Two',
+            startsOn: '2030-01-01',
+            endsOn: '2030-01-02',
+          },
+          {
+            organizationId: orgB!.id,
+            slug: 'one',
+            name: 'Other tenant',
+            startsOn: '2030-01-01',
+            endsOn: '2030-01-02',
+          },
+        ])
+        .returning();
+      createdEventIds.push(eventA1!.id, eventA2!.id, eventB!.id);
+      const ctx = (organization: string) =>
+        createRequestContext({
+          deploymentMode: 'cloud',
+          organizationId: organizationId(organization),
+          permissions: new Set([
+            'event:read',
+            'event:write',
+            'entry:read',
+            'entry:write',
+          ]),
+          capabilities: new Set(),
+          correlationId: 'status-dimension-isolation',
+        });
+      const repository = createEntryStatusDimensionRepository(db);
+      const eventConfig = {
+        ...defaultEntryStatusDimensionConfig,
+        dimensions: defaultEntryStatusDimensionConfig.dimensions.map(
+          (dimension) =>
+            dimension.key === 'technical_inspection'
+              ? {
+                  ...dimension,
+                  values: dimension.values.map((value) =>
+                    value.key === 'pending'
+                      ? {
+                          ...value,
+                          labels: {
+                            de: 'Event A1 pending',
+                            en: 'Event A1 pending',
+                          },
+                        }
+                      : value,
+                  ),
+                }
+              : dimension,
+        ),
+      };
+      await repository.setEvent(
+        ctx(orgA!.id),
+        eventA1!.id,
+        eventConfig,
+        'admin-a',
+        'event-specific setup',
+      );
+      expect(await repository.getEvent(ctx(orgA!.id), eventA1!.id)).toEqual(
+        eventConfig,
+      );
+      expect(await repository.getEvent(ctx(orgA!.id), eventA2!.id)).toEqual(
+        defaultEntryStatusDimensionConfig,
+      );
+      expect(await repository.getEvent(ctx(orgB!.id), eventB!.id)).toEqual(
+        defaultEntryStatusDimensionConfig,
+      );
+      expect(await repository.getEvent(ctx(orgB!.id), eventA1!.id)).toBeNull();
+      const [person] = await db
+        .insert(people)
+        .values({
+          organizationId: orgA!.id,
+          firstName: 'Test',
+          lastName: 'Driver',
+        })
+        .returning();
+      const [vehicle] = await db
+        .insert(vehicles)
+        .values({ organizationId: orgA!.id, make: 'Test', model: 'Car' })
+        .returning();
+      const [eventClass] = await db
+        .insert(eventClasses)
+        .values({
+          organizationId: orgA!.id,
+          eventId: eventA1!.id,
+          name: 'Open',
+          code: 'OPEN',
+          vehicleType: 'car',
+        })
+        .returning();
+      const [group] = await db
+        .insert(registrationGroups)
+        .values({
+          organizationId: orgA!.id,
+          eventId: eventA1!.id,
+          personId: person!.id,
+        })
+        .returning();
+      const [entry] = await db
+        .insert(entries)
+        .values({
+          organizationId: orgA!.id,
+          eventId: eventA1!.id,
+          classId: eventClass!.id,
+          registrationGroupId: group!.id,
+          driverPersonId: person!.id,
+          vehicleId: vehicle!.id,
+        })
+        .returning();
+      expect(
+        await repository.transition(
+          ctx(orgB!.id),
+          entry!.id,
+          'technical_inspection',
+          'passed',
+          'admin-b',
+          'foreign entry',
+        ),
+      ).toBeNull();
+      expect(
+        await repository.updateHints(
+          ctx(orgB!.id),
+          entry!.id,
+          { passenger: true },
+          'admin-b',
+          'foreign entry',
+        ),
+      ).toBe(false);
+      expect(
+        await repository.transition(
+          ctx(orgA!.id),
+          entry!.id,
+          'technical_inspection',
+          'reinspection',
+          'admin-a',
+          'check failed',
+        ),
+      ).toBe(true);
+      expect(
+        await repository.updateHints(
+          ctx(orgA!.id),
+          entry!.id,
+          { passenger: true },
+          'admin-a',
+          'seat role confirmed',
+        ),
+      ).toBe(true);
+      const projected = await createEntryRepository(db).getById(
+        ctx(orgA!.id),
+        entry!.id,
+      );
+      expect(
+        projected?.statusProjection?.dimensions.find(
+          ({ key }) => key === 'technical_inspection',
+        )?.value,
+      ).toBe('reinspection');
+      expect(projected?.statusProjection?.documents.total).toBe(2);
+      expect(
+        projected?.statusProjection?.hints.find(
+          ({ key }) => key === 'passenger',
+        )?.present,
+      ).toBe(true);
+
+      // Hold the event row while both operations enter the database. Once both
+      // transactions are queued on that same row lock, releasing it lets PG
+      // choose either serial order without permitting a stale config write.
+      const technical = eventConfig.dimensions.find(
+        ({ key }) => key === 'technical_inspection',
+      )!;
+      const targetKey = 'race_target';
+      const configWithTarget = {
+        ...eventConfig,
+        dimensions: eventConfig.dimensions.map((dimension) =>
+          dimension.key === 'technical_inspection'
+            ? {
+                ...dimension,
+                values: [
+                  ...dimension.values,
+                  {
+                    key: targetKey,
+                    labels: { de: 'Race target', en: 'Race target' },
+                    meaning: 'done' as const,
+                  },
+                ],
+                transitions: [
+                  ...dimension.transitions,
+                  { from: 'reinspection', to: targetKey },
+                ],
+              }
+            : dimension,
+        ),
+      };
+      expect(technical.values.some(({ key }) => key === targetKey)).toBe(false);
+      await repository.setEvent(
+        ctx(orgA!.id),
+        eventA1!.id,
+        configWithTarget,
+        'admin-a',
+        'enable race target',
+      );
+      const barrier = await pool.connect();
+      await barrier.query('BEGIN');
+      await barrier.query(
+        'SELECT id FROM event WHERE organization_id = $1 AND id = $2 FOR UPDATE',
+        [orgA!.id, eventA1!.id],
+      );
+      const transition = repository.transition(
+        ctx(orgA!.id),
+        entry!.id,
+        'technical_inspection',
+        targetKey,
+        'status-race',
+        'race test',
+      );
+      const removeTarget = repository.setEvent(
+        ctx(orgA!.id),
+        eventA1!.id,
+        eventConfig,
+        'status-race',
+        'remove race target',
+      );
+      const outcomes = Promise.allSettled([transition, removeTarget]);
+      let lockHeld = true;
+      try {
+        let waiters = 0;
+        for (let attempt = 0; attempt < 100 && waiters < 2; attempt++) {
+          const result = await pool.query<{ waiters: string }>(
+            `SELECT count(*)::text AS waiters FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND pid <> pg_backend_pid()`,
+          );
+          waiters = Number(result.rows[0]?.waiters ?? 0);
+          if (waiters < 2)
+            await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        expect(waiters).toBeGreaterThanOrEqual(2);
+        await barrier.query('COMMIT');
+        lockHeld = false;
+      } finally {
+        if (lockHeld) await barrier.query('ROLLBACK');
+        barrier.release();
+      }
+      const [transitionOutcome, configOutcome] = await outcomes;
+      const finalConfig = (await repository.getEvent(
+        ctx(orgA!.id),
+        eventA1!.id,
+      ))!;
+      const finalEntry = await createEntryRepository(db).getById(
+        ctx(orgA!.id),
+        entry!.id,
+      );
+      const finalStatus = finalEntry!.statusProjection!.dimensions.find(
+        ({ key }) => key === 'technical_inspection',
+      )!.value;
+      const targetRemainsConfigured = finalConfig.dimensions
+        .find(({ key }) => key === 'technical_inspection')!
+        .values.some(({ key }) => key === targetKey);
+      expect(targetRemainsConfigured).toBe(finalStatus === targetKey);
+      if (transitionOutcome.status === 'fulfilled') {
+        expect(transitionOutcome.value).toBe(true);
+        expect(configOutcome.status).toBe('rejected');
+        if (configOutcome.status === 'rejected')
+          expect(configOutcome.reason).toBeInstanceOf(EntryStatusInUseError);
+      } else {
+        expect(configOutcome.status).toBe('fulfilled');
+        expect(finalStatus).toBe('reinspection');
+      }
+      expect(
+        await db
+          .select()
+          .from(entryStatusDimensionValues)
+          .where(eq(entryStatusDimensionValues.entryId, entry!.id)),
+      ).toHaveLength(2);
+      expect(
+        await db
+          .select()
+          .from(entryStatusDimensionAudit)
+          .where(eq(entryStatusDimensionAudit.entryId, entry!.id)),
+      ).toHaveLength(transitionOutcome.status === 'fulfilled' ? 2 : 1);
+      expect(
+        await db
+          .select()
+          .from(entryStatusHintsAudit)
+          .where(eq(entryStatusHintsAudit.organizationId, orgB!.id)),
+      ).toHaveLength(0);
+      expect(
+        await db
+          .select()
+          .from(eventEntryStatusDimensionConfigs)
+          .where(eq(eventEntryStatusDimensionConfigs.organizationId, orgA!.id)),
+      ).toHaveLength(1);
+      expect(
+        await db
+          .select()
+          .from(eventEntryStatusDimensionConfigAudit)
+          .where(
+            eq(eventEntryStatusDimensionConfigAudit.organizationId, orgA!.id),
+          ),
+      ).toHaveLength(configOutcome.status === 'fulfilled' ? 3 : 2);
+    } finally {
+      if (createdEventIds.length)
+        await db.delete(events).where(inArray(events.id, createdEventIds));
+      if (createdOrganizationIds.length)
+        await db
+          .delete(organizations)
+          .where(inArray(organizations.id, createdOrganizationIds));
+      await pool.end();
+    }
+  });
+
   it('persists organization and event workflow revisions with Cloud tenant isolation', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();

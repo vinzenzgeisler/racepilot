@@ -11,6 +11,11 @@ import {
   type Entry,
   type RequestContext,
   permissionsForRole,
+  defaultEntryStatusDimensionConfig,
+  entryStatusMeanings,
+  normalizeEntryWorkflow,
+  projectEntryStatuses,
+  validateEntryStatusDimensionConfig,
 } from './index.js';
 const ctx: RequestContext = {
   deploymentMode: 'community',
@@ -64,6 +69,89 @@ describe('entry domain rules', () => {
       'waitlisted->rejected',
       'waitlisted->withdrawn',
     ]);
+  });
+  it('normalizes legacy meanings without making legacy colors semantic tokens', () => {
+    const legacy = {
+      ...defaultEntryWorkflow,
+      statuses: defaultEntryWorkflow.statuses.map((status) => {
+        const { meaning, ...legacyStatus } = status;
+        void meaning;
+        return { ...legacyStatus, color: '#010203' };
+      }),
+    };
+    const normalized = normalizeEntryWorkflow(legacy);
+    expect(normalized.statuses.map(({ meaning }) => meaning)).toEqual([
+      'new',
+      'done',
+      'rejected',
+      'in_progress',
+      'not_relevant',
+    ]);
+    for (const status of normalized.statuses)
+      expect(status.color).toBe('#010203');
+    expect(entryStatusMeanings).toHaveLength(6);
+  });
+  it('validates tenant-editable event status dimensions', () => {
+    expect(
+      validateEntryStatusDimensionConfig(defaultEntryStatusDimensionConfig),
+    ).toEqual([]);
+    const invalid = {
+      ...defaultEntryStatusDimensionConfig,
+      dimensions: defaultEntryStatusDimensionConfig.dimensions.map(
+        (dimension) =>
+          dimension.key === 'technical_inspection'
+            ? {
+                ...dimension,
+                values: [{ ...dimension.values[0]!, key: 'pending' }],
+              }
+            : dimension,
+      ),
+    };
+    expect(validateEntryStatusDimensionConfig(invalid)).toContain(
+      'Unknown technical_inspection transition value',
+    );
+  });
+  it('projects per-dimension meanings, document counts, and separate hints', () => {
+    const pending = projectEntryStatuses({
+      workflow: defaultEntryWorkflow,
+      acceptanceStatus: 'pending',
+      paymentStatus: 'open',
+      technicalStatus: 'pending',
+      waiverStatus: 'f_pending',
+      emailStatus: 'unverified',
+      config: defaultEntryStatusDimensionConfig,
+      hints: { double_starter: true, passenger: false, late_entry: true },
+    });
+    expect(pending.dimensions).toHaveLength(5);
+    expect(pending.dimensions[0]).toMatchObject({
+      key: 'entry',
+      meaning: 'new',
+    });
+    expect(
+      pending.dimensions.find(({ key }) => key === 'payment'),
+    ).toMatchObject({
+      meaning: 'missing',
+      nextAction: { key: 'payment:record' },
+    });
+    expect(pending.documents).toEqual({ complete: 0, total: 2 });
+    expect(pending.hints).toEqual([
+      { key: 'double_starter', present: true },
+      { key: 'passenger', present: false },
+      { key: 'late_entry', present: true },
+    ]);
+    const completed = projectEntryStatuses({
+      workflow: defaultEntryWorkflow,
+      acceptanceStatus: 'accepted',
+      paymentStatus: 'paid',
+      technicalStatus: 'passed',
+      waiverStatus: 'f_signed',
+      emailStatus: 'verified',
+      config: defaultEntryStatusDimensionConfig,
+    });
+    expect(completed.documents).toEqual({ complete: 2, total: 2 });
+    expect(completed.dimensions.every((item) => item.meaning === 'done')).toBe(
+      true,
+    );
   });
   it('rejects forbidden transitions and enforces configured reasons', () => {
     expect(() =>
