@@ -520,6 +520,26 @@ export async function verifyObjectStorageContract(
 
 export type EntryVerificationStatus = 'unverified' | 'verified';
 export type EntryAcceptanceStatus = string;
+export const entryStatusMeanings = [
+  'new',
+  'in_progress',
+  'missing',
+  'done',
+  'rejected',
+  'not_relevant',
+] as const;
+export type EntryStatusMeaning = (typeof entryStatusMeanings)[number];
+/** Stable semantic colors. Presentation clients should choose color by meaning, never by a tenant value. */
+export const entryStatusMeaningColors: Readonly<
+  Record<EntryStatusMeaning, string>
+> = Object.freeze({
+  new: '#4f5a54',
+  in_progress: '#91b6a0',
+  missing: '#b8400f',
+  done: '#3fb97a',
+  rejected: '#b8400f',
+  not_relevant: '#9aa49f',
+});
 export const entryWorkflowCategories = [
   'pending',
   'accepted',
@@ -533,6 +553,8 @@ export interface EntryWorkflowStatus {
   readonly labels: { readonly de: string; readonly en: string };
   readonly color: string;
   readonly category: EntryWorkflowCategory;
+  /** Fixed NENNBOX semantic; optional only for old persisted workflow revisions. */
+  readonly meaning?: EntryStatusMeaning;
 }
 export interface EntryWorkflowTransition {
   readonly from: string;
@@ -578,6 +600,34 @@ export interface EntryWorkflowRepository {
     reason: string,
   ): Promise<EntryWorkflowRevision | null>;
 }
+export interface EntryStatusDimensionRepository {
+  getEvent(
+    ctx: RequestContext,
+    eventId: string,
+  ): Promise<EntryStatusDimensionConfig | null>;
+  setEvent(
+    ctx: RequestContext,
+    eventId: string,
+    config: EntryStatusDimensionConfig,
+    actor: string,
+    reason: string,
+  ): Promise<EntryStatusDimensionConfig | null>;
+  transition(
+    ctx: RequestContext,
+    entryId: string,
+    dimension: 'technical_inspection' | 'waiver',
+    to: string,
+    actor: string,
+    reason: string,
+  ): Promise<boolean | null>;
+  updateHints(
+    ctx: RequestContext,
+    entryId: string,
+    hints: Partial<Record<EntryStatusHintKey, boolean>>,
+    actor: string,
+    reason: string,
+  ): Promise<boolean>;
+}
 export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
   {
     version: 1,
@@ -585,32 +635,37 @@ export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
       {
         key: 'pending',
         labels: { de: 'Ausstehend', en: 'Pending' },
-        color: '#64748b',
+        color: entryStatusMeaningColors.new,
         category: 'pending',
+        meaning: 'new',
       },
       {
         key: 'accepted',
         labels: { de: 'Angenommen', en: 'Accepted' },
-        color: '#15803d',
+        color: entryStatusMeaningColors.done,
         category: 'accepted',
+        meaning: 'done',
       },
       {
         key: 'rejected',
         labels: { de: 'Abgelehnt', en: 'Rejected' },
-        color: '#b91c1c',
+        color: entryStatusMeaningColors.rejected,
         category: 'rejected',
+        meaning: 'rejected',
       },
       {
         key: 'waitlisted',
         labels: { de: 'Warteliste', en: 'Waitlisted' },
-        color: '#a16207',
+        color: entryStatusMeaningColors.in_progress,
         category: 'waitlisted',
+        meaning: 'in_progress',
       },
       {
         key: 'withdrawn',
         labels: { de: 'Zurückgezogen', en: 'Withdrawn' },
-        color: '#475569',
+        color: entryStatusMeaningColors.not_relevant,
         category: 'withdrawn',
+        meaning: 'not_relevant',
       },
     ],
     transitions: [
@@ -630,6 +685,365 @@ export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
     ],
   },
 );
+
+const defaultMeaningByCategory: Readonly<
+  Record<EntryWorkflowCategory, EntryStatusMeaning>
+> = Object.freeze({
+  pending: 'new',
+  accepted: 'done',
+  rejected: 'rejected',
+  waitlisted: 'in_progress',
+  withdrawn: 'not_relevant',
+});
+
+/** Normalize legacy revisions and discard arbitrary colors in favor of meaning-bound tokens. */
+export function normalizeEntryWorkflow(workflow: EntryWorkflow): EntryWorkflow {
+  return {
+    ...workflow,
+    statuses: workflow.statuses.map((status) => {
+      const meaning =
+        status.meaning ?? defaultMeaningByCategory[status.category];
+      return {
+        ...status,
+        meaning,
+        color: entryStatusMeaningColors[meaning],
+      };
+    }),
+  };
+}
+
+export const entryStatusDimensionKeys = [
+  'payment',
+  'technical_inspection',
+  'waiver',
+  'email_verification',
+] as const;
+export type EntryStatusDimensionKey = (typeof entryStatusDimensionKeys)[number];
+export interface EntryStatusValue {
+  readonly key: string;
+  readonly labels: { readonly de: string; readonly en: string };
+  readonly meaning: EntryStatusMeaning;
+}
+export interface EntryStatusDimensionDefinition {
+  readonly key: EntryStatusDimensionKey;
+  readonly required: boolean;
+  readonly values: readonly EntryStatusValue[];
+  readonly transitions: readonly {
+    readonly from: string;
+    readonly to: string;
+  }[];
+}
+export interface EntryStatusDimensionConfig {
+  readonly version: 1;
+  readonly dimensions: readonly EntryStatusDimensionDefinition[];
+}
+const statusValue = (
+  key: string,
+  de: string,
+  en: string,
+  meaning: EntryStatusMeaning,
+): EntryStatusValue => ({ key, labels: { de, en }, meaning });
+export const defaultEntryStatusDimensionConfig: EntryStatusDimensionConfig =
+  Object.freeze<EntryStatusDimensionConfig>({
+    version: 1,
+    dimensions: [
+      {
+        key: 'payment',
+        required: true,
+        values: [
+          statusValue('open', 'Offen', 'Open', 'missing'),
+          statusValue(
+            'partially_paid',
+            'Teilweise bezahlt',
+            'Partially paid',
+            'missing',
+          ),
+          statusValue('paid', 'Bezahlt', 'Paid', 'done'),
+          statusValue(
+            'not_required',
+            'Keine erforderlich',
+            'Not required',
+            'not_relevant',
+          ),
+          statusValue(
+            'not_relevant',
+            'Nicht relevant',
+            'Not relevant',
+            'not_relevant',
+          ),
+        ],
+        transitions: [],
+      },
+      {
+        key: 'technical_inspection',
+        required: true,
+        values: [
+          statusValue('pending', 'Ausstehend', 'Pending', 'missing'),
+          statusValue(
+            'reinspection',
+            'Nachprüfung',
+            'Reinspection',
+            'in_progress',
+          ),
+          statusValue('passed', 'Bestanden', 'Passed', 'done'),
+          statusValue(
+            'not_relevant',
+            'Nicht relevant',
+            'Not relevant',
+            'not_relevant',
+          ),
+        ],
+        transitions: [
+          { from: 'pending', to: 'reinspection' },
+          { from: 'pending', to: 'passed' },
+          { from: 'pending', to: 'not_relevant' },
+          { from: 'reinspection', to: 'passed' },
+          { from: 'reinspection', to: 'not_relevant' },
+        ],
+      },
+      {
+        key: 'waiver',
+        required: true,
+        values: [
+          statusValue('f_pending', 'F · Ausstehend', 'F · Pending', 'missing'),
+          statusValue('f_signed', 'F · Unterschrieben', 'F · Signed', 'done'),
+          statusValue(
+            'bf_signed',
+            'BF · Unterschrieben',
+            'BF · Signed',
+            'done',
+          ),
+          statusValue(
+            'not_relevant',
+            'Nicht relevant',
+            'Not relevant',
+            'not_relevant',
+          ),
+        ],
+        transitions: [
+          { from: 'f_pending', to: 'f_signed' },
+          { from: 'f_pending', to: 'bf_signed' },
+          { from: 'f_pending', to: 'not_relevant' },
+        ],
+      },
+      {
+        key: 'email_verification',
+        required: true,
+        values: [
+          statusValue('unverified', 'Unbestätigt', 'Unverified', 'missing'),
+          statusValue('verified', 'Verifiziert', 'Verified', 'done'),
+        ],
+        transitions: [],
+      },
+    ],
+  });
+
+export function validateEntryStatusDimensionConfig(
+  config: EntryStatusDimensionConfig,
+): string[] {
+  const errors: string[] = [];
+  if (config.version !== 1) errors.push('Unsupported status dimension version');
+  const dimensions = new Set<EntryStatusDimensionKey>();
+  for (const definition of config.dimensions) {
+    if (!entryStatusDimensionKeys.includes(definition.key)) {
+      errors.push(`Unknown status dimension: ${definition.key}`);
+      continue;
+    }
+    if (dimensions.has(definition.key))
+      errors.push(`Duplicate status dimension: ${definition.key}`);
+    dimensions.add(definition.key);
+    const values = new Set<string>();
+    for (const value of definition.values) {
+      if (!/^[a-z][a-z0-9_-]{0,63}$/.test(value.key) || values.has(value.key))
+        errors.push(
+          `Invalid or duplicate ${definition.key} value: ${value.key}`,
+        );
+      values.add(value.key);
+      if (!entryStatusMeanings.includes(value.meaning))
+        errors.push(`Invalid meaning for ${definition.key}.${value.key}`);
+      if (!value.labels.de.trim() || !value.labels.en.trim())
+        errors.push(`Missing labels for ${definition.key}.${value.key}`);
+    }
+    const edges = new Set<string>();
+    for (const transition of definition.transitions) {
+      const edge = `${transition.from}\0${transition.to}`;
+      if (!values.has(transition.from) || !values.has(transition.to))
+        errors.push(`Unknown ${definition.key} transition value`);
+      if (edges.has(edge))
+        errors.push(`Duplicate ${definition.key} transition`);
+      edges.add(edge);
+    }
+    if (
+      definition.key === 'payment' ||
+      definition.key === 'email_verification'
+    ) {
+      if (definition.transitions.length)
+        errors.push(
+          `${definition.key} is derived and cannot define transitions`,
+        );
+    }
+  }
+  for (const key of entryStatusDimensionKeys)
+    if (!dimensions.has(key)) errors.push(`Missing status dimension: ${key}`);
+  const requiredValues: Partial<
+    Record<EntryStatusDimensionKey, readonly string[]>
+  > = {
+    payment: ['open', 'partially_paid', 'paid', 'not_required', 'not_relevant'],
+    email_verification: ['unverified', 'verified'],
+    technical_inspection: ['pending', 'reinspection', 'passed', 'not_relevant'],
+    waiver: ['f_pending', 'f_signed', 'bf_signed', 'not_relevant'],
+  };
+  for (const definition of config.dimensions) {
+    const keys = new Set(definition.values.map(({ key }) => key));
+    for (const key of requiredValues[definition.key] ?? [])
+      if (!keys.has(key))
+        errors.push(`Missing required ${definition.key} value: ${key}`);
+  }
+  return [...new Set(errors)];
+}
+
+export interface EntryStatusDimensionProjection {
+  readonly key: 'entry' | EntryStatusDimensionKey;
+  readonly value: string;
+  readonly label: { readonly de: string; readonly en: string };
+  readonly meaning: EntryStatusMeaning;
+  readonly required: boolean;
+  readonly nextAction: {
+    readonly key: string;
+    readonly label: { readonly de: string; readonly en: string };
+  } | null;
+}
+export interface EntryStatusProjection {
+  readonly dimensions: readonly EntryStatusDimensionProjection[];
+  readonly documents: { readonly complete: number; readonly total: number };
+  readonly hints: readonly EntryStatusHint[];
+}
+export type EntryStatusHintKey = 'double_starter' | 'passenger' | 'late_entry';
+export interface EntryStatusHint {
+  readonly key: EntryStatusHintKey;
+  readonly present: boolean;
+}
+
+/** Produces status meaning and actionable summaries without making hints into statuses. */
+export function projectEntryStatuses(input: {
+  readonly workflow: EntryWorkflow;
+  readonly acceptanceStatus: string;
+  readonly paymentStatus: string;
+  readonly technicalStatus: string;
+  readonly waiverStatus: string;
+  readonly emailStatus: string;
+  readonly config: EntryStatusDimensionConfig;
+  readonly hints?: Partial<Record<EntryStatusHintKey, boolean>>;
+}): EntryStatusProjection {
+  const config = new Map(
+    input.config.dimensions.map((item) => [item.key, item]),
+  );
+  const workflow = normalizeEntryWorkflow(input.workflow);
+  const entryStatus = workflow.statuses.find(
+    (item) => item.key === input.acceptanceStatus,
+  );
+  if (!entryStatus)
+    throw new Error(`Unknown entry status: ${input.acceptanceStatus}`);
+  const pick = (key: EntryStatusDimensionKey, valueKey: string) => {
+    const definition = config.get(key);
+    const value = definition?.values.find((item) => item.key === valueKey);
+    if (!definition || !value)
+      throw new Error(`Unknown ${key} status: ${valueKey}`);
+    return { definition, value };
+  };
+  const entryTransitions = workflow.transitions.filter(
+    (edge) => edge.from === input.acceptanceStatus,
+  );
+  const dimensions: EntryStatusDimensionProjection[] = [
+    {
+      key: 'entry',
+      value: entryStatus.key,
+      label: entryStatus.labels,
+      meaning: entryStatus.meaning!,
+      required: true,
+      nextAction: entryTransitions[0]
+        ? {
+            key: `entry:${entryTransitions[0].to}`,
+            label: {
+              de: `Status auf ${workflow.statuses.find((s) => s.key === entryTransitions[0]!.to)?.labels.de ?? entryTransitions[0].to} setzen`,
+              en: `Set status to ${workflow.statuses.find((s) => s.key === entryTransitions[0]!.to)?.labels.en ?? entryTransitions[0].to}`,
+            },
+          }
+        : null,
+    },
+    ...(
+      [
+        'payment',
+        'technical_inspection',
+        'waiver',
+        'email_verification',
+      ] as const
+    ).map((key) => {
+      const actual = {
+        payment: input.paymentStatus,
+        technical_inspection: input.technicalStatus,
+        waiver: input.waiverStatus,
+        email_verification: input.emailStatus,
+      }[key];
+      const { definition, value } = pick(key, actual);
+      const edge = definition.transitions.find(
+        (transition) => transition.from === actual,
+      );
+      const actionLabels: Partial<
+        Record<EntryStatusDimensionKey, { de: string; en: string }>
+      > = {
+        payment: { de: 'Zahlung erfassen', en: 'Record payment' },
+        technical_inspection: {
+          de: 'Technische Abnahme durchführen',
+          en: 'Perform technical inspection',
+        },
+        waiver: { de: 'Haftverzicht einholen', en: 'Collect waiver' },
+        email_verification: { de: 'E-Mail verifizieren', en: 'Verify email' },
+      };
+      return {
+        key,
+        value: actual,
+        label: value.labels,
+        meaning: value.meaning,
+        required: definition.required,
+        nextAction: edge
+          ? {
+              key: `${key}:${edge.to}`,
+              label: actionLabels[key] ?? value.labels,
+            }
+          : key === 'payment' && ['open', 'partially_paid'].includes(actual)
+            ? { key: 'payment:record', label: actionLabels.payment! }
+            : key === 'email_verification' && actual === 'unverified'
+              ? {
+                  key: 'email_verification:verify',
+                  label: actionLabels.email_verification!,
+                }
+              : null,
+      };
+    }),
+  ];
+  const documents = dimensions.filter(
+    (item) =>
+      (item.key === 'technical_inspection' || item.key === 'waiver') &&
+      item.required,
+  );
+  const hints = (['double_starter', 'passenger', 'late_entry'] as const).map(
+    (key) => ({
+      key,
+      present: input.hints?.[key] === true,
+    }),
+  );
+  return {
+    dimensions,
+    documents: {
+      complete: documents.filter(
+        (item) => item.meaning === 'done' || item.meaning === 'not_relevant',
+      ).length,
+      total: documents.length,
+    },
+    hints,
+  };
+}
 export function validateEntryWorkflow(workflow: EntryWorkflow): string[] {
   const errors: string[] = [],
     keys = new Set<string>(),
@@ -641,6 +1055,11 @@ export function validateEntryWorkflow(workflow: EntryWorkflow): string[] {
     keys.add(status.key);
     if (!entryWorkflowCategories.includes(status.category))
       errors.push(`Invalid category: ${status.category}`);
+    if (
+      status.meaning !== undefined &&
+      !entryStatusMeanings.includes(status.meaning)
+    )
+      errors.push(`Invalid meaning: ${status.key}`);
     if (!/^#[0-9a-f]{6}$/i.test(status.color))
       errors.push(`Invalid color: ${status.key}`);
     if (!status.labels.de.trim() || !status.labels.en.trim())
@@ -765,6 +1184,8 @@ export interface Entry {
   createdAt: string;
   deletedAt: string | null;
   deletionReason: string | null;
+  /** Read-model fields computed from the pinned workflow, event configuration and source records. */
+  statusProjection?: EntryStatusProjection;
 }
 export interface EntryAuditEvent {
   id: string;

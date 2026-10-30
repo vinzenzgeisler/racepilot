@@ -47,7 +47,11 @@ import {
   type EntryRepository,
   type EntryWorkflowRepository,
   validateEntryWorkflow,
+  normalizeEntryWorkflow,
+  validateEntryStatusDimensionConfig,
   type EntryListQuery,
+  type EntryStatusDimensionRepository,
+  type EntryStatusHintKey,
   type EntryExportRepository,
   type EntryConfirmationRepository,
   type ArtifactJobRepository,
@@ -74,6 +78,7 @@ import {
   type RegistrationSettings,
   standardRegistrationForm,
   PublicRegistrationRequestSchema,
+  EntryStatusDimensionConfigSchema,
 } from '@racepilot/contracts';
 export function health(version: string) {
   return healthResponseSchema.parse({ status: 'ok', version });
@@ -229,6 +234,7 @@ export interface ApiDeps {
   paymentRecipients?: PaymentRecipientRepository;
   pricing?: EventClassPricingRepository;
   entryWorkflows?: EntryWorkflowRepository;
+  entryStatusDimensions?: EntryStatusDimensionRepository;
   registrationSettings?: {
     get(
       context: import('@racepilot/core').RequestContext,
@@ -1426,7 +1432,9 @@ export function createApp(deps: ApiDeps) {
     return c.json(
       await deps.entryWorkflows.setOrganization(
         context,
-        candidate as import('@racepilot/core').EntryWorkflow,
+        normalizeEntryWorkflow(
+          candidate as import('@racepilot/core').EntryWorkflow,
+        ),
         actor,
         body.reason,
       ),
@@ -1489,11 +1497,136 @@ export function createApp(deps: ApiDeps) {
     const revision = await deps.entryWorkflows.setEvent(
       context,
       c.req.param('eventId'),
-      candidate as import('@racepilot/core').EntryWorkflow,
+      normalizeEntryWorkflow(
+        candidate as import('@racepilot/core').EntryWorkflow,
+      ),
       actor,
       body.reason,
     );
     return revision ? c.json(revision) : c.json({ error: 'Not found' }, 404);
+  });
+  app.get('/admin/events/:eventId/status-dimensions', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entryStatusDimensions) return c.json({ error: 'Not found' }, 404);
+    const config = await deps.entryStatusDimensions.getEvent(
+      context,
+      c.req.param('eventId'),
+    );
+    return config
+      ? c.json(EntryStatusDimensionConfigSchema.parse(config))
+      : c.json({ error: 'Not found' }, 404);
+  });
+  app.put('/admin/events/:eventId/status-dimensions', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entryStatusDimensions) return c.json({ error: 'Not found' }, 404);
+    const parsed = z
+      .object({
+        config: EntryStatusDimensionConfigSchema,
+        reason: z.string().trim().min(1).max(1000),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success)
+      return c.json({ error: 'Invalid status dimensions' }, 400);
+    const errors = validateEntryStatusDimensionConfig(parsed.data.config);
+    if (errors.length)
+      return c.json(
+        { error: 'Invalid status dimensions', details: errors },
+        400,
+      );
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : 'unknown';
+    const config = await deps.entryStatusDimensions.setEvent(
+      context,
+      c.req.param('eventId'),
+      parsed.data.config,
+      actor,
+      parsed.data.reason,
+    );
+    return config ? c.json(config) : c.json({ error: 'Not found' }, 404);
+  });
+  app.post(
+    '/admin/entries/:entryId/status-dimensions/:dimension/transitions',
+    async (c) => {
+      const context = await resolveMemberContext(c.req.raw);
+      if (!context) return c.json({ error: 'Unauthorized' }, 401);
+      if (!context.permissions.has('entry:write'))
+        return c.json({ error: 'Forbidden' }, 403);
+      if (!deps.entryStatusDimensions)
+        return c.json({ error: 'Not found' }, 404);
+      const dimension = z
+        .enum(['technical_inspection', 'waiver'])
+        .safeParse(c.req.param('dimension'));
+      const parsed = z
+        .object({
+          status: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
+          reason: z.string().trim().min(1).max(1000),
+        })
+        .strict()
+        .safeParse(await c.req.json().catch(() => null));
+      if (!dimension.success || !parsed.success)
+        return c.json({ error: 'Invalid status transition' }, 400);
+      const actor = context.subject
+        ? `${context.subject.issuer}|${context.subject.subject}`
+        : 'unknown';
+      try {
+        const updated = await deps.entryStatusDimensions.transition(
+          context,
+          c.req.param('entryId'),
+          dimension.data,
+          parsed.data.status,
+          actor,
+          parsed.data.reason,
+        );
+        return updated === null
+          ? c.json({ error: 'Not found' }, 404)
+          : c.json({ updated });
+      } catch {
+        return c.json({ error: 'Invalid status transition' }, 400);
+      }
+    },
+  );
+  app.put('/admin/entries/:entryId/status-hints', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('entry:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entryStatusDimensions) return c.json({ error: 'Not found' }, 404);
+    const parsed = z
+      .object({
+        hints: z
+          .object({
+            double_starter: z.boolean().optional(),
+            passenger: z.boolean().optional(),
+            late_entry: z.boolean().optional(),
+          })
+          .strict()
+          .refine((value) => Object.keys(value).length > 0),
+        reason: z.string().trim().min(1).max(1000),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid status hints' }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : 'unknown';
+    const updated = await deps.entryStatusDimensions.updateHints(
+      context,
+      c.req.param('entryId'),
+      parsed.data.hints as Partial<Record<EntryStatusHintKey, boolean>>,
+      actor,
+      parsed.data.reason,
+    );
+    return updated
+      ? c.json({ updated: true })
+      : c.json({ error: 'Not found' }, 404);
   });
   app.get('/admin/organization/registration-settings', async (c) => {
     const context = await resolveMemberContext(c.req.raw);

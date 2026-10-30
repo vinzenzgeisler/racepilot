@@ -9,6 +9,7 @@ import {
   createRequestContext,
   organizationId,
   defaultEntryWorkflow,
+  defaultEntryStatusDimensionConfig,
 } from '@racepilot/core';
 
 describe('api entry', () => {
@@ -589,6 +590,68 @@ describe('api entry', () => {
     );
     expect(response.status).toBe(403);
     expect(called).toBe(false);
+  });
+
+  it('manages event status dimensions only with validated server-scoped requests', async () => {
+    const org = organizationId('11111111-1111-4111-8111-111111111111');
+    let stored: unknown;
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: org },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'admin',
+        }),
+      },
+      memberships: {
+        resolvePermissions: async () => new Set(['event:read', 'event:write']),
+      },
+      entryStatusDimensions: {
+        getEvent: async (ctx, eventId) => {
+          expect(ctx.organizationId).toBe(org);
+          expect(eventId).toBe('event-1');
+          return defaultEntryStatusDimensionConfig;
+        },
+        setEvent: async (ctx, eventId, config, actor, reason) => {
+          expect(ctx.organizationId).toBe(org);
+          expect(eventId).toBe('event-1');
+          expect(actor).toBe('https://id.example|admin');
+          expect(reason).toBe('event setup');
+          stored = config;
+          return config;
+        },
+        transition: async () => true,
+        updateHints: async () => true,
+      },
+    });
+    expect(
+      (await app.request('/admin/events/event-1/status-dimensions')).status,
+    ).toBe(200);
+    const response = await app.request(
+      '/admin/events/event-1/status-dimensions',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          config: defaultEntryStatusDimensionConfig,
+          reason: 'event setup',
+          organizationId: '22222222-2222-4222-8222-222222222222',
+        }),
+      },
+    );
+    expect(response.status).toBe(400);
+    const valid = await app.request('/admin/events/event-1/status-dimensions', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        config: defaultEntryStatusDimensionConfig,
+        reason: 'event setup',
+      }),
+    });
+    expect(valid.status).toBe(200);
+    expect(stored).toEqual(defaultEntryStatusDimensionConfig);
   });
 });
 

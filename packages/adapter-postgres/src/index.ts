@@ -60,6 +60,7 @@ import type {
   ArtifactKind,
   ModuleActivationRepository,
   ModuleStateRecord,
+  EntryStatusHintKey,
 } from '@racepilot/core';
 import {
   organizationId,
@@ -70,6 +71,11 @@ import {
   normalizeRequestedStartNumber,
   deriveInvoiceStatus,
   createPaymentReference,
+  defaultEntryWorkflow,
+  normalizeEntryWorkflow,
+  projectEntryStatuses,
+  defaultEntryStatusDimensionConfig,
+  validateEntryStatusDimensionConfig,
   ProviderError,
 } from '@racepilot/core';
 import type { Pool } from 'pg';
@@ -387,6 +393,10 @@ export const entries = pgTable(
       .notNull()
       .default('unverified'),
     acceptanceStatus: text('acceptance_status').notNull().default('pending'),
+    statusHints: jsonb('status_hints')
+      .$type<Record<'double_starter' | 'passenger' | 'late_entry', boolean>>()
+      .notNull()
+      .default({ double_starter: false, passenger: false, late_entry: false }),
     workflowRevisionId: uuid('workflow_revision_id'),
     requestedStartNumber: text('requested_start_number'),
     priceSnapshotVersion: text('price_snapshot_version'),
@@ -402,6 +412,7 @@ export const entries = pgTable(
   },
   (t) => [
     unique('entry_org_id_unique').on(t.organizationId, t.id),
+    unique('entry_org_event_id_unique').on(t.organizationId, t.eventId, t.id),
     foreignKey({
       columns: [t.organizationId, t.eventId],
       foreignColumns: [events.organizationId, events.id],
@@ -489,6 +500,166 @@ export const entryAuditEvents = pgTable(
       t.organizationId,
       t.entryId,
       t.occurredAt,
+    ),
+  ],
+);
+export const eventEntryStatusDimensionConfigs = pgTable(
+  'event_entry_status_dimension_config',
+  {
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    config: jsonb('config')
+      .$type<import('@racepilot/core').EntryStatusDimensionConfig>()
+      .notNull(),
+    actor: text('actor').notNull(),
+    reason: text('reason').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.eventId] }),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'event_entry_status_dimension_config_event_fk',
+    }).onDelete('cascade'),
+  ],
+);
+export const entryStatusDimensionValues = pgTable(
+  'entry_status_dimension_value',
+  {
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    entryId: uuid('entry_id').notNull(),
+    dimension: text('dimension').notNull(),
+    value: text('value').notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.organizationId, t.entryId, t.dimension] }),
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.entryId],
+      foreignColumns: [entries.organizationId, entries.eventId, entries.id],
+      name: 'entry_status_dimension_value_entry_fk',
+    }).onDelete('cascade'),
+    check(
+      'entry_status_dimension_value_dimension_check',
+      sql`${t.dimension} in ('technical_inspection','waiver')`,
+    ),
+    check(
+      'entry_status_dimension_value_key_check',
+      sql`length(trim(${t.value})) > 0`,
+    ),
+  ],
+);
+export const entryStatusDimensionAudit = pgTable(
+  'entry_status_dimension_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    entryId: uuid('entry_id').notNull(),
+    dimension: text('dimension').notNull(),
+    fromValue: text('from_value').notNull(),
+    toValue: text('to_value').notNull(),
+    actor: text('actor').notNull(),
+    reason: text('reason').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.entryId],
+      foreignColumns: [entries.organizationId, entries.eventId, entries.id],
+      name: 'entry_status_dimension_audit_entry_fk',
+    }).onDelete('cascade'),
+    check(
+      'entry_status_dimension_audit_dimension_check',
+      sql`${t.dimension} in ('technical_inspection','waiver')`,
+    ),
+    check(
+      'entry_status_dimension_audit_actor_check',
+      sql`length(trim(${t.actor})) > 0`,
+    ),
+    check(
+      'entry_status_dimension_audit_reason_check',
+      sql`length(trim(${t.reason})) > 0`,
+    ),
+    index('entry_status_dimension_audit_entry_idx').on(
+      t.organizationId,
+      t.entryId,
+      t.occurredAt,
+    ),
+  ],
+);
+export const eventEntryStatusDimensionConfigAudit = pgTable(
+  'event_entry_status_dimension_config_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    actor: text('actor').notNull(),
+    reason: text('reason').notNull(),
+    beforeConfig: jsonb('before_config').$type<
+      import('@racepilot/core').EntryStatusDimensionConfig | null
+    >(),
+    afterConfig: jsonb('after_config')
+      .$type<import('@racepilot/core').EntryStatusDimensionConfig>()
+      .notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'event_entry_status_dimension_config_audit_event_fk',
+    }).onDelete('cascade'),
+    check(
+      'event_entry_status_dimension_config_audit_actor_check',
+      sql`length(trim(${t.actor})) > 0`,
+    ),
+    check(
+      'event_entry_status_dimension_config_audit_reason_check',
+      sql`length(trim(${t.reason})) > 0`,
+    ),
+  ],
+);
+export const entryStatusHintsAudit = pgTable(
+  'entry_status_hints_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    entryId: uuid('entry_id').notNull(),
+    beforeHints: jsonb('before_hints')
+      .$type<Record<string, boolean>>()
+      .notNull(),
+    afterHints: jsonb('after_hints').$type<Record<string, boolean>>().notNull(),
+    actor: text('actor').notNull(),
+    reason: text('reason').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.entryId],
+      foreignColumns: [entries.organizationId, entries.eventId, entries.id],
+      name: 'entry_status_hints_audit_entry_fk',
+    }).onDelete('cascade'),
+    check(
+      'entry_status_hints_audit_actor_check',
+      sql`length(trim(${t.actor})) > 0`,
+    ),
+    check(
+      'entry_status_hints_audit_reason_check',
+      sql`length(trim(${t.reason})) > 0`,
     ),
   ],
 );
@@ -2277,6 +2448,162 @@ function mapEntry(
     deletedAt: row.deletedAt?.toISOString() ?? null,
   };
 }
+async function projectEntryRows(
+  db: Database,
+  ctx: RequestContext,
+  rows: readonly (typeof entries.$inferSelect)[],
+): Promise<import('@racepilot/core').Entry[]> {
+  if (!rows.length) return [];
+  const ids = [...new Set(rows.map((row) => row.id))];
+  const revisionIds = [
+    ...new Set(
+      rows
+        .map((row) => row.workflowRevisionId)
+        .filter((id): id is string => id !== null),
+    ),
+  ];
+  const eventIds = [...new Set(rows.map((row) => row.eventId))];
+  const groupIds = [...new Set(rows.map((row) => row.registrationGroupId))];
+  const inSql = (values: readonly string[]) =>
+    sql`(${sql.join(
+      values.map((value) => sql`${value}`),
+      sql`, `,
+    )})`;
+  const [
+    workflowResult,
+    configs,
+    states,
+    invoiceRows,
+    eventRows,
+    starterResult,
+  ] = await Promise.all([
+    revisionIds.length
+      ? db.execute(sql`
+            SELECT id, workflow FROM entry_workflow_revision
+            WHERE organization_id=${ctx.organizationId} AND id IN ${inSql(revisionIds)}
+          `)
+      : Promise.resolve({ rows: [] }),
+    db
+      .select({
+        eventId: eventEntryStatusDimensionConfigs.eventId,
+        config: eventEntryStatusDimensionConfigs.config,
+      })
+      .from(eventEntryStatusDimensionConfigs)
+      .where(
+        and(
+          eq(
+            eventEntryStatusDimensionConfigs.organizationId,
+            ctx.organizationId,
+          ),
+          inArray(eventEntryStatusDimensionConfigs.eventId, eventIds),
+        ),
+      ),
+    db
+      .select({
+        entryId: entryStatusDimensionValues.entryId,
+        dimension: entryStatusDimensionValues.dimension,
+        value: entryStatusDimensionValues.value,
+      })
+      .from(entryStatusDimensionValues)
+      .where(
+        and(
+          eq(entryStatusDimensionValues.organizationId, ctx.organizationId),
+          inArray(entryStatusDimensionValues.entryId, ids),
+        ),
+      ),
+    db
+      .select({
+        registrationGroupId: invoices.registrationGroupId,
+        status: invoices.status,
+      })
+      .from(invoices)
+      .where(
+        and(
+          eq(invoices.organizationId, ctx.organizationId),
+          inArray(invoices.registrationGroupId, groupIds),
+        ),
+      ),
+    db
+      .select({
+        id: events.id,
+        registrationClosesAt: events.registrationClosesAt,
+      })
+      .from(events)
+      .where(
+        and(
+          eq(events.organizationId, ctx.organizationId),
+          inArray(events.id, eventIds),
+        ),
+      ),
+    db.execute(sql`
+        SELECT id, count(*) OVER (PARTITION BY event_id, driver_person_id) > 1 AS double_starter
+        FROM entry WHERE organization_id=${ctx.organizationId}
+          AND event_id IN ${inSql(eventIds)} AND deleted_at IS NULL
+      `),
+  ]);
+  type WorkflowRow = {
+    id: string;
+    workflow: import('@racepilot/core').EntryWorkflow;
+  };
+  type StarterRow = { id: string; double_starter: boolean };
+  const workflowMap = new Map(
+    (workflowResult as unknown as { rows: WorkflowRow[] }).rows.map((row) => [
+      row.id,
+      row.workflow,
+    ]),
+  );
+  const starterMap = new Map(
+    (starterResult as unknown as { rows: StarterRow[] }).rows.map((row) => [
+      row.id,
+      row.double_starter,
+    ]),
+  );
+  const configMap = new Map(configs.map((row) => [row.eventId, row.config]));
+  const stateMap = new Map(
+    states.map((row) => [`${row.entryId}:${row.dimension}`, row.value]),
+  );
+  const invoiceMap = new Map(
+    invoiceRows.map((row) => [row.registrationGroupId, row.status]),
+  );
+  const closeMap = new Map(
+    eventRows.map((row) => [row.id, row.registrationClosesAt]),
+  );
+  return rows.map((row) => {
+    const rawHints = row.statusHints ?? {
+      double_starter: false,
+      passenger: false,
+      late_entry: false,
+    };
+    const closesAt = closeMap.get(row.eventId);
+    const hints = {
+      double_starter:
+        rawHints.double_starter || starterMap.get(row.id) === true,
+      passenger: rawHints.passenger,
+      late_entry:
+        rawHints.late_entry || Boolean(closesAt && row.createdAt > closesAt),
+    };
+    const invoiceStatus = invoiceMap.get(row.registrationGroupId);
+    const paymentStatus =
+      invoiceStatus === undefined
+        ? 'not_required'
+        : invoiceStatus === 'cancelled'
+          ? 'not_relevant'
+          : invoiceStatus;
+    const statusProjection = projectEntryStatuses({
+      workflow:
+        workflowMap.get(row.workflowRevisionId ?? '') ?? defaultEntryWorkflow,
+      acceptanceStatus: row.acceptanceStatus,
+      paymentStatus,
+      technicalStatus:
+        stateMap.get(`${row.id}:technical_inspection`) ?? 'pending',
+      waiverStatus: stateMap.get(`${row.id}:waiver`) ?? 'f_pending',
+      emailStatus: row.verificationStatus,
+      config: configMap.get(row.eventId) ?? defaultEntryStatusDimensionConfig,
+      hints,
+    });
+    return { ...mapEntry(row), statusProjection };
+  });
+}
 export function createPersonRepository(
   db: Database,
 ): import('@racepilot/core').PersonRepository {
@@ -2507,7 +2834,7 @@ export function createEntryRepository(
             sql`${entries.deletedAt} is null`,
           ),
         );
-      return row ? mapEntry(row) : null;
+      return row ? (await projectEntryRows(db, ctx, [row]))[0]! : null;
     },
     listAdmin: async (ctx, query) => {
       const predicates = [
@@ -2607,7 +2934,11 @@ export function createEntryRepository(
           .where(where),
       ]);
       return {
-        items: rows.map((row) => mapEntry(row.entry)),
+        items: await projectEntryRows(
+          db,
+          ctx,
+          rows.map((row) => row.entry),
+        ),
         total: totals[0]?.total ?? 0,
       };
     },
@@ -4093,7 +4424,7 @@ export function createEntryWorkflowRepository(
     organizationId: organizationId(row.organization_id),
     eventId: row.event_id,
     version: row.version,
-    workflow: row.workflow,
+    workflow: normalizeEntryWorkflow(row.workflow),
   });
   return {
     getOrganization: async (ctx) => {
@@ -4168,6 +4499,270 @@ export function createEntryWorkflowRepository(
         );
         return map(revision);
       }),
+  };
+}
+
+/** Event-scoped status dimensions and audited per-entry status markers. */
+export function createEntryStatusDimensionRepository(
+  db: Database,
+): import('@racepilot/core').EntryStatusDimensionRepository {
+  return {
+    getEvent: async (ctx, eventId) => {
+      const [event] = await db
+        .select({ id: events.id })
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.id, eventId),
+          ),
+        )
+        .limit(1);
+      if (!event) return null;
+      const [row] = await db
+        .select({ config: eventEntryStatusDimensionConfigs.config })
+        .from(eventEntryStatusDimensionConfigs)
+        .where(
+          and(
+            eq(
+              eventEntryStatusDimensionConfigs.organizationId,
+              ctx.organizationId,
+            ),
+            eq(eventEntryStatusDimensionConfigs.eventId, eventId),
+          ),
+        )
+        .limit(1);
+      return row?.config ?? defaultEntryStatusDimensionConfig;
+    },
+    setEvent: async (ctx, eventId, config, actor, reason) => {
+      if (!ctx.permissions.has('event:write')) throw new Error('Forbidden');
+      if (!actor.trim() || !reason.trim())
+        throw new Error('Actor and reason are required');
+      const errors = validateEntryStatusDimensionConfig(config);
+      if (errors.length)
+        throw new Error(
+          `Invalid status dimension config: ${errors.join('; ')}`,
+        );
+      return db.transaction(async (tx) => {
+        const [event] = await tx
+          .select({ id: events.id })
+          .from(events)
+          .where(
+            and(
+              eq(events.organizationId, ctx.organizationId),
+              eq(events.id, eventId),
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!event) return null;
+        const [old] = await tx
+          .select({ config: eventEntryStatusDimensionConfigs.config })
+          .from(eventEntryStatusDimensionConfigs)
+          .where(
+            and(
+              eq(
+                eventEntryStatusDimensionConfigs.organizationId,
+                ctx.organizationId,
+              ),
+              eq(eventEntryStatusDimensionConfigs.eventId, eventId),
+            ),
+          )
+          .limit(1);
+        const stateRows = await tx
+          .select({
+            dimension: entryStatusDimensionValues.dimension,
+            value: entryStatusDimensionValues.value,
+          })
+          .from(entryStatusDimensionValues)
+          .where(
+            and(
+              eq(entryStatusDimensionValues.organizationId, ctx.organizationId),
+              eq(entryStatusDimensionValues.eventId, eventId),
+            ),
+          );
+        for (const state of stateRows) {
+          const dimension = config.dimensions.find(
+            (item) => item.key === state.dimension,
+          );
+          if (!dimension?.values.some((item) => item.key === state.value))
+            throw new Error(
+              `Cannot remove in-use status ${state.dimension}.${state.value}`,
+            );
+        }
+        await tx
+          .insert(eventEntryStatusDimensionConfigs)
+          .values({
+            organizationId: ctx.organizationId,
+            eventId,
+            config,
+            actor: actor.trim(),
+            reason: reason.trim(),
+          })
+          .onConflictDoUpdate({
+            target: [
+              eventEntryStatusDimensionConfigs.organizationId,
+              eventEntryStatusDimensionConfigs.eventId,
+            ],
+            set: {
+              config,
+              actor: actor.trim(),
+              reason: reason.trim(),
+              updatedAt: new Date(),
+            },
+          });
+        await tx.insert(eventEntryStatusDimensionConfigAudit).values({
+          organizationId: ctx.organizationId,
+          eventId,
+          beforeConfig: old?.config ?? null,
+          afterConfig: config,
+          actor: actor.trim(),
+          reason: reason.trim(),
+        });
+        return config;
+      });
+    },
+    transition: async (ctx, entryId, dimension, to, actor, reason) => {
+      if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
+      if (!actor.trim() || !reason.trim())
+        throw new Error('Actor and reason are required');
+      return db.transaction(async (tx) => {
+        const [entry] = await tx
+          .select({ eventId: entries.eventId })
+          .from(entries)
+          .where(
+            and(
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.id, entryId),
+              sql`${entries.deletedAt} is null`,
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!entry) return null;
+        const [configured] = await tx
+          .select({ config: eventEntryStatusDimensionConfigs.config })
+          .from(eventEntryStatusDimensionConfigs)
+          .where(
+            and(
+              eq(
+                eventEntryStatusDimensionConfigs.organizationId,
+                ctx.organizationId,
+              ),
+              eq(eventEntryStatusDimensionConfigs.eventId, entry.eventId),
+            ),
+          )
+          .limit(1);
+        const config = configured?.config ?? defaultEntryStatusDimensionConfig;
+        const definition = config.dimensions.find(
+          (item) => item.key === dimension,
+        );
+        const target = definition?.values.find((item) => item.key === to);
+        if (!definition || !target) throw new Error('Unknown status value');
+        const [current] = await tx
+          .select({ value: entryStatusDimensionValues.value })
+          .from(entryStatusDimensionValues)
+          .where(
+            and(
+              eq(entryStatusDimensionValues.organizationId, ctx.organizationId),
+              eq(entryStatusDimensionValues.entryId, entryId),
+              eq(entryStatusDimensionValues.dimension, dimension),
+            ),
+          )
+          .limit(1);
+        const from =
+          current?.value ?? (dimension === 'waiver' ? 'f_pending' : 'pending');
+        if (
+          !definition.transitions.some(
+            (edge) => edge.from === from && edge.to === to,
+          )
+        )
+          throw new Error(`Invalid ${dimension} transition: ${from} -> ${to}`);
+        await tx
+          .insert(entryStatusDimensionValues)
+          .values({
+            organizationId: ctx.organizationId,
+            eventId: entry.eventId,
+            entryId,
+            dimension,
+            value: to,
+            updatedAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [
+              entryStatusDimensionValues.organizationId,
+              entryStatusDimensionValues.entryId,
+              entryStatusDimensionValues.dimension,
+            ],
+            set: { value: to, updatedAt: new Date() },
+          });
+        await tx.insert(entryStatusDimensionAudit).values({
+          organizationId: ctx.organizationId,
+          eventId: entry.eventId,
+          entryId,
+          dimension,
+          fromValue: from,
+          toValue: to,
+          actor: actor.trim(),
+          reason: reason.trim(),
+        });
+        return true;
+      });
+    },
+    updateHints: async (ctx, entryId, hints, actor, reason) => {
+      if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
+      if (!actor.trim() || !reason.trim())
+        throw new Error('Actor and reason are required');
+      const allowed = new Set<EntryStatusHintKey>([
+        'double_starter',
+        'passenger',
+        'late_entry',
+      ]);
+      if (
+        !Object.keys(hints).length ||
+        Object.entries(hints).some(
+          ([key, value]) =>
+            !allowed.has(key as EntryStatusHintKey) ||
+            typeof value !== 'boolean',
+        )
+      )
+        throw new Error('Invalid status hint');
+      return db.transaction(async (tx) => {
+        const [entry] = await tx
+          .select({ eventId: entries.eventId, hints: entries.statusHints })
+          .from(entries)
+          .where(
+            and(
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.id, entryId),
+              sql`${entries.deletedAt} is null`,
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!entry) return false;
+        const after = { ...entry.hints, ...hints };
+        await tx
+          .update(entries)
+          .set({ statusHints: after })
+          .where(
+            and(
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.id, entryId),
+            ),
+          );
+        await tx.insert(entryStatusHintsAudit).values({
+          organizationId: ctx.organizationId,
+          eventId: entry.eventId,
+          entryId,
+          beforeHints: entry.hints,
+          afterHints: after,
+          actor: actor.trim(),
+          reason: reason.trim(),
+        });
+        return true;
+      });
+    },
   };
 }
 

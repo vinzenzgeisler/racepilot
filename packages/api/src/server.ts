@@ -9,6 +9,7 @@ import {
   createEventClassRepository,
   createRegistrationSettingsRepository,
   createEntryWorkflowRepository,
+  createEntryStatusDimensionRepository,
   createEventConsentRepository,
   createPublicRegistrationService,
   createEntryConfirmationRepository,
@@ -100,6 +101,7 @@ serve({
     classes: createEventClassRepository(db),
     registrationSettings: createRegistrationSettingsRepository(db),
     entryWorkflows: createEntryWorkflowRepository(db),
+    entryStatusDimensions: createEntryStatusDimensionRepository(db),
     eventConsents: createEventConsentRepository(db),
     ...(publicRegistration
       ? {

@@ -127,6 +127,13 @@
       "when": 1793300002000,
       "tag": "0017_public_registration_rate_limit_overrides",
       "breakpoints": false
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793390000000,
+      "tag": "0018_entry_status_dimensions",
+      "breakpoints": false
     }
   ]
 }
