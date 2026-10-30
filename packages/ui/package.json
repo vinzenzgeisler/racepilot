@@ -25,6 +25,8 @@
     "licenses",
     "src/tokens.css",
     "src/base.css",
-    "src/brand/signet.svg"
+    "src/brand/signet.svg",
+    "src/brand/app-icon.svg",
+    "TRADEMARKS.md"
   ]
 }

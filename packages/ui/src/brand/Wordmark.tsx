@@ -33,6 +33,9 @@ export function Wordmark({
       style={
         {
           display: 'inline-flex',
+          fontFamily: 'var(--font-archivo)',
+          fontStretch: '118%',
+          fontWeight: 800,
           alignItems: 'center',
           gap: '0.35em',
           color: palette.mark,
@@ -43,17 +46,15 @@ export function Wordmark({
     >
       <Signet
         style={{
-          width: '1.7em',
-          height: '1.7em',
-          fill: 'currentColor',
+          width: '1.7cap',
+          height: '1.7cap',
+          fill: variant === 'on-green' ? 'var(--color-mint)' : 'currentColor',
           flex: 'none',
         }}
       />
       <span
         style={{
-          fontFamily: 'var(--font-archivo)',
-          fontStretch: '118%',
-          fontWeight: 800,
+          color: variant === 'on-green' ? 'var(--color-ivory)' : palette.mark,
           letterSpacing: '0.03em',
           lineHeight: 1,
         }}

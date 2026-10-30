@@ -87,6 +87,8 @@ try {
       'src/tokens.css',
       'src/base.css',
       'src/brand/signet.svg',
+      'src/brand/app-icon.svg',
+      'TRADEMARKS.md',
       'migrations',
       'fonts',
       'licenses',
@@ -101,6 +103,13 @@ try {
         if (error.code !== 'ENOENT') throw error;
       }
     }
+    if (manifest.name === '@racepilot/ui') {
+      await cp(
+        path.join(root, 'TRADEMARKS.md'),
+        path.join(stage, 'TRADEMARKS.md'),
+      );
+    }
+
     const packOutput = execFileSync(
       'npm',
       ['pack', '--json', '--pack-destination', output],
@@ -110,6 +119,17 @@ try {
     const filePath = path.join(output, packed.filename);
     const bytes = await readFile(filePath);
     const packedFiles = packed.files.map(({ path: file }) => file).sort();
+    if (manifest.name === '@racepilot/ui') {
+      for (const required of [
+        'TRADEMARKS.md',
+        'src/brand/signet.svg',
+        'src/brand/app-icon.svg',
+      ]) {
+        if (!packedFiles.includes(required)) {
+          throw new Error(`@racepilot/ui artifact is missing ${required}`);
+        }
+      }
+    }
     const allowed = packedFiles.every(
       (file) =>
         file === 'package.json' ||
@@ -119,6 +139,8 @@ try {
         file === 'src/tokens.css' ||
         file === 'src/base.css' ||
         file === 'src/brand/signet.svg' ||
+        file === 'src/brand/app-icon.svg' ||
+        file === 'TRADEMARKS.md' ||
         file.startsWith('migrations/') ||
         file.startsWith('fonts/') ||
         file.startsWith('licenses/'),

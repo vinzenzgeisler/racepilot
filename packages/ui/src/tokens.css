@@ -73,10 +73,14 @@
   --type-small-line: 1.5;
   --type-button-line: 1;
   --type-label-line: 1.4;
-  --type-display-tracking: -4%;
-  --type-h1-tracking: -3.5%;
-  --type-h2-tracking: -2%;
-  --type-h3-tracking: -1%;
-  --type-label-tracking: 8%;
+  --type-display-tracking: -0.04em;
+  --type-display-stretch: 125%;
+  --type-h1-tracking: -0.035em;
+  --type-h1-stretch: 122%;
+  --type-h2-tracking: -0.02em;
+  --type-h2-stretch: 118%;
+  --type-h3-tracking: -0.01em;
+  --type-h3-stretch: 112%;
+  --type-label-tracking: 0.08em;
   font-synthesis: none;
 }

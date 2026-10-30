@@ -11,16 +11,16 @@ Import `@racepilot/ui/base.css` for the reset, typography, focus behavior, motio
 
 | Style | Desktop | Mobile | App |
 |---|---:|---:|---:|
-| Display | 172 / .84 / −4% | 64 / .84 / −4% | — |
-| H1 | 84 / .92 / −3.5% | 40 / .92 / −3.5% | 28 / .92 / −3.5% |
-| H2 | 48 / 1 / −2% | 30 / 1 / −2% | 22 / 1 / −2% |
-| H3 | 26 / 1.1 / −1% | 21 / 1.1 / −1% | 18 / 1.1 / −1% |
+| Display | 172 / .84 / −0.04em / 125% | 64 / .84 / −0.04em / 125% | — |
+| H1 | 84 / .92 / −0.035em / 122% | 40 / .92 / −0.035em / 122% | 28 / .92 / −0.035em / 122% |
+| H2 | 48 / 1 / −0.02em / 118% | 30 / 1 / −0.02em / 118% | 22 / 1 / −0.02em / 118% |
+| H3 | 26 / 1.1 / −0.01em / 112% | 21 / 1.1 / −0.01em / 112% | 18 / 1.1 / −0.01em / 112% |
 | H4 | 20 / 1.3 / 0 | 17 / 1.3 / 0 | 15 / 1.3 / 0 |
 | Body L | 20 / 1.5 / 0 | 17 / 1.5 / 0 | — |
 | Body | 17 / 1.55 / 0 | 16 / 1.55 / 0 | 14 / 1.45 / 0 |
 | Small | 14 / 1.5 / 0 | 14 / 1.5 / 0 | 13 / 1.5 / 0 |
 | Button | 16 / 1 / 0 | 16 / 1 / 0 | 14 / 1 / 0 |
-| Label | 12 / 1.4 / +8% | 11 / 1.4 / +8% | 11 / 1.4 / +8% |
+| Label | 12 / 1.4 / +0.08em | 11 / 1.4 / +0.08em | 11 / 1.4 / +0.08em |
 | Numerals | 64–84 / .9 / 0 | 40–56 / .9 / 0 | 20 / .9 / 0 |
 | Tabular data | 14 / 1.4 / 0 | 14 / 1.4 / 0 | 14 / 1.4 / 0 |
 
@@ -55,4 +55,9 @@ Use square geometry, prescribed line weights and no shadows. Keyboard focus is a
 
 ### Fonts and logo
 
-All font files are served from the application bundle via Fontsource; OFL notices are in `packages/ui/licenses/`. Archivo Variable's `wdth.css` declares a 62–125% stretch axis and variable weight 100–900, so the required width and weight values are supported. The logo components live in `packages/ui/src/brand/`; their four provided variants are approved combinations from M2. The logo's trademark/licensing status is still subject to the owner's review.
+All font files are served from the application bundle via Fontsource; OFL notices are in `packages/ui/licenses/`. Archivo Variable's `wdth.css` declares a 62–125% stretch axis and variable weight 100–900, so the required width and weight values are supported. The brand components and app-icon asset live in `packages/ui/src/brand/`; the four wordmark variants and the green/ivory app icon follow M2. The signet is sized to 1.7 times the font cap height (`cap`), and its adjacent Archivo wordmark uses 118% width, weight 800, and +0.03em tracking. The square app-icon master is `packages/ui/src/brand/app-icon.svg` (green field, ivory signet; M2 shows 160, 64, 32, and 16 px examples). Use signet-only below 24 px. M2 also captions a smallest logo with a 20 px signet; these source statements conflict, so this implementation follows the explicit below-24 px signet-only rule and does not infer a wordmark at 20 px. The text-rendered wordmark follows the HTML specimen; no claim is made that it is a curve-converted final master. See [`TRADEMARKS.md`](../../TRADEMARKS.md) for the separation of brand notice from software licensing.
+
+
+### Browser verification
+
+Rendered the package base styles and `Wordmark` in Chromium on 2026-10-30 at exact 320 px and 1440 px CSS viewports using the local app bundle. `document.fonts.check()` returned true for Archivo Variable, IBM Plex Sans, and IBM Plex Mono at both widths; the computed display face was Archivo Variable at 125% width, and the page had no horizontal overflow. The four logo variants computed to Green/Ivory, Mint signet + Ivory wordmark on Green, White on Ink, and Ink on Ivory respectively. This review used local assets only.

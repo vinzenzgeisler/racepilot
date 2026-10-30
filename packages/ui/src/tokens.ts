@@ -70,29 +70,37 @@ const step = (
   size: number,
   lineHeight: number,
   letterSpacing: string,
-) => ({ fontFamily, fontWeight, size, lineHeight, letterSpacing });
+  widthPercent = 100,
+) => ({
+  fontFamily,
+  fontWeight,
+  size,
+  lineHeight,
+  letterSpacing,
+  widthPercent,
+});
 const archivo = 'Archivo Variable';
 const plex = 'IBM Plex Sans';
 const mono = 'IBM Plex Mono';
 export const typography = {
   display: {
-    webDesktop: step(archivo, 800, 172, 0.84, '-4%'),
-    webMobile: step(archivo, 800, 64, 0.84, '-4%'),
+    webDesktop: step(archivo, 800, 172, 0.84, '-0.04em', 125),
+    webMobile: step(archivo, 800, 64, 0.84, '-0.04em', 125),
   },
   h1: {
-    webDesktop: step(archivo, 800, 84, 0.92, '-3.5%'),
-    webMobile: step(archivo, 800, 40, 0.92, '-3.5%'),
-    app: step(archivo, 800, 28, 0.92, '-3.5%'),
+    webDesktop: step(archivo, 800, 84, 0.92, '-0.035em', 122),
+    webMobile: step(archivo, 800, 40, 0.92, '-0.035em', 122),
+    app: step(archivo, 800, 28, 0.92, '-0.035em', 122),
   },
   h2: {
-    webDesktop: step(archivo, 800, 48, 1, '-2%'),
-    webMobile: step(archivo, 800, 30, 1, '-2%'),
-    app: step(archivo, 800, 22, 1, '-2%'),
+    webDesktop: step(archivo, 800, 48, 1, '-0.02em', 118),
+    webMobile: step(archivo, 800, 30, 1, '-0.02em', 118),
+    app: step(archivo, 800, 22, 1, '-0.02em', 118),
   },
   h3: {
-    webDesktop: step(archivo, 700, 26, 1.1, '-1%'),
-    webMobile: step(archivo, 700, 21, 1.1, '-1%'),
-    app: step(archivo, 700, 18, 1.1, '-1%'),
+    webDesktop: step(archivo, 700, 26, 1.1, '-0.01em', 112),
+    webMobile: step(archivo, 700, 21, 1.1, '-0.01em', 112),
+    app: step(archivo, 700, 18, 1.1, '-0.01em', 112),
   },
   h4: {
     webDesktop: step(plex, 600, 20, 1.3, '0'),
@@ -119,14 +127,14 @@ export const typography = {
     app: step(plex, 500, 14, 1, '0'),
   },
   label: {
-    webDesktop: step(mono, 500, 12, 1.4, '8%'),
-    webMobile: step(mono, 500, 11, 1.4, '8%'),
-    app: step(mono, 500, 11, 1.4, '8%'),
+    webDesktop: step(mono, 500, 12, 1.4, '0.08em'),
+    webMobile: step(mono, 500, 11, 1.4, '0.08em'),
+    app: step(mono, 500, 11, 1.4, '0.08em'),
   },
   digits: {
-    webDesktop: step(archivo, 900, 64, 0.9, '0'),
-    webMobile: step(archivo, 900, 40, 0.9, '0'),
-    app: step(archivo, 900, 20, 0.9, '0'),
+    webDesktop: step(archivo, 900, 64, 0.9, '0', 62),
+    webMobile: step(archivo, 900, 40, 0.9, '0', 62),
+    app: step(archivo, 900, 20, 0.9, '0', 62),
   },
   tabular: {
     webDesktop: step(plex, 400, 14, 1.4, '0'),
