@@ -1,0 +1,58 @@
+// @vitest-environment jsdom
+import { act } from 'react';
+import { createRoot } from 'react-dom/client';
+import { afterEach, describe, expect, it } from 'vitest';
+import { ComponentGallery } from './ComponentGallery.js';
+
+let root: ReturnType<typeof createRoot> | undefined;
+let container: HTMLDivElement;
+afterEach(() => {
+  act(() => root?.unmount());
+  container?.remove();
+  root = undefined;
+});
+
+describe('component review gallery', () => {
+  it('shows the complete primitive and app component catalogue', () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    act(() => root!.render(<ComponentGallery />));
+    for (const text of [
+      'Komponenten',
+      'Buttons',
+      'Eingaben',
+      'Status & Hinweise',
+      'Icons',
+      'App-Bausteine',
+      'Tabelle & Menü',
+      'Rückmeldung',
+      'Neu',
+      'In Arbeit',
+      'Fehlt',
+      'Erledigt',
+      'Abgelehnt',
+      'Nicht relevant',
+    ])
+      expect(container.textContent).toContain(text);
+  });
+  it('opens the menu and can trigger and dismiss a confirmation toast', () => {
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    act(() => root!.render(<ComponentGallery />));
+    const summary = container.querySelector('summary')!;
+    act(() => summary.click());
+    expect(summary.parentElement?.hasAttribute('open')).toBe(true);
+    const show = Array.from(container.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Bestätigung zeigen',
+    )!;
+    act(() => show.click());
+    expect(container.textContent).toContain('Nr. 42 ist zugelassen.');
+    const dismiss = container.querySelector(
+      '[aria-label="Meldung schließen"]',
+    )!;
+    act(() => (dismiss as HTMLButtonElement).click());
+    expect(container.textContent).not.toContain('Nr. 42 ist zugelassen.');
+  });
+});

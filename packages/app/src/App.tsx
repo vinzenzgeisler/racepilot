@@ -7,6 +7,7 @@ import './styles.css';
 import { Registration, RegistrationVerification } from './Registration.js';
 import { AdminEntries } from './AdminEntries.js';
 import { AdminModules } from './AdminModules.js';
+import { ComponentGallery } from './ComponentGallery.js';
 
 type State =
   | { kind: 'loading' }
@@ -20,8 +21,9 @@ export interface AppProps {
 export function App({ renderContribution }: AppProps = {}) {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const isAdmin = window.location.pathname.startsWith('/admin');
+  const isComponentGallery = window.location.pathname === '/components';
   useEffect(() => {
-    if (isAdmin) return;
+    if (isAdmin || isComponentGallery) return;
     let current = true;
     fetch('/runtime/bootstrap', {
       credentials: 'same-origin',
@@ -41,7 +43,9 @@ export function App({ renderContribution }: AppProps = {}) {
     return () => {
       current = false;
     };
-  }, [isAdmin]);
+  }, [isAdmin, isComponentGallery]);
+
+  if (isComponentGallery) return <ComponentGallery />;
 
   if (isAdmin)
     return (
