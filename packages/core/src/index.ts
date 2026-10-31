@@ -1145,6 +1145,7 @@ export interface Person {
   email: string | null;
   emailNormalized: string | null;
   dateOfBirth: string | null;
+  country: string | null;
   createdAt: string;
   deletedAt: string | null;
   deletionReason: string | null;
@@ -1220,7 +1221,7 @@ export interface EntryAuditEvent {
 }
 export type PersonInput = Pick<
   Person,
-  'firstName' | 'lastName' | 'email' | 'dateOfBirth'
+  'firstName' | 'lastName' | 'email' | 'dateOfBirth' | 'country'
 >;
 export type VehicleInput = Pick<
   Vehicle,
@@ -1398,6 +1399,8 @@ export interface EntryListQuery {
   readonly classId?: string;
   readonly acceptanceStatus?: EntryAcceptanceStatus;
   readonly verificationStatus?: EntryVerificationStatus;
+  readonly paymentStatus?:
+    'open' | 'partially_paid' | 'paid' | 'not_required' | 'not_relevant';
   readonly search?: string;
   readonly sort:
     | 'createdAt'

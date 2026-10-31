@@ -294,6 +294,7 @@ export const people = pgTable(
     email: text('email'),
     emailNormalized: text('email_normalized'),
     dateOfBirth: date('date_of_birth'),
+    country: text('country'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2618,6 +2619,7 @@ async function attachAdminEntryDetails(
       firstName: people.firstName,
       lastName: people.lastName,
       dateOfBirth: people.dateOfBirth,
+      country: people.country,
       email: people.email,
       emailVerified: entries.verificationStatus,
     })
@@ -2853,7 +2855,7 @@ async function attachAdminEntryDetails(
         driver: {
           name: [driver?.firstName, driver?.lastName].filter(Boolean).join(' '),
           dateOfBirth: driver?.dateOfBirth ?? null,
-          country: null,
+          country: driver?.country ?? null,
           email: driver?.email ?? null,
           emailVerified: driver?.emailVerified === 'verified',
         },
@@ -2891,6 +2893,7 @@ export function createPersonRepository(
           email: input.email?.trim() ?? null,
           emailNormalized: normalized,
           dateOfBirth: input.dateOfBirth,
+          country: input.country ?? null,
         })
         .returning();
       return mapPerson(row!);
@@ -3124,6 +3127,18 @@ export function createEntryRepository(
       if (query.verificationStatus)
         predicates.push(
           eq(entries.verificationStatus, query.verificationStatus),
+        );
+      if (query.paymentStatus === 'not_required')
+        predicates.push(
+          sql`not exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId})`,
+        );
+      else if (query.paymentStatus === 'not_relevant')
+        predicates.push(
+          sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = 'cancelled')`,
+        );
+      else if (query.paymentStatus)
+        predicates.push(
+          sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = ${query.paymentStatus})`,
         );
       const search = query.search?.trim();
       if (search) {
@@ -4020,6 +4035,7 @@ export interface PublicRegistrationPayload {
     lastName: string;
     email: string;
     dateOfBirth: string;
+    country?: string | undefined;
     guardianName?: string | undefined;
     guardianEmail?: string | undefined;
   };
@@ -4346,6 +4362,7 @@ export function createPublicRegistrationService(
               email: payload.person.email.trim(),
               emailNormalized,
               dateOfBirth: payload.person.dateOfBirth,
+              country: payload.person.country ?? null,
             })
             .returning({ id: people.id });
           personId = person!.id;

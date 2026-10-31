@@ -355,7 +355,7 @@ describe('api entry', () => {
       },
     });
     const response = await app.request(
-      '/admin/entries?page=2&pageSize=10&acceptanceStatus=pending&sort=createdAt&direction=asc',
+      '/admin/entries?page=2&pageSize=10&acceptanceStatus=pending&paymentStatus=paid&sort=createdAt&direction=asc',
     );
     expect(response.status).toBe(200);
     expect(seen).toEqual({
@@ -364,6 +364,7 @@ describe('api entry', () => {
         page: 2,
         pageSize: 10,
         acceptanceStatus: 'pending',
+        paymentStatus: 'paid',
         direction: 'asc',
       }),
     });

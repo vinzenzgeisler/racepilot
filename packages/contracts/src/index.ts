@@ -490,6 +490,10 @@ export const PublicRegistrationRequestSchema = z
         lastName: z.string().trim().min(1).max(100),
         email: z.string().email().max(254),
         dateOfBirth: z.string().date(),
+        country: z
+          .string()
+          .regex(/^[A-Z]{2}$/)
+          .optional(),
         guardianName: z.string().trim().min(1).max(200).optional(),
         guardianEmail: z.string().email().max(254).optional(),
       })

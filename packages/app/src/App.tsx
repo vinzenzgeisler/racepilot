@@ -236,6 +236,19 @@ function AdminApplication() {
               VORSCHAU ·{' '}
               {selectedEntry.requestedStartNumber ?? 'OHNE STARTNUMMER'}
             </p>
+            <div
+              className="app-preview-vehicle"
+              aria-label="Kein Fahrzeugbild verfügbar"
+            >
+              <span aria-hidden="true">▧</span>
+            </div>
+            {selectedEntry.adminDetails && (
+              <p>
+                {selectedEntry.adminDetails.driver.name} ·{' '}
+                {selectedEntry.adminDetails.vehicle.make}{' '}
+                {selectedEntry.adminDetails.vehicle.model}
+              </p>
+            )}
             <h2>
               Nennung{' '}
               {selectedEntry.requestedStartNumber ??
@@ -270,7 +283,15 @@ function AdminApplication() {
             </Button>
             <div className="app-preview-extra">
               <h3>Verlauf und Nachrichten</h3>
-              <p>Details im vollständigen Datensatz öffnen.</p>
+              {(selectedEntry.adminHistory ?? [])
+                .slice(-3)
+                .reverse()
+                .map((item) => (
+                  <p key={item.id}>
+                    {new Date(item.occurredAt).toLocaleString()} · {item.label}{' '}
+                    · {item.actor}
+                  </p>
+                ))}
             </div>
           </>
         ) : undefined

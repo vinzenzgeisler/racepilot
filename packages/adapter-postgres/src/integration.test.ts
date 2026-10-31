@@ -1269,6 +1269,15 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(pageA.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       expect(pageA.total).toBe(1);
+      const noInvoice = await adminEntries.listAdmin!(ctxA, {
+        page: 1,
+        pageSize: 100,
+        eventId: eventA!.id,
+        paymentStatus: 'not_required',
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      expect(noInvoice.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       expect(pageA.items[0]?.adminDetails).toEqual({
         driver: {
           name: 'Same Name',
@@ -1279,7 +1288,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         },
         vehicle: { make: 'X', model: 'Y', year: null },
         eventClass: { code: 'A', name: 'A' },
-        startNumber: null,
+        startNumber: 'A-01',
       });
       expect(await adminEntries.getById(ctxA, foreignEntryId!)).toBeNull();
       const byDriverName = await adminEntries.listAdmin!(ctxA, {
