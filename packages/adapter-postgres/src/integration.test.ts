@@ -2753,7 +2753,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       });
       const concurrentPayloadB = {
         ...concurrentPayloadA,
-        consents: [],
+        person: { ...concurrentPayloadA.person, firstName: 'Concurrent B' },
       };
       const concurrentResults = await Promise.allSettled([
         service.submit(ctx, event!.slug, concurrentPayloadA),
