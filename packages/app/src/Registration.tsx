@@ -2,9 +2,14 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   PublicRegistrationRequestSchema,
   StandardRegistrationFormSchema,
+  RegistrationFormConfigSchema,
+  defaultRegistrationFormConfig,
+  deriveAccessibleBrandColors,
   type RegistrationSettings,
   type StandardRegistrationForm,
+  type RegistrationFormConfig,
 } from '@racepilot/contracts';
+import type { CSSProperties } from 'react';
 
 type FormPayload = {
   form: StandardRegistrationForm;
@@ -24,6 +29,7 @@ type FormPayload = {
     hash: string;
   }>;
   registrationSettings: RegistrationSettings;
+  registrationFormConfig: RegistrationFormConfig;
 };
 type VehicleEntry = {
   classId: string;
@@ -148,7 +154,8 @@ export function Registration({
         if (!alive || !body || typeof body !== 'object') return;
         const value = body as FormPayload;
         const form = StandardRegistrationFormSchema.parse(value.form);
-        if (alive) setPayload({ ...value, form });
+        const registrationFormConfig = RegistrationFormConfigSchema.parse(value.registrationFormConfig ?? defaultRegistrationFormConfig);
+        if (alive) setPayload({ ...value, form, registrationFormConfig });
       })
       .catch(() => {
         if (alive) setLoadError(true);
@@ -173,6 +180,7 @@ export function Registration({
     );
   const steps = payload.form.steps;
   const currentStep = steps[step];
+  const contrastColors = deriveAccessibleBrandColors(payload.registrationFormConfig.branding.primaryColor, payload.registrationFormConfig.branding.accentColor);
   const age = getAge(values.dateOfBirth, payload.event.startsOn);
   const guardianRequired =
     age < payload.registrationSettings.guardianRequiredBelowAge;
@@ -275,7 +283,7 @@ export function Registration({
     );
 
   return (
-    <section className="registration" aria-labelledby="registration-title">
+    <section className="registration" aria-labelledby="registration-title" style={{ '--brand-primary': payload.registrationFormConfig.branding.primaryColor, '--brand-accent': payload.registrationFormConfig.branding.accentColor, '--brand-primary-text': contrastColors.primaryForeground, '--brand-accent-text': contrastColors.accentForeground, '--brand-link': contrastColors.linkColor, '--brand-radius': payload.registrationFormConfig.branding.corners === 'rounded' ? '6px' : '0' } as CSSProperties}>
       <div
         className="registration-language"
         role="group"
@@ -296,7 +304,12 @@ export function Registration({
           English
         </button>
       </div>
-      <h2 id="registration-title">{payload.event.name}</h2>
+      <header className="registration-header">
+        <p className="registration-event-date">{payload.event.startsOn}</p>
+        <h2 id="registration-title">{payload.event.name}</h2>
+        {payload.registrationFormConfig.welcomeText && <p>{payload.registrationFormConfig.welcomeText}</p>}
+      </header>
+      {contrastColors.contrastNotice && <p className="registration-contrast-note" role="note">{locale === 'de' ? 'Schriftfarben werden automatisch für gute Lesbarkeit angepasst.' : 'Text colors are automatically adjusted for readability.'}</p>}
       <ol
         className="registration-steps"
         aria-label={locale === 'de' ? 'Anmeldeschritte' : 'Registration steps'}
@@ -307,6 +320,7 @@ export function Registration({
           </li>
         ))}
       </ol>
+      <div className="registration-layout">
       <form ref={formRef} onSubmit={submit} noValidate={false}>
         <fieldset>
           <legend>{currentStep?.title[locale]}</legend>
@@ -523,6 +537,14 @@ export function Registration({
           </button>
         </div>
       </form>
+      <aside className="registration-summary" aria-label={locale === 'de' ? 'Deine Nennung' : 'Your entry'}>
+        <h3>{locale === 'de' ? 'Deine Nennung' : 'Your entry'}</h3>
+        <p>{vehicles.length} {locale === 'de' ? 'Startmeldung(en)' : 'entry/entries'}</p>
+        <p>{locale === 'de' ? 'Startgeld' : 'Entry fee'} · {vehicles.length} × —</p>
+        <p>{locale === 'de' ? 'Nennungsschluss' : 'Deadline'} · —</p>
+      </aside>
+      </div>
+      <footer className="registration-footer">{payload.event.name} · Nennung mit NENNBOX</footer>
     </section>
   );
 }

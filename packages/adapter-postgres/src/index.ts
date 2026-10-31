@@ -108,6 +108,7 @@ export const organizations = pgTable(
         guardianRequiredBelowAge: 18,
         maximumClassesPerGroup: 8,
       }),
+    registrationFormConfig: jsonb('registration_form_config').$type<Record<string, unknown> | null>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -167,6 +168,7 @@ export const events = pgTable(
       >()
       .notNull()
       .default([]),
+    registrationFormConfig: jsonb('registration_form_config').$type<Record<string, unknown> | null>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -992,6 +994,27 @@ export const groupEmailVerifications = pgTable(
       .where(sql`${t.consumedAt} is null`),
   ],
 );
+export const registrationFormDrafts = pgTable(
+  'registration_form_draft',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    emailNormalized: text('email_normalized').notNull(),
+    recipientEmail: text('recipient_email').notNull(),
+    language: text('language').notNull(),
+    draftData: jsonb('draft_data').$type<Record<string, unknown>>().notNull(),
+    resumeTokenHash: text('resume_token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique('registration_form_draft_scope_email_unique').on(t.organizationId, t.eventId, t.emailNormalized),
+    foreignKey({ columns: [t.organizationId, t.eventId], foreignColumns: [events.organizationId, events.id], name: 'registration_form_draft_event_fk' }).onDelete('cascade'),
+    index('registration_form_draft_expiry_idx').on(t.expiresAt),
+  ],
+);
 export const consentEvidence = pgTable(
   'consent_evidence',
   {
@@ -1056,6 +1079,22 @@ export const registrationSettingsAudit = pgTable(
       .notNull()
       .defaultNow(),
   },
+);
+export const registrationFormConfigAudit = pgTable(
+  'registration_form_config_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id'),
+    actor: text('actor').notNull(),
+    beforeConfig: jsonb('before_config'),
+    afterConfig: jsonb('after_config').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    foreignKey({ columns: [t.organizationId], foreignColumns: [organizations.id], name: 'registration_form_config_audit_org_fk' }).onDelete('cascade'),
+    foreignKey({ columns: [t.organizationId, t.eventId], foreignColumns: [events.organizationId, events.id], name: 'registration_form_config_audit_event_fk' }).onDelete('cascade'),
+  ],
 );
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -4042,6 +4081,33 @@ export function createRegistrationSettingsRepository(db: Database) {
   };
 }
 
+export function createRegistrationFormConfigRepository(db: Database) {
+  return {
+    getOrganization: async (ctx: RequestContext) => {
+      const [row] = await db.select({ config: organizations.registrationFormConfig }).from(organizations).where(eq(organizations.id, ctx.organizationId));
+      return row?.config ?? null;
+    },
+    updateOrganization: async (ctx: RequestContext, config: Record<string, unknown>, actor: string) => db.transaction(async (tx) => {
+      const [before] = await tx.select({ config: organizations.registrationFormConfig }).from(organizations).where(eq(organizations.id, ctx.organizationId)).for('update');
+      if (!before) return null;
+      const [after] = await tx.update(organizations).set({ registrationFormConfig: config, updatedAt: new Date() }).where(eq(organizations.id, ctx.organizationId)).returning({ config: organizations.registrationFormConfig });
+      await tx.insert(registrationFormConfigAudit).values({ organizationId: ctx.organizationId, actor, beforeConfig: before.config, afterConfig: config });
+      return after?.config ?? null;
+    }),
+    getEvent: async (ctx: RequestContext, eventId: string) => {
+      const [row] = await db.select({ config: events.registrationFormConfig }).from(events).where(and(eq(events.organizationId, ctx.organizationId), eq(events.id, eventId)));
+      return row?.config ?? null;
+    },
+    updateEvent: async (ctx: RequestContext, eventId: string, config: Record<string, unknown>, actor: string) => db.transaction(async (tx) => {
+      const [before] = await tx.select({ config: events.registrationFormConfig }).from(events).where(and(eq(events.organizationId, ctx.organizationId), eq(events.id, eventId))).for('update');
+      if (!before) return null;
+      const [after] = await tx.update(events).set({ registrationFormConfig: config, updatedAt: new Date() }).where(and(eq(events.organizationId, ctx.organizationId), eq(events.id, eventId))).returning({ config: events.registrationFormConfig });
+      await tx.insert(registrationFormConfigAudit).values({ organizationId: ctx.organizationId, eventId, actor, beforeConfig: before.config, afterConfig: config });
+      return after?.config ?? null;
+    }),
+  };
+}
+
 export interface PublicRegistrationPayload {
   submissionId: string;
   formVersion: '1.0';
@@ -4112,7 +4178,7 @@ export function createPublicRegistrationService(
         )
         .orderBy(eventClasses.sortOrder);
       const [organization] = await db
-        .select({ registrationSettings: organizations.registrationSettings })
+        .select({ registrationSettings: organizations.registrationSettings, registrationFormConfig: organizations.registrationFormConfig })
         .from(organizations)
         .where(eq(organizations.id, ctx.organizationId))
         .limit(1);
@@ -4131,6 +4197,9 @@ export function createPublicRegistrationService(
           guardianRequiredBelowAge: 18,
           maximumClassesPerGroup: 8,
         },
+        registrationFormConfig: (organization?.registrationFormConfig ?? null) && event.registrationFormConfig
+          ? { ...organization!.registrationFormConfig!, ...event.registrationFormConfig, branding: { ...(organization!.registrationFormConfig as Record<string, any>).branding, ...(event.registrationFormConfig as Record<string, any>).branding }, fields: { ...(organization!.registrationFormConfig as Record<string, any>).fields, ...(event.registrationFormConfig as Record<string, any>).fields }, features: { ...(organization!.registrationFormConfig as Record<string, any>).features, ...(event.registrationFormConfig as Record<string, any>).features } }
+          : event.registrationFormConfig ?? organization?.registrationFormConfig ?? null,
       };
     },
     submit: async (

@@ -4,6 +4,7 @@ import { createJobContext } from './index.js';
 
 export const mailTemplateContracts = {
   verification: ['recipientName', 'verificationUrl'],
+  'registration-resume': ['recipientName', 'resumeUrl'],
   'entry-received': ['recipientName', 'eventName'],
   accepted: ['recipientName', 'eventName'],
   rejected: ['recipientName', 'eventName'],
@@ -33,6 +34,18 @@ const defaultCopy: Record<MailTemplateKey, Record<MailLocale, MailTemplate>> = {
       subject: 'Verify your email address',
       text: 'Hello {{recipientName}}, verify your email address: {{verificationUrl}}',
       html: '<p>Hello {{recipientName}},</p><p><a href="{{verificationUrl}}">Verify your email address</a></p>',
+    },
+  },
+  'registration-resume': {
+    de: {
+      subject: 'Setze deine Nennung fort',
+      text: 'Hallo {{recipientName}}, hier kannst du deine Nennung sicher fortsetzen: {{resumeUrl}}',
+      html: '<p>Hallo {{recipientName}},</p><p><a href="{{resumeUrl}}">Nennung fortsetzen</a></p><p>Der Link ist zeitlich begrenzt und funktioniert nur einmal.</p>',
+    },
+    en: {
+      subject: 'Continue your registration',
+      text: 'Hello {{recipientName}}, continue your registration securely: {{resumeUrl}}',
+      html: '<p>Hello {{recipientName}},</p><p><a href="{{resumeUrl}}">Continue registration</a></p><p>This link expires and can only be used once.</p>',
     },
   },
   'entry-received': {

@@ -80,6 +80,10 @@ import {
   standardRegistrationForm,
   PublicRegistrationRequestSchema,
   EntryStatusDimensionConfigSchema,
+  RegistrationFormConfigSchema,
+  RegistrationFormConfigPatchSchema,
+  defaultRegistrationFormConfig,
+  mergeRegistrationFormConfig,
 } from '@racepilot/contracts';
 export function health(version: string) {
   return healthResponseSchema.parse({ status: 'ok', version });
@@ -260,6 +264,12 @@ export interface ApiDeps {
       context: import('@racepilot/core').RequestContext,
       token: string,
     ): Promise<boolean>;
+  };
+  registrationFormConfigs?: {
+    getOrganization(context: RequestContext): Promise<unknown | null>;
+    updateOrganization(context: RequestContext, config: Record<string, unknown>, actor: string): Promise<unknown | null>;
+    getEvent(context: RequestContext, eventId: string): Promise<unknown | null>;
+    updateEvent(context: RequestContext, eventId: string, config: Record<string, unknown>, actor: string): Promise<unknown | null>;
   };
   registrationRateLimiter?: RegistrationRateLimiter;
   publicRegistrationRateLimits?: {
@@ -1155,7 +1165,7 @@ export function createApp(deps: ApiDeps) {
           c.req.param('slug'),
         );
         return result
-          ? c.json({ form: standardRegistrationForm, ...(result as object) })
+          ? c.json({ form: standardRegistrationForm, ...(result as object), registrationFormConfig: mergeRegistrationFormConfig(defaultRegistrationFormConfig, RegistrationFormConfigPatchSchema.parse((result as Record<string, unknown>).registrationFormConfig ?? {})) })
           : c.json({ error: 'Not found' }, 404);
       }
       const event = await getPublicEvent(
@@ -1165,10 +1175,51 @@ export function createApp(deps: ApiDeps) {
         { events: deps.events },
       );
       return event
-        ? c.json({ form: standardRegistrationForm, event, consents: [] })
+        ? c.json({ form: standardRegistrationForm, event, consents: [], registrationFormConfig: defaultRegistrationFormConfig })
         : c.json({ error: 'Not found' }, 404);
     },
   );
+  app.get('/admin/organization/registration-form-config', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:read')) return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationFormConfigs) return c.json({ error: 'Not found' }, 404);
+    const config = await deps.registrationFormConfigs.getOrganization(context);
+    return c.json({ config: config ? RegistrationFormConfigSchema.parse(config) : defaultRegistrationFormConfig });
+  });
+  app.put('/admin/organization/registration-form-config', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:update')) return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationFormConfigs) return c.json({ error: 'Not found' }, 404);
+    const parsed = RegistrationFormConfigSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return c.json({ error: 'Invalid registration form configuration' }, 400);
+    const actor = context.subject ? `${context.subject.issuer}|${context.subject.subject}` : 'unknown';
+    return c.json({ config: await deps.registrationFormConfigs.updateOrganization(context, parsed.data, actor) });
+  });
+  app.get('/admin/events/:eventId/registration-form-config', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:read')) return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationFormConfigs) return c.json({ error: 'Not found' }, 404);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success) return c.json({ error: 'Not found' }, 404);
+    const config = await deps.registrationFormConfigs.getEvent(context, eventId);
+    return config === null ? c.json({ error: 'Not found' }, 404) : c.json({ config: RegistrationFormConfigPatchSchema.parse(config) });
+  });
+  app.put('/admin/events/:eventId/registration-form-config', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:write')) return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationFormConfigs) return c.json({ error: 'Not found' }, 404);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success) return c.json({ error: 'Not found' }, 404);
+    const parsed = RegistrationFormConfigPatchSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success || Object.keys(parsed.data ?? {}).length === 0) return c.json({ error: 'Invalid registration form configuration' }, 400);
+    const actor = context.subject ? `${context.subject.issuer}|${context.subject.subject}` : 'unknown';
+    const config = await deps.registrationFormConfigs.updateEvent(context, eventId, parsed.data as Record<string, unknown>, actor);
+    return config === null ? c.json({ error: 'Not found' }, 404) : c.json({ config: RegistrationFormConfigPatchSchema.parse(config) });
+  });
   app.post(
     '/public/organizations/:organizationId/events/:slug/registration/submissions',
     async (c) => {

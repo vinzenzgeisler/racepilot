@@ -67,14 +67,24 @@ a:focus-visible {
 }
 
 .registration {
-  max-width: 54rem;
+  max-width: 72rem;
   margin: 2rem auto;
+  padding: 0 1rem;
+  --brand-radius: 0;
 }
+.registration-header { border-bottom: 2px solid var(--color-ink); padding: 1rem 0 1.5rem; }
+.registration-header h2, .registration h3, .registration legend { font-family: var(--font-archivo); }
+.registration-event-date { color: var(--brand-accent); font-family: var(--font-mono); }
+.registration-contrast-note { border-left: 3px solid var(--brand-accent); padding: .75rem 1rem; }
+.registration-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr); gap: 2rem; align-items: start; }
+.registration-summary { border-left: 1px solid var(--color-line); padding: 1rem; position: sticky; top: 1rem; }
+.registration-footer { border-top: 1px solid var(--color-ink); padding: 1rem 0; color: var(--color-graphite); }
 .registration form fieldset,
 .vehicle-card {
-  border: 1px solid var(--color-line);
-  border-radius: 0;
-  padding: 1rem;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+  border-radius: var(--brand-radius);
+  padding: 1rem 0;
   margin-block: 1rem;
 }
 .registration label {
@@ -87,9 +97,16 @@ a:focus-visible {
 .registration select,
 .registration button {
   font: inherit;
-  min-height: 2.75rem;
+  min-height: 44px;
   padding: 0.5rem 0.7rem;
 }
+.registration button[type='submit'] { background: var(--brand-primary); color: var(--brand-primary-text); border: 0; border-radius: var(--brand-radius); min-width: 12rem; }
+.registration-steps { list-style: none; counter-reset: regstep; padding: 0; align-items: end; }
+.registration-steps li { counter-increment: regstep; flex: 1; min-height: calc(2rem + var(--step-height, 0px)); border-top: 5px solid var(--color-line); padding-top: .5rem; }
+.registration-steps li:nth-child(1) { --step-height: 0px; }
+.registration-steps li:nth-child(2) { --step-height: 5px; }
+.registration-steps li:nth-child(3) { --step-height: 10px; }
+.registration-steps li[aria-current='step'] { border-color: var(--brand-primary); color: var(--brand-primary); }
 .registration-language,
 .registration-actions,
 .registration-steps {
@@ -117,6 +134,16 @@ a:focus-visible {
 .registration :focus-visible {
   outline: 0.2rem solid var(--brand-accent, var(--color-marshal));
   outline-offset: 3px;
+}
+@media (max-width: 720px) {
+  .registration-layout { grid-template-columns: 1fr; gap: .5rem; }
+  .registration-summary { position: static; order: -1; border: 0; border-top: 1px solid var(--color-line); border-bottom: 1px solid var(--color-line); padding: .5rem 0; }
+  .registration-summary h3 { margin-bottom: .25rem; }
+  .registration-summary p { display: inline-block; margin: .3rem 1rem .3rem 0; }
+  .registration-actions { display: grid; grid-template-columns: 1fr 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .registration *, .registration *::before, .registration *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
 
 .admin-entries {

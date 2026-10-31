@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { healthResponseSchema, RuntimeBootstrapResponse } from './index.js';
+import { deriveAccessibleBrandColors, RegistrationFormConfigSchema, defaultRegistrationFormConfig } from './index.js';
+
+describe('registration brand contrast', () => {
+  it('accepts source colors and derives readable foreground/link colors for two sample brands', () => {
+    for (const [primary, accent] of [['#1F4AA8', '#F5C518'], ['#FFFFFF', '#8FD3F0']] as const) {
+      const colors = deriveAccessibleBrandColors(primary, accent);
+      expect(colors.contrastNotice).toBe(true);
+      expect(['#FFFFFF', '#111A16']).toContain(colors.primaryForeground);
+      expect(['#FFFFFF', '#111A16']).toContain(colors.accentForeground);
+      expect(colors.linkColor).toMatch(/^#[\dA-F]{6}$/);
+      expect(RegistrationFormConfigSchema.parse({ ...defaultRegistrationFormConfig, branding: { ...defaultRegistrationFormConfig.branding, primaryColor: primary, accentColor: accent } }).branding.primaryColor).toBe(primary);
+    }
+  });
+});
 
 describe('healthResponseSchema', () => {
   it('validates a health response', () => {
@@ -40,7 +54,7 @@ describe('RuntimeBootstrapResponse', () => {
   it('accepts neutral and configured bootstrap projections', () => {
     expect(RuntimeBootstrapResponse.safeParse(valid).success).toBe(true);
   });
-  it('rejects script URLs, CSS injection, and low-contrast text colors', () => {
+  it('rejects script URLs and CSS injection while allowing colors to be derived', () => {
     expect(
       RuntimeBootstrapResponse.safeParse({
         ...valid,
@@ -58,7 +72,7 @@ describe('RuntimeBootstrapResponse', () => {
         ...valid,
         branding: { ...valid.branding, primaryColor: '#eeeeee' },
       }).success,
-    ).toBe(false);
+    ).toBe(true);
   });
 });
 
