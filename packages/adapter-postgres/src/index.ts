@@ -294,6 +294,7 @@ export const people = pgTable(
     email: text('email'),
     emailNormalized: text('email_normalized'),
     dateOfBirth: date('date_of_birth'),
+    country: text('country'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -2033,6 +2034,7 @@ export const emailOutbox = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     organizationId: uuid('organization_id').notNull(),
     eventId: uuid('event_id'),
+    registrationGroupId: uuid('registration_group_id'),
     templateKey: text('template_key').notNull(),
     templateVersion: integer('template_version').notNull(),
     templateVersionId: uuid('template_version_id'),
@@ -2072,6 +2074,15 @@ export const emailOutbox = pgTable(
       name: 'email_outbox_org_event_fk',
     }),
     foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'email_outbox_org_event_group_fk',
+    }),
+    foreignKey({
       columns: [
         t.organizationId,
         t.templateVersionId,
@@ -2102,6 +2113,9 @@ export const emailOutbox = pgTable(
     index('email_outbox_due_idx')
       .on(t.availableAt)
       .where(sql`${t.status} in ('pending','sending')`),
+    index('email_outbox_registration_group_idx')
+      .on(t.organizationId, t.eventId, t.registrationGroupId)
+      .where(sql`${t.registrationGroupId} is not null`),
   ],
 );
 export const emailDeliveries = pgTable(
@@ -2596,8 +2610,8 @@ async function projectEntryRows(
       acceptanceStatus: row.acceptanceStatus,
       paymentStatus,
       technicalStatus:
-        stateMap.get(`${row.id}:technical_inspection`) ?? 'pending',
-      waiverStatus: stateMap.get(`${row.id}:waiver`) ?? 'f_pending',
+        stateMap.get(`${row.id}:technical_inspection`) ?? 'not_relevant',
+      waiverStatus: stateMap.get(`${row.id}:waiver`) ?? 'not_relevant',
       emailStatus: row.verificationStatus,
       config: configMap.get(row.eventId) ?? defaultEntryStatusDimensionConfig,
       hints,
@@ -2605,6 +2619,275 @@ async function projectEntryRows(
     return { ...mapEntry(row), statusProjection };
   });
 }
+async function attachAdminEntryDetails(
+  db: Database,
+  ctx: RequestContext,
+  items: readonly import('@racepilot/core').Entry[],
+): Promise<import('@racepilot/core').Entry[]> {
+  if (!items.length) return [];
+  const ids = items.map((item) => item.id);
+  const peopleRows = await db
+    .select({
+      entryId: entries.id,
+      firstName: people.firstName,
+      lastName: people.lastName,
+      dateOfBirth: people.dateOfBirth,
+      country: people.country,
+      email: people.email,
+      emailVerified: entries.verificationStatus,
+    })
+    .from(entries)
+    .innerJoin(
+      people,
+      and(
+        eq(people.id, entries.driverPersonId),
+        eq(people.organizationId, ctx.organizationId),
+      ),
+    )
+    .where(
+      and(
+        eq(entries.organizationId, ctx.organizationId),
+        inArray(entries.id, ids),
+      ),
+    );
+  const vehicleRows = await db
+    .select({
+      entryId: entries.id,
+      make: vehicles.make,
+      model: vehicles.model,
+      year: vehicles.year,
+    })
+    .from(entries)
+    .innerJoin(
+      vehicles,
+      and(
+        eq(vehicles.id, entries.vehicleId),
+        eq(vehicles.organizationId, ctx.organizationId),
+      ),
+    )
+    .where(
+      and(
+        eq(entries.organizationId, ctx.organizationId),
+        inArray(entries.id, ids),
+      ),
+    );
+  const classRows = await db
+    .select({
+      entryId: entries.id,
+      code: eventClasses.code,
+      name: eventClasses.name,
+    })
+    .from(entries)
+    .innerJoin(
+      eventClasses,
+      and(
+        eq(eventClasses.id, entries.classId),
+        eq(eventClasses.eventId, entries.eventId),
+        eq(eventClasses.organizationId, ctx.organizationId),
+      ),
+    )
+    .where(
+      and(
+        eq(entries.organizationId, ctx.organizationId),
+        inArray(entries.id, ids),
+      ),
+    );
+  const [entryAudits, dimensionAudits, paymentAudits, mailRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(entryAuditEvents)
+        .where(
+          and(
+            eq(entryAuditEvents.organizationId, ctx.organizationId),
+            inArray(entryAuditEvents.entryId, ids),
+          ),
+        ),
+      db
+        .select()
+        .from(entryStatusDimensionAudit)
+        .where(
+          and(
+            eq(entryStatusDimensionAudit.organizationId, ctx.organizationId),
+            inArray(entryStatusDimensionAudit.entryId, ids),
+          ),
+        ),
+      db
+        .select({
+          entryId: entries.id,
+          id: invoicePaymentAuditEvents.id,
+          action: invoicePaymentAuditEvents.action,
+          actor: invoicePaymentAuditEvents.actor,
+          reason: invoicePaymentAuditEvents.reason,
+          occurredAt: invoicePaymentAuditEvents.occurredAt,
+        })
+        .from(invoicePaymentAuditEvents)
+        .innerJoin(
+          invoicePayments,
+          and(
+            eq(invoicePayments.id, invoicePaymentAuditEvents.paymentId),
+            eq(invoicePayments.organizationId, ctx.organizationId),
+          ),
+        )
+        .innerJoin(
+          invoices,
+          and(
+            eq(invoices.id, invoicePayments.invoiceId),
+            eq(invoices.organizationId, ctx.organizationId),
+          ),
+        )
+        .innerJoin(
+          registrationGroups,
+          and(
+            eq(registrationGroups.id, invoices.registrationGroupId),
+            eq(registrationGroups.organizationId, ctx.organizationId),
+          ),
+        )
+        .innerJoin(
+          entries,
+          and(
+            eq(entries.registrationGroupId, registrationGroups.id),
+            eq(entries.organizationId, ctx.organizationId),
+          ),
+        )
+        .where(
+          and(
+            eq(invoicePaymentAuditEvents.organizationId, ctx.organizationId),
+            inArray(entries.id, ids),
+          ),
+        ),
+      db
+        .select({
+          entryId: entries.id,
+          id: emailOutbox.id,
+          status: emailOutbox.status,
+          templateKey: emailOutbox.templateKey,
+          recipient: emailOutbox.recipient,
+          createdAt: emailOutbox.createdAt,
+          sentAt: emailOutbox.sentAt,
+        })
+        .from(emailOutbox)
+        .innerJoin(
+          registrationGroups,
+          and(
+            eq(registrationGroups.organizationId, emailOutbox.organizationId),
+            eq(registrationGroups.id, emailOutbox.registrationGroupId),
+            eq(registrationGroups.eventId, emailOutbox.eventId),
+          ),
+        )
+        .innerJoin(
+          entries,
+          and(
+            eq(entries.organizationId, registrationGroups.organizationId),
+            eq(entries.registrationGroupId, registrationGroups.id),
+            eq(entries.eventId, emailOutbox.eventId),
+          ),
+        )
+        .where(
+          and(
+            eq(emailOutbox.organizationId, ctx.organizationId),
+            inArray(entries.id, ids),
+          ),
+        ),
+    ]);
+  const historyByEntry = new Map<
+    string,
+    Array<{
+      id: string;
+      kind: 'entry' | 'status' | 'payment' | 'email';
+      label: string;
+      actor: string;
+      occurredAt: string;
+      detail: string;
+    }>
+  >();
+  const appendHistory = (
+    entryId: string,
+    item: {
+      id: string;
+      kind: 'entry' | 'status' | 'payment' | 'email';
+      label: string;
+      actor: string;
+      occurredAt: Date | string;
+      detail: string;
+    },
+  ) => {
+    const list = historyByEntry.get(entryId) ?? [];
+    list.push({ ...item, occurredAt: new Date(item.occurredAt).toISOString() });
+    historyByEntry.set(entryId, list);
+  };
+  for (const row of entryAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'entry',
+      label: `${row.transition}: ${row.fromStatus} → ${row.toStatus}`,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: row.reason,
+    });
+  for (const row of dimensionAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'status',
+      label: `${row.dimension}: ${row.fromValue} → ${row.toValue}`,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: row.reason,
+    });
+  for (const row of paymentAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'payment',
+      label: row.action,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: row.reason,
+    });
+  for (const row of mailRows)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'email',
+      label: `${row.templateKey}: ${row.status}`,
+      actor: 'System',
+      occurredAt: row.sentAt ?? row.createdAt,
+      detail: row.recipient,
+    });
+  const drivers = new Map(peopleRows.map((row) => [row.entryId, row]));
+  const vehiclesByEntry = new Map(vehicleRows.map((row) => [row.entryId, row]));
+  const classesByEntry = new Map(classRows.map((row) => [row.entryId, row]));
+  return items.map((item) => {
+    const driver = drivers.get(item.id);
+    const vehicle = vehiclesByEntry.get(item.id);
+    const eventClass = classesByEntry.get(item.id);
+    const adminHistory = (historyByEntry.get(item.id) ?? []).sort((a, b) =>
+      a.occurredAt.localeCompare(b.occurredAt),
+    );
+    return {
+      ...item,
+      adminHistory,
+      adminDetails: {
+        driver: {
+          name: [driver?.firstName, driver?.lastName].filter(Boolean).join(' '),
+          dateOfBirth: driver?.dateOfBirth ?? null,
+          country: driver?.country ?? null,
+          email: driver?.email ?? null,
+          emailVerified: driver?.emailVerified === 'verified',
+        },
+        vehicle: {
+          make: vehicle?.make ?? '',
+          model: vehicle?.model ?? '',
+          year: vehicle?.year ?? null,
+        },
+        eventClass: {
+          code: eventClass?.code ?? '',
+          name: eventClass?.name ?? '',
+        },
+        startNumber: item.requestedStartNumber,
+      },
+    };
+  });
+}
+
 export function createPersonRepository(
   db: Database,
 ): import('@racepilot/core').PersonRepository {
@@ -2624,6 +2907,7 @@ export function createPersonRepository(
           email: input.email?.trim() ?? null,
           emailNormalized: normalized,
           dateOfBirth: input.dateOfBirth,
+          country: input.country ?? null,
         })
         .returning();
       return mapPerson(row!);
@@ -2835,7 +3119,15 @@ export function createEntryRepository(
             sql`${entries.deletedAt} is null`,
           ),
         );
-      return row ? (await projectEntryRows(db, ctx, [row]))[0]! : null;
+      return row
+        ? (
+            await attachAdminEntryDetails(
+              db,
+              ctx,
+              await projectEntryRows(db, ctx, [row]),
+            )
+          )[0]!
+        : null;
     },
     listAdmin: async (ctx, query) => {
       const predicates = [
@@ -2849,6 +3141,18 @@ export function createEntryRepository(
       if (query.verificationStatus)
         predicates.push(
           eq(entries.verificationStatus, query.verificationStatus),
+        );
+      if (query.paymentStatus === 'not_required')
+        predicates.push(
+          sql`not exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId})`,
+        );
+      else if (query.paymentStatus === 'not_relevant')
+        predicates.push(
+          sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = 'cancelled')`,
+        );
+      else if (query.paymentStatus)
+        predicates.push(
+          sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = ${query.paymentStatus})`,
         );
       const search = query.search?.trim();
       if (search) {
@@ -2935,10 +3239,14 @@ export function createEntryRepository(
           .where(where),
       ]);
       return {
-        items: await projectEntryRows(
+        items: await attachAdminEntryDetails(
           db,
           ctx,
-          rows.map((row) => row.entry),
+          await projectEntryRows(
+            db,
+            ctx,
+            rows.map((row) => row.entry),
+          ),
         ),
         total: totals[0]?.total ?? 0,
       };
@@ -3036,6 +3344,7 @@ export function createEntryRepository(
               ctx.organizationId,
               {
                 eventId: row.eventId,
+                registrationGroupId: row.registrationGroupId,
                 templateKey: 'status-change',
                 templateVersion: 1,
                 locale: recipient.locale === 'en' ? 'en' : 'de',
@@ -3381,6 +3690,7 @@ export type MailOutboxExecutor = Pick<
 >;
 export interface NewMailOutboxMessage {
   eventId?: string | null;
+  registrationGroupId?: string | null;
   templateKey: string;
   templateVersion: number;
   templateVersionId?: string | null;
@@ -3402,6 +3712,7 @@ export async function enqueueMailOutbox(
     .values({
       organizationId: organization,
       eventId: input.eventId ?? null,
+      registrationGroupId: input.registrationGroupId ?? null,
       templateKey: input.templateKey,
       templateVersion: input.templateVersion,
       templateVersionId: input.templateVersionId ?? null,
@@ -3741,6 +4052,7 @@ export interface PublicRegistrationPayload {
     lastName: string;
     email: string;
     dateOfBirth: string;
+    country?: string | undefined;
     guardianName?: string | undefined;
     guardianEmail?: string | undefined;
   };
@@ -4067,6 +4379,7 @@ export function createPublicRegistrationService(
               email: payload.person.email.trim(),
               emailNormalized,
               dateOfBirth: payload.person.dateOfBirth,
+              country: payload.person.country ?? null,
             })
             .returning({ id: people.id });
           personId = person!.id;
@@ -4234,6 +4547,7 @@ export function createPublicRegistrationService(
           ctx.organizationId,
           {
             eventId: event.id,
+            registrationGroupId: group!.id,
             templateKey: 'verification',
             templateVersion: template?.version ?? 1,
             templateVersionId: template?.id ?? null,

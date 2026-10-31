@@ -840,6 +840,15 @@ export function createApp(deps: ApiDeps) {
           .regex(/^[a-z][a-z0-9_-]{0,63}$/)
           .optional(),
         verificationStatus: z.enum(['unverified', 'verified']).optional(),
+        paymentStatus: z
+          .enum([
+            'open',
+            'partially_paid',
+            'paid',
+            'not_required',
+            'not_relevant',
+          ])
+          .optional(),
         search: z.string().trim().max(120).optional(),
         sort: z
           .enum([
@@ -854,8 +863,14 @@ export function createApp(deps: ApiDeps) {
       .strict()
       .safeParse(Object.fromEntries(new URL(c.req.url).searchParams));
     if (!parsed.success) return c.json({ error: 'Invalid query' }, 400);
-    const { eventId, classId, acceptanceStatus, verificationStatus, search } =
-      parsed.data;
+    const {
+      eventId,
+      classId,
+      acceptanceStatus,
+      verificationStatus,
+      paymentStatus,
+      search,
+    } = parsed.data;
     const query: EntryListQuery = {
       page: parsed.data.page,
       pageSize: parsed.data.pageSize,
@@ -865,6 +880,7 @@ export function createApp(deps: ApiDeps) {
       ...(classId ? { classId } : {}),
       ...(acceptanceStatus ? { acceptanceStatus } : {}),
       ...(verificationStatus ? { verificationStatus } : {}),
+      ...(paymentStatus ? { paymentStatus } : {}),
       ...(search ? { search } : {}),
     };
     const result = await deps.entries.listAdmin(context, query);

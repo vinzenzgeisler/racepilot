@@ -43,6 +43,40 @@ const entry = (id: string, eventId: string, classId: string) => ({
   createdAt: '2026-01-01T00:00:00.000Z',
   deletedAt: null,
   deletionReason: null,
+  adminDetails: {
+    driver: {
+      name: id === entryA ? 'Alex Driver' : 'Casey Driver',
+      dateOfBirth: '1990-01-01',
+      country: 'DE',
+      email: 'family@example.test',
+      emailVerified: true,
+    },
+    vehicle: { make: 'Porsche', model: '911', year: 2020 },
+    eventClass: { code: 'TOUR', name: 'Touring A' },
+    startNumber: id === entryA ? '42' : null,
+  },
+  statusProjection: {
+    dimensions: [
+      {
+        key: 'entry',
+        value: 'pending',
+        label: { de: 'Offen', en: 'Pending' },
+        meaning: 'new',
+        required: true,
+        nextAction: { key: 'accept', label: { de: 'Prüfen', en: 'Review' } },
+      },
+      {
+        key: 'payment',
+        value: 'open',
+        label: { de: 'Offen', en: 'Open' },
+        meaning: 'in_progress',
+        required: true,
+        nextAction: null,
+      },
+    ],
+    documents: { complete: 1, total: 3 },
+    hints: [],
+  },
 });
 const itemsA = [entry(entryA, eventA, classA), entry(entryA2, eventA, classA)];
 const itemB = entry(entryB, eventB, classB);
@@ -97,6 +131,7 @@ async function mount(
       fetchImpl(String(input), init),
     ) as unknown as typeof fetchMock;
   container = document.createElement('div');
+  document.body.appendChild(container);
   root = createRoot(container);
   await act(async () => root!.render(<AdminEntries />));
   await flush();
@@ -138,9 +173,13 @@ async function setInput(label: string, value: string) {
   });
 }
 async function click(text: string) {
-  const button = [...container.querySelectorAll('button')].find(
-    (item) => item.textContent?.includes(text) ?? false,
-  );
+  const button =
+    container.querySelector<HTMLButtonElement>(
+      `[data-entry-action="${text}"]`,
+    ) ??
+    [...container.querySelectorAll('button')].find(
+      (item) => item.textContent?.includes(text) ?? false,
+    );
   if (!button) throw new Error(`Button not found: ${text}`);
   await act(async () => button.click());
   await flush();
@@ -160,8 +199,8 @@ function listCalls() {
     .filter((url) => url.startsWith('/admin/entries?'));
 }
 function visibleEntryIds() {
-  return [...container.querySelectorAll('tbody .link-button')].map((button) =>
-    button.textContent?.trim(),
+  return [...container.querySelectorAll('tbody [data-entry-action]')].map(
+    (button) => button.getAttribute('data-entry-action'),
   );
 }
 function detailEntryId() {
@@ -175,6 +214,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   if (root) act(() => root?.unmount());
+  container?.remove();
   root = undefined;
   vi.restoreAllMocks();
 });
@@ -190,7 +230,7 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     expect(container.textContent).toContain('Spring Rally');
-    expect(container.textContent).toContain(entryA);
+    expect(container.textContent).toContain('Alex Driver');
     expect(listCalls().some((url) => url.includes(`eventId=${eventA}`))).toBe(
       true,
     );
@@ -415,6 +455,301 @@ describe('AdminEntries', () => {
     expect(refreshes).toHaveLength(1);
     expect(refreshes[0]).toContain('page=2');
     expect(refreshes[0]).toContain('acceptanceStatus=accepted');
+  });
+
+  it('renders entry details instead of IDs and provides one next action per row', async () => {
+    await mount(async (url) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    const firstRow = container.querySelector('tbody tr')!;
+    expect(firstRow.textContent).toContain('Alex Driver');
+    expect(firstRow.textContent).toContain('Porsche 911');
+    expect(firstRow.textContent).toContain('Touring A');
+    expect(firstRow.textContent).toContain('42');
+    expect(firstRow.textContent).not.toContain(entryA);
+    expect(
+      firstRow.querySelectorAll('.entry-row-actions > button'),
+    ).toHaveLength(1);
+    expect(
+      firstRow.querySelector('.entry-more-actions summary')?.textContent,
+    ).toBe('Mehr');
+    expect(
+      firstRow.querySelectorAll('.entry-more-actions [role=menuitem]').length,
+    ).toBeGreaterThan(0);
+    expect(firstRow.querySelector('.entry-vehicle-placeholder')).not.toBeNull();
+  });
+
+  it('shows selected count and closes the wide preview with Escape; Enter opens detail', async () => {
+    await mount(async (url) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}`) return Response.json(itemsA[0]);
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    const checkbox = container.querySelector(
+      'tbody input[type="checkbox"]',
+    ) as HTMLInputElement;
+    await act(async () => {
+      checkbox.click();
+    });
+    expect(
+      container.querySelector('.entry-selection-bar')?.textContent,
+    ).toContain('1 von 2');
+    const action = container.querySelector(
+      `[data-entry-action="${entryA}"]`,
+    ) as HTMLButtonElement;
+    await act(async () => action.focus());
+    await act(async () =>
+      action.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+      ),
+    );
+    await flush();
+    expect(container.querySelector('.admin-detail')).not.toBeNull();
+    expect(
+      container.querySelector('.admin-detail')?.getAttribute('aria-labelledby'),
+    ).toBe('entry-detail-title');
+    await act(async () =>
+      document.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
+      ),
+    );
+    expect(container.querySelector('.admin-detail')).toBeNull();
+  });
+
+  it('uses the configured accepted status key for bulk acceptance', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Reviewed');
+    const transitionBodies: Array<{ status: string }> = [];
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url.endsWith('/registration-workflow'))
+        return Response.json({
+          workflow: {
+            statuses: [
+              {
+                key: 'confirmed',
+                labels: { de: 'Bestätigt', en: 'Confirmed' },
+                color: '#15803d',
+                category: 'accepted',
+              },
+            ],
+            transitions: [
+              { from: 'pending', to: 'confirmed', reasonRequired: true },
+            ],
+          },
+        });
+      if (url.endsWith('/transitions') && init?.method === 'POST') {
+        transitionBodies.push(
+          JSON.parse(String(init.body)) as { status: string },
+        );
+        return Response.json(itemsA[0]);
+      }
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    const checkbox = container.querySelector(
+      'tbody input[type="checkbox"]',
+    ) as HTMLInputElement;
+    await act(async () => checkbox.click());
+    await flush();
+    const accept = [
+      ...container.querySelectorAll('.entry-selection-bar button'),
+    ].find((button) =>
+      button.textContent?.includes('Zulassen'),
+    ) as HTMLButtonElement;
+    expect(accept.disabled).toBe(false);
+    await act(async () => accept.click());
+    await flush();
+    expect(transitionBodies).toHaveLength(1);
+    expect(transitionBodies[0]?.status).toBe('confirmed');
+  });
+
+  it('opens the next pending entry after acceptance using the configured accepted key', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Reviewed');
+    const second = entry(entryA2, eventA, classA);
+    const updatedFirst = { ...itemsA[0]!, acceptanceStatus: 'confirmed' };
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url.endsWith('/registration-workflow'))
+        return Response.json({
+          workflow: {
+            statuses: [
+              {
+                key: 'pending',
+                labels: { de: 'Offen', en: 'Pending' },
+                color: '#777',
+                category: 'pending',
+              },
+              {
+                key: 'confirmed',
+                labels: { de: 'Bestätigt', en: 'Confirmed' },
+                color: '#070',
+                category: 'accepted',
+              },
+            ],
+            transitions: [
+              { from: 'pending', to: 'confirmed', reasonRequired: true },
+            ],
+          },
+        });
+      if (url === `/admin/entries/${entryA}`) return Response.json(itemsA[0]);
+      if (url === `/admin/entries/${entryA2}`) return Response.json(second);
+      if (
+        url === `/admin/entries/${entryA}/transitions` &&
+        init?.method === 'POST'
+      )
+        return Response.json(updatedFirst);
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await setInput('Reason (required for audit)', 'Reviewed');
+    await click('confirmed');
+    expect(detailEntryId()).toBe(entryA2);
+  });
+
+  it('keeps the accepted entry selected when no next pending entry exists', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Reviewed');
+    const onlyEntry = [itemsA[0]!];
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(onlyEntry);
+      if (url.endsWith('/registration-workflow'))
+        return Response.json({
+          workflow: {
+            statuses: [
+              {
+                key: 'pending',
+                labels: { de: 'Offen', en: 'Pending' },
+                color: '#777',
+                category: 'pending',
+              },
+              {
+                key: 'confirmed',
+                labels: { de: 'Bestätigt', en: 'Confirmed' },
+                color: '#070',
+                category: 'accepted',
+              },
+            ],
+            transitions: [
+              { from: 'pending', to: 'confirmed', reasonRequired: true },
+            ],
+          },
+        });
+      if (url === `/admin/entries/${entryA}`)
+        return Response.json(onlyEntry[0]);
+      if (
+        url === `/admin/entries/${entryA}/transitions` &&
+        init?.method === 'POST'
+      )
+        return Response.json({
+          ...onlyEntry[0],
+          acceptanceStatus: 'confirmed',
+        });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await setInput('Reason (required for audit)', 'Reviewed');
+    await click('confirmed');
+    expect(detailEntryId()).toBe(entryA);
+  });
+
+  it('clears bulk selection when changing pages, filters, and events', async () => {
+    await mount(async (url) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) {
+        const params = new URL(url, 'http://localhost').searchParams;
+        return listResponse(
+          params.get('eventId') === eventB ? [itemB] : itemsA,
+          Number(params.get('page')),
+          2,
+        );
+      }
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    const selectFirst = async () => {
+      const checkbox = container.querySelector(
+        'tbody input[type="checkbox"]',
+      ) as HTMLInputElement;
+      await act(async () => checkbox.click());
+      await flush();
+    };
+    await selectFirst();
+    expect(
+      container.querySelector('.entry-selection-bar')?.textContent,
+    ).toContain('1 von');
+    await setInput('Search', 'Alex');
+    await submitFilters();
+    expect(container.querySelector('.entry-selection-bar')).toBeNull();
+    await selectFirst();
+    await click('Next');
+    expect(container.querySelector('.entry-selection-bar')).toBeNull();
+    await selectFirst();
+    await chooseEvent(eventB);
+    expect(container.querySelector('.entry-selection-bar')).toBeNull();
+    expect(
+      (
+        container.querySelector(
+          'tbody input[type="checkbox"]',
+        ) as HTMLInputElement
+      ).checked,
+    ).toBe(false);
+  });
+
+  it('shows only currently possible actions in the detail panel', async () => {
+    await mount(async (url) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}`)
+        return Response.json({ ...itemsA[0], verificationStatus: 'verified' });
+      if (url.endsWith('/registration-workflow'))
+        return Response.json({
+          workflow: {
+            statuses: [
+              {
+                key: 'accepted',
+                labels: { de: 'Angenommen', en: 'Accepted' },
+                color: '#15803d',
+                category: 'accepted',
+              },
+            ],
+            transitions: [
+              { from: 'pending', to: 'accepted', reasonRequired: true },
+            ],
+          },
+        });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await act(async () =>
+      (
+        container.querySelector(
+          `[data-entry-action="${entryA}"]`,
+        ) as HTMLButtonElement
+      ).click(),
+    );
+    await flush();
+    const actions = [...container.querySelectorAll('.admin-actions button')];
+    expect(actions).toHaveLength(1);
+    expect(actions[0]?.textContent).toContain('accepted');
+    expect(
+      actions.some((button) => button.textContent?.includes('Mark verified')),
+    ).toBe(false);
   });
 
   it('applies search only on submit and resets to page one for filters and sorting', async () => {

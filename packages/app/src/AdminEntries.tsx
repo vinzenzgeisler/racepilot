@@ -20,6 +20,7 @@ type EntryQuery = {
   classId: string;
   acceptanceStatus: string;
   verificationStatus: string;
+  paymentStatus: string;
   search: string;
   sort: string;
   direction: string;
@@ -28,6 +29,7 @@ const initialQuery: EntryQuery = {
   classId: '',
   acceptanceStatus: '',
   verificationStatus: '',
+  paymentStatus: '',
   search: '',
   sort: 'createdAt',
   direction: 'desc',
@@ -109,7 +111,49 @@ export function AdminEntries({
     [],
   );
   const [selected, setSelected] = useState<Entry | null>(null);
+  const [selection, setSelection] = useState<{
+    eventId: string;
+    ids: Set<string>;
+  }>({ eventId, ids: new Set() });
+  const selectedIds =
+    selection.eventId === eventId ? selection.ids : new Set<string>();
+  const clearSelection = () => setSelection({ eventId, ids: new Set() });
   useEffect(() => onSelectionChange?.(selected), [onSelectionChange, selected]);
+  useEffect(() => {
+    const handleKeys = (event: KeyboardEvent) => {
+      if (
+        !items.length ||
+        (event.target instanceof HTMLElement &&
+          ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName))
+      )
+        return;
+      const index = items.findIndex((item) => item.id === selected?.id);
+      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+        event.preventDefault();
+        const next = Math.min(
+          items.length - 1,
+          Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)),
+        );
+        document
+          .querySelector<HTMLButtonElement>(
+            `[data-entry-action="${items[next]!.id}"]`,
+          )
+          ?.click();
+      } else if (event.key === 'Escape' && selected) {
+        setSelected(null);
+      } else if (event.key === 'Enter') {
+        const focusedAction = (
+          event.target as HTMLElement | null
+        )?.closest<HTMLButtonElement>('[data-entry-action]');
+        (
+          focusedAction ??
+          document.querySelector<HTMLButtonElement>('[data-selected-entry]')
+        )?.click();
+      }
+    };
+    document.addEventListener('keydown', handleKeys);
+    return () => document.removeEventListener('keydown', handleKeys);
+  }, [items, selected]);
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -222,6 +266,8 @@ export function AdminEntries({
       params.set('acceptanceStatus', applied.acceptanceStatus);
     if (applied.verificationStatus)
       params.set('verificationStatus', applied.verificationStatus);
+    if (applied.paymentStatus)
+      params.set('paymentStatus', applied.paymentStatus);
     if (applied.search.trim()) params.set('search', applied.search.trim());
 
     const requestedEventId = eventId;
@@ -268,45 +314,48 @@ export function AdminEntries({
     [invalidateContextRequests],
   );
 
-  async function openEntry(id: string) {
-    invalidate(transitionGate.current);
-    setBusy(false);
-    const requestedEventId = eventId;
-    const { generation, controller } = begin(detailGate.current);
-    setSelected(null);
-    setReason('');
-    setActionError('');
-    try {
-      const response = await request(
-        `/admin/entries/${encodeURIComponent(id)}`,
-        { signal: controller.signal },
-      );
-      if (!isCurrent(detailGate.current, generation, controller)) return;
-      if (!response.ok) {
-        setActionError(
-          response.status === 401
-            ? 'Your OIDC session is not authorized. Sign in through the configured OIDC session.'
-            : response.status === 403
-              ? 'You do not have permission to view this entry.'
-              : 'Entry details are unavailable.',
+  const openEntry = useCallback(
+    async (id: string) => {
+      invalidate(transitionGate.current);
+      setBusy(false);
+      const requestedEventId = eventId;
+      const { generation, controller } = begin(detailGate.current);
+      setSelected(null);
+      setReason('');
+      setActionError('');
+      try {
+        const response = await request(
+          `/admin/entries/${encodeURIComponent(id)}`,
+          { signal: controller.signal },
         );
-        return;
+        if (!isCurrent(detailGate.current, generation, controller)) return;
+        if (!response.ok) {
+          setActionError(
+            response.status === 401
+              ? 'Your OIDC session is not authorized. Sign in through the configured OIDC session.'
+              : response.status === 403
+                ? 'You do not have permission to view this entry.'
+                : 'Entry details are unavailable.',
+          );
+          return;
+        }
+        const entry = EntryResponse.parse(await response.json());
+        if (
+          isCurrent(detailGate.current, generation, controller) &&
+          eventId === requestedEventId &&
+          entry.eventId === requestedEventId
+        )
+          setSelected(entry);
+      } catch {
+        if (isCurrent(detailGate.current, generation, controller))
+          setActionError('Entry details are unavailable.');
+      } finally {
+        if (detailGate.current.controller === controller)
+          detailGate.current.controller = null;
       }
-      const entry = EntryResponse.parse(await response.json());
-      if (
-        isCurrent(detailGate.current, generation, controller) &&
-        eventId === requestedEventId &&
-        entry.eventId === requestedEventId
-      )
-        setSelected(entry);
-    } catch {
-      if (isCurrent(detailGate.current, generation, controller))
-        setActionError('Entry details are unavailable.');
-    } finally {
-      if (detailGate.current.controller === controller)
-        detailGate.current.controller = null;
-    }
-  }
+    },
+    [eventId],
+  );
 
   async function transition(
     transitionType: 'acceptance' | 'verification',
@@ -355,6 +404,26 @@ export function AdminEntries({
       setSelected(updated);
       setReason('');
       setRefreshRevision((revision) => revision + 1);
+      const acceptedCategory = workflow?.statuses.find(
+        (item) => item.key === status && item.category === 'accepted',
+      );
+      if (transitionType === 'acceptance' && acceptedCategory) {
+        const currentIndex = items.findIndex((item) => item.id === current.id);
+        const nextOpen = items
+          .slice(Math.max(0, currentIndex + 1))
+          .find(
+            (item) =>
+              workflow?.statuses.find(
+                (candidate) => candidate.key === item.acceptanceStatus,
+              )?.category === 'pending' &&
+              workflow.transitions.some(
+                (edge) =>
+                  edge.from === item.acceptanceStatus &&
+                  edge.to === acceptedCategory.key,
+              ),
+          );
+        if (nextOpen) void openEntry(nextOpen.id);
+      }
     } catch {
       if (isCurrent(transitionGate.current, generation, controller))
         setActionError('The status change could not be completed.');
@@ -370,9 +439,61 @@ export function AdminEntries({
     }
   }
 
+  const acceptedStatusKey = workflow?.statuses.find(
+    (status) => status.category === 'accepted',
+  )?.key;
+  const eligibleSelectedItems = items.filter(
+    (item) =>
+      selectedIds.has(item.id) &&
+      acceptedStatusKey !== undefined &&
+      (workflow?.transitions ?? []).some(
+        (edge) =>
+          edge.from === item.acceptanceStatus && edge.to === acceptedStatusKey,
+      ),
+  );
+
+  async function bulkAccept() {
+    const eligible = eligibleSelectedItems;
+    if (!eligible.length) return;
+    const requestedReason = window
+      .prompt(
+        `Zulassen für ${eligible.length} von ${selectedIds.size} Nennungen. Grund für den Audit-Verlauf:`,
+      )
+      ?.trim();
+    if (!requestedReason) return;
+    setBusy(true);
+    setActionError('');
+    try {
+      const responses = await Promise.all(
+        eligible.map((item) =>
+          request(`/admin/entries/${encodeURIComponent(item.id)}/transitions`, {
+            method: 'POST',
+            body: JSON.stringify({
+              transition: 'acceptance',
+              status: acceptedStatusKey,
+              reason: requestedReason,
+            }),
+          }),
+        ),
+      );
+      if (responses.some((response) => !response.ok))
+        throw new Error('bulk transition rejected');
+      clearSelection();
+      setRefreshRevision((revision) => revision + 1);
+    } catch {
+      setActionError(
+        'Ein Teil der Massenaktion konnte nicht abgeschlossen werden. Bitte Liste aktualisieren und prüfen.',
+      );
+      setRefreshRevision((revision) => revision + 1);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function applyFilters(event: FormEvent) {
     event.preventDefault();
     setPage(1);
+    clearSelection();
     setApplied({ ...draft });
   }
 
@@ -381,6 +502,7 @@ export function AdminEntries({
     if (onSharedEventChange) onSharedEventChange(nextEventId);
     else setLocalEventId(nextEventId);
     setPage(1);
+    clearSelection();
     setDraft({ ...initialQuery });
     setApplied({ ...initialQuery });
     setClasses([]);
@@ -400,6 +522,7 @@ export function AdminEntries({
       direction: nextDirection,
     }));
     setPage(1);
+    clearSelection();
     setApplied((value) => ({
       ...value,
       sort: nextSort,
@@ -441,7 +564,7 @@ export function AdminEntries({
 
   return (
     <section className="admin-entries" aria-labelledby="admin-entries-title">
-      <h2 id="admin-entries-title">Entries</h2>
+      <h2 id="admin-entries-title">Nennungen</h2>
       <label>
         Event
         <select
@@ -513,6 +636,25 @@ export function AdminEntries({
               </select>
             </label>
             <label>
+              Zahlung
+              <select
+                value={draft.paymentStatus}
+                onChange={(e) =>
+                  setDraft((value) => ({
+                    ...value,
+                    paymentStatus: e.target.value,
+                  }))
+                }
+              >
+                <option value="">Alle Zahlungen</option>
+                <option value="open">Offen</option>
+                <option value="partially_paid">Teilweise bezahlt</option>
+                <option value="paid">Bezahlt</option>
+                <option value="not_required">Nicht erforderlich</option>
+                <option value="not_relevant">Nicht relevant</option>
+              </select>
+            </label>
+            <label>
               Search
               <input
                 value={draft.search}
@@ -557,37 +699,91 @@ export function AdminEntries({
             <table>
               <thead>
                 <tr>
-                  <th data-priority="1">Entry</th>
-                  <th data-priority="2">Class</th>
-                  <th data-priority="1">Acceptance</th>
-                  <th data-priority="2">Verification</th>
-                  <th data-priority="4">Received</th>
+                  <th data-priority="1">
+                    <span className="sr-only">Auswahl</span>
+                  </th>
+                  <th data-priority="1">Nennung</th>
+                  <th data-priority="2">Klasse</th>
+                  <th data-priority="1">Nr.</th>
+                  <th data-priority="1">Status</th>
+                  <th data-priority="2">Zahlung</th>
+                  <th data-priority="3">Prüfstatus</th>
+                  <th data-priority="1">Aktion</th>
+                  <th data-priority="4">Eingang</th>
                 </tr>
               </thead>
               <tbody>
                 {apiState === 'ready' &&
                   items.map((entry) => (
-                    <tr key={entry.id}>
-                      <td data-priority="1">
-                        {entry.requestedStartNumber ? (
-                          <strong className="app-start-number">
-                            {entry.requestedStartNumber}
-                          </strong>
-                        ) : null}
-                        <button
-                          className="link-button"
-                          data-selected-entry={
-                            selected?.id === entry.id ? true : undefined
+                    <tr
+                      key={entry.id}
+                      className={selected?.id === entry.id ? 'is-selected' : ''}
+                      onClick={() => void openEntry(entry.id)}
+                    >
+                      <td
+                        data-priority="1"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <input
+                          aria-label={`Nennung ${entry.adminDetails?.driver.name ?? entry.id} auswählen`}
+                          type="checkbox"
+                          checked={selectedIds.has(entry.id)}
+                          onChange={(event) =>
+                            setSelection((current) => {
+                              const next = new Set(
+                                current.eventId === eventId ? current.ids : [],
+                              );
+                              if (event.target.checked) next.add(entry.id);
+                              else next.delete(entry.id);
+                              return { eventId, ids: next };
+                            })
                           }
-                          type="button"
-                          onClick={() => void openEntry(entry.id)}
-                        >
-                          {entry.id}
-                        </button>
+                        />
+                      </td>
+                      <td data-priority="1">
+                        {entry.adminDetails?.vehicle && (
+                          <span
+                            className="entry-vehicle-placeholder"
+                            aria-label="Kein Fahrzeugbild verfügbar"
+                          >
+                            ▧
+                          </span>
+                        )}
+                        <span className="entry-driver-name">
+                          {entry.adminDetails?.driver.name ?? entry.id}
+                        </span>
+                        {entry.adminDetails?.driver.email && (
+                          <small>
+                            {entry.adminDetails.driver.email}
+                            {entry.adminDetails.driver.emailVerified
+                              ? ' ✓'
+                              : ''}
+                          </small>
+                        )}
+                        {entry.adminDetails && (
+                          <small className="entry-vehicle-name">
+                            {entry.adminDetails.vehicle.make}{' '}
+                            {entry.adminDetails.vehicle.model}
+                          </small>
+                        )}
+                        {entry.statusProjection?.hints
+                          .filter((hint) => hint.present)
+                          .map((hint) => (
+                            <small className="entry-hint" key={hint.key}>
+                              {hint.key.replaceAll('_', ' ').toUpperCase()}
+                            </small>
+                          ))}
                       </td>
                       <td data-priority="2">
-                        {classes.find((item) => item.id === entry.classId)
-                          ?.name ?? entry.classId}
+                        {entry.adminDetails?.eventClass.name ??
+                          classes.find((item) => item.id === entry.classId)
+                            ?.name ??
+                          entry.classId}
+                      </td>
+                      <td data-priority="1">
+                        <strong className="app-start-number">
+                          {entry.adminDetails?.startNumber ?? '—'}
+                        </strong>
                       </td>
                       <td data-priority="1">
                         <StatusBadge
@@ -597,7 +793,99 @@ export function AdminEntries({
                           fallback={entry.acceptanceStatus}
                         />
                       </td>
-                      <td data-priority="2">{entry.verificationStatus}</td>
+                      <td data-priority="2">
+                        {entry.statusProjection?.dimensions.find(
+                          (item) => item.key === 'payment',
+                        )?.label.de ?? '—'}
+                      </td>
+                      <td
+                        data-priority="3"
+                        title={entry.statusProjection?.dimensions
+                          .filter((item) =>
+                            [
+                              'technical_inspection',
+                              'waiver',
+                              'payment',
+                            ].includes(item.key),
+                          )
+                          .map((item) => `${item.label.de}: ${item.value}`)
+                          .join(' · ')}
+                      >
+                        {entry.statusProjection?.dimensions
+                          .filter((item) =>
+                            ['technical_inspection', 'waiver'].includes(
+                              item.key,
+                            ),
+                          )
+                          .map((item) => `${item.label.de}: ${item.value}`)
+                          .join(' · ') || '—'}
+                      </td>
+                      <td
+                        data-priority="1"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        <div className="entry-row-actions">
+                          <button
+                            type="button"
+                            data-selected-entry={
+                              selected?.id === entry.id ? true : undefined
+                            }
+                            data-entry-action={entry.id}
+                            onClick={() => void openEntry(entry.id)}
+                          >
+                            {entry.statusProjection?.dimensions.find(
+                              (item) => item.nextAction,
+                            )?.nextAction?.label.de ?? 'Öffnen'}
+                          </button>
+                          {(() => {
+                            const rowTransitions = (workflow?.transitions ?? [])
+                              .filter(
+                                (edge) => edge.from === entry.acceptanceStatus,
+                              )
+                              .filter((edge) => edge.to !== acceptedStatusKey);
+                            const hasVerificationAction =
+                              entry.verificationStatus !== 'verified';
+                            if (
+                              rowTransitions.length === 0 &&
+                              !hasVerificationAction
+                            )
+                              return null;
+                            return (
+                              <details className="entry-more-actions">
+                                <summary aria-label="Weitere Aktionen">
+                                  Mehr
+                                </summary>
+                                <div role="menu" aria-label="Weitere Aktionen">
+                                  {rowTransitions.map((edge) => {
+                                    const status = workflow?.statuses.find(
+                                      (item) => item.key === edge.to,
+                                    );
+                                    return (
+                                      <button
+                                        key={edge.to}
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => void openEntry(entry.id)}
+                                      >
+                                        {status?.labels.de ?? edge.to} …
+                                      </button>
+                                    );
+                                  })}
+                                  {hasVerificationAction && (
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => void openEntry(entry.id)}
+                                    >
+                                      Verifikation …
+                                    </button>
+                                  )}
+                                </div>
+                              </details>
+                            );
+                          })()}
+                        </div>
+                      </td>
                       <td data-priority="4">
                         {new Date(entry.createdAt).toLocaleString()}
                       </td>
@@ -605,17 +893,41 @@ export function AdminEntries({
                   ))}
                 {apiState === 'ready' && items.length === 0 && (
                   <tr>
-                    <td colSpan={5}>No entries match these filters.</td>
+                    <td colSpan={9}>Keine Nennungen für diese Filter.</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+          {selectedIds.size > 0 && (
+            <div
+              className="entry-selection-bar"
+              role="toolbar"
+              aria-label="Massenaktionen"
+            >
+              <strong>
+                {selectedIds.size} von {total} ausgewählt
+              </strong>
+              <button type="button" onClick={() => clearSelection()}>
+                Auswahl aufheben
+              </button>
+              <button
+                type="button"
+                disabled={busy || eligibleSelectedItems.length === 0}
+                onClick={() => void bulkAccept()}
+              >
+                Zulassen ({eligibleSelectedItems.length} von {selectedIds.size})
+              </button>
+            </div>
+          )}
           <nav className="admin-pagination" aria-label="Entry pages">
             <button
               type="button"
               disabled={page <= 1 || apiState === 'loading'}
-              onClick={() => setPage((value) => value - 1)}
+              onClick={() => {
+                clearSelection();
+                setPage((value) => value - 1);
+              }}
             >
               Previous
             </button>
@@ -625,7 +937,10 @@ export function AdminEntries({
             <button
               type="button"
               disabled={page >= totalPages || apiState === 'loading'}
-              onClick={() => setPage((value) => value + 1)}
+              onClick={() => {
+                clearSelection();
+                setPage((value) => value + 1);
+              }}
             >
               Next
             </button>
@@ -645,10 +960,27 @@ export function AdminEntries({
             </dd>
             <dt>Registration group</dt>
             <dd>{selected.registrationGroupId}</dd>
-            <dt>Driver record</dt>
-            <dd>{selected.driverPersonId}</dd>
-            <dt>Vehicle record</dt>
-            <dd>{selected.vehicleId}</dd>
+            <dt>Fahrer</dt>
+            <dd>
+              {selected.adminDetails?.driver.name ?? selected.driverPersonId}
+            </dd>
+            <dt>Geburtsdatum</dt>
+            <dd>{selected.adminDetails?.driver.dateOfBirth ?? '—'}</dd>
+            <dt>Land</dt>
+            <dd>{selected.adminDetails?.driver.country ?? '—'}</dd>
+            <dt>E-Mail</dt>
+            <dd>
+              {selected.adminDetails?.driver.email ?? '—'}{' '}
+              {selected.adminDetails?.driver.emailVerified ? '✓' : ''}
+            </dd>
+            <dt>Fahrzeug</dt>
+            <dd>
+              {selected.adminDetails
+                ? `${selected.adminDetails.vehicle.make} ${selected.adminDetails.vehicle.model}${selected.adminDetails.vehicle.year ? ` · ${selected.adminDetails.vehicle.year}` : ''}`
+                : selected.vehicleId}
+            </dd>
+            <dt>Startnummer</dt>
+            <dd>{selected.adminDetails?.startNumber ?? '—'}</dd>
             <dt>Acceptance</dt>
             <dd>
               <StatusBadge
@@ -696,22 +1028,49 @@ export function AdminEntries({
                   </button>
                 );
               })}
-            <button
-              type="button"
-              disabled={
-                busy ||
-                !reason.trim() ||
-                selected.verificationStatus === 'verified'
-              }
-              onClick={() => void transition('verification', 'verified')}
-            >
-              Mark verified
-            </button>
+            {selected.verificationStatus !== 'verified' && (
+              <button
+                type="button"
+                disabled={busy || !reason.trim()}
+                onClick={() => void transition('verification', 'verified')}
+              >
+                Mark verified
+              </button>
+            )}
           </div>
-          <p className="admin-dependency">
-            Invoice, payment history, consent evidence, audit timeline, notes
-            and status-mail actions are not exposed by the current admin API.
-          </p>
+          <section className="admin-documents" aria-label="Prüfstatus">
+            <h4>Prüfstatus</h4>
+            <p>
+              Echte Nennungsunterlagen und Upload-Zähler sind noch nicht
+              verfügbar.
+            </p>
+            <ul>
+              {selected.statusProjection?.dimensions
+                .filter((item) =>
+                  ['technical_inspection', 'waiver'].includes(item.key),
+                )
+                .map((item) => (
+                  <li key={item.key}>
+                    <span>{item.label.de}</span>
+                    <strong>{item.value}</strong>
+                  </li>
+                ))}
+            </ul>
+          </section>
+          <section aria-label="Verlauf">
+            <h4>Verlauf</h4>
+            <ol>
+              {(selected.adminHistory ?? []).map((event) => (
+                <li key={`${event.kind}-${event.id}`}>
+                  <time dateTime={event.occurredAt}>
+                    {new Date(event.occurredAt).toLocaleString()}
+                  </time>{' '}
+                  · {event.label} · {event.actor}
+                  {event.detail ? ` — ${event.detail}` : ''}
+                </li>
+              ))}
+            </ol>
+          </section>
         </section>
       )}
       {actionError && <p role="alert">{actionError}</p>}

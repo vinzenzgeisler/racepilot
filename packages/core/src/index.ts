@@ -1023,8 +1023,9 @@ export function projectEntryStatuses(input: {
   ];
   const documents = dimensions.filter(
     (item) =>
-      (item.key === 'technical_inspection' || item.key === 'waiver') &&
-      item.required,
+      ['payment', 'technical_inspection', 'waiver'].includes(item.key) &&
+      item.required &&
+      item.meaning !== 'not_relevant',
   );
   const hints = (['double_starter', 'passenger', 'late_entry'] as const).map(
     (key) => ({
@@ -1144,6 +1145,7 @@ export interface Person {
   email: string | null;
   emailNormalized: string | null;
   dateOfBirth: string | null;
+  country: string | null;
   createdAt: string;
   deletedAt: string | null;
   deletionReason: string | null;
@@ -1184,6 +1186,26 @@ export interface Entry {
   deletedAt: string | null;
   deletionReason: string | null;
   /** Read-model fields computed from the pinned workflow, event configuration and source records. */
+  adminHistory?: Array<{
+    id: string;
+    kind: 'entry' | 'status' | 'payment' | 'email';
+    label: string;
+    actor: string;
+    occurredAt: string;
+    detail: string;
+  }>;
+  adminDetails?: {
+    driver: {
+      name: string;
+      dateOfBirth: string | null;
+      country: string | null;
+      email: string | null;
+      emailVerified: boolean;
+    };
+    vehicle: { make: string; model: string; year: number | null };
+    eventClass: { code: string; name: string };
+    startNumber: string | null;
+  };
   statusProjection?: EntryStatusProjection;
 }
 export interface EntryAuditEvent {
@@ -1199,7 +1221,7 @@ export interface EntryAuditEvent {
 }
 export type PersonInput = Pick<
   Person,
-  'firstName' | 'lastName' | 'email' | 'dateOfBirth'
+  'firstName' | 'lastName' | 'email' | 'dateOfBirth' | 'country'
 >;
 export type VehicleInput = Pick<
   Vehicle,
@@ -1377,6 +1399,8 @@ export interface EntryListQuery {
   readonly classId?: string;
   readonly acceptanceStatus?: EntryAcceptanceStatus;
   readonly verificationStatus?: EntryVerificationStatus;
+  readonly paymentStatus?:
+    'open' | 'partially_paid' | 'paid' | 'not_required' | 'not_relevant';
   readonly search?: string;
   readonly sort:
     | 'createdAt'

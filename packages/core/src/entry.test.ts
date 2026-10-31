@@ -133,7 +133,7 @@ describe('entry domain rules', () => {
       meaning: 'missing',
       nextAction: { key: 'payment:record' },
     });
-    expect(pending.documents).toEqual({ complete: 0, total: 2 });
+    expect(pending.documents).toEqual({ complete: 0, total: 3 });
     expect(pending.hints).toEqual([
       { key: 'double_starter', present: true },
       { key: 'passenger', present: false },
@@ -148,7 +148,7 @@ describe('entry domain rules', () => {
       emailStatus: 'verified',
       config: defaultEntryStatusDimensionConfig,
     });
-    expect(completed.documents).toEqual({ complete: 2, total: 2 });
+    expect(completed.documents).toEqual({ complete: 3, total: 3 });
     expect(completed.dimensions.every((item) => item.meaning === 'done')).toBe(
       true,
     );

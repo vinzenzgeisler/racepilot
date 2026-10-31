@@ -167,6 +167,43 @@ export const EntryResponse = z
     createdAt: z.string().datetime({ offset: true }),
     deletedAt: z.string().datetime({ offset: true }).nullable(),
     deletionReason: z.string().nullable(),
+    adminHistory: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            kind: z.enum(['entry', 'status', 'payment', 'email']),
+            label: z.string(),
+            actor: z.string(),
+            occurredAt: z.string().datetime({ offset: true }),
+            detail: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
+    adminDetails: z
+      .object({
+        driver: z
+          .object({
+            name: z.string(),
+            dateOfBirth: z.string().nullable(),
+            country: z.string().nullable(),
+            email: z.string().nullable(),
+            emailVerified: z.boolean(),
+          })
+          .strict(),
+        vehicle: z
+          .object({
+            make: z.string(),
+            model: z.string(),
+            year: z.number().int().nullable(),
+          })
+          .strict(),
+        eventClass: z.object({ code: z.string(), name: z.string() }).strict(),
+        startNumber: z.string().nullable(),
+      })
+      .strict()
+      .optional(),
     statusProjection: z
       .object({
         dimensions: z.array(
@@ -453,6 +490,10 @@ export const PublicRegistrationRequestSchema = z
         lastName: z.string().trim().min(1).max(100),
         email: z.string().email().max(254),
         dateOfBirth: z.string().date(),
+        country: z
+          .string()
+          .regex(/^[A-Z]{2}$/)
+          .optional(),
         guardianName: z.string().trim().min(1).max(200).optional(),
         guardianEmail: z.string().email().max(254).optional(),
       })
