@@ -167,6 +167,29 @@ export const EntryResponse = z
     createdAt: z.string().datetime({ offset: true }),
     deletedAt: z.string().datetime({ offset: true }).nullable(),
     deletionReason: z.string().nullable(),
+    adminDetails: z
+      .object({
+        driver: z
+          .object({
+            name: z.string(),
+            dateOfBirth: z.string().nullable(),
+            country: z.string().nullable(),
+            email: z.string().nullable(),
+            emailVerified: z.boolean(),
+          })
+          .strict(),
+        vehicle: z
+          .object({
+            make: z.string(),
+            model: z.string(),
+            year: z.number().int().nullable(),
+          })
+          .strict(),
+        eventClass: z.object({ code: z.string(), name: z.string() }).strict(),
+        startNumber: z.string().nullable(),
+      })
+      .strict()
+      .optional(),
     statusProjection: z
       .object({
         dimensions: z.array(

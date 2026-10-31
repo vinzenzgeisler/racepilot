@@ -1184,6 +1184,18 @@ export interface Entry {
   deletedAt: string | null;
   deletionReason: string | null;
   /** Read-model fields computed from the pinned workflow, event configuration and source records. */
+  adminDetails?: {
+    driver: {
+      name: string;
+      dateOfBirth: string | null;
+      country: string | null;
+      email: string | null;
+      emailVerified: boolean;
+    };
+    vehicle: { make: string; model: string; year: number | null };
+    eventClass: { code: string; name: string };
+    startNumber: string | null;
+  };
   statusProjection?: EntryStatusProjection;
 }
 export interface EntryAuditEvent {

@@ -2605,6 +2605,110 @@ async function projectEntryRows(
     return { ...mapEntry(row), statusProjection };
   });
 }
+async function attachAdminEntryDetails(
+  db: Database,
+  ctx: RequestContext,
+  items: readonly import('@racepilot/core').Entry[],
+): Promise<import('@racepilot/core').Entry[]> {
+  if (!items.length) return [];
+  const ids = items.map((item) => item.id);
+  const peopleRows = await db
+    .select({
+      entryId: entries.id,
+      firstName: people.firstName,
+      lastName: people.lastName,
+      dateOfBirth: people.dateOfBirth,
+      email: people.email,
+      emailVerified: entries.verificationStatus,
+    })
+    .from(entries)
+    .innerJoin(
+      people,
+      and(
+        eq(people.id, entries.driverPersonId),
+        eq(people.organizationId, ctx.organizationId),
+      ),
+    )
+    .where(
+      and(
+        eq(entries.organizationId, ctx.organizationId),
+        inArray(entries.id, ids),
+      ),
+    );
+  const vehicleRows = await db
+    .select({
+      entryId: entries.id,
+      make: vehicles.make,
+      model: vehicles.model,
+      year: vehicles.year,
+    })
+    .from(entries)
+    .innerJoin(
+      vehicles,
+      and(
+        eq(vehicles.id, entries.vehicleId),
+        eq(vehicles.organizationId, ctx.organizationId),
+      ),
+    )
+    .where(
+      and(
+        eq(entries.organizationId, ctx.organizationId),
+        inArray(entries.id, ids),
+      ),
+    );
+  const classRows = await db
+    .select({
+      entryId: entries.id,
+      code: eventClasses.code,
+      name: eventClasses.name,
+    })
+    .from(entries)
+    .innerJoin(
+      eventClasses,
+      and(
+        eq(eventClasses.id, entries.classId),
+        eq(eventClasses.eventId, entries.eventId),
+        eq(eventClasses.organizationId, ctx.organizationId),
+      ),
+    )
+    .where(
+      and(
+        eq(entries.organizationId, ctx.organizationId),
+        inArray(entries.id, ids),
+      ),
+    );
+  const drivers = new Map(peopleRows.map((row) => [row.entryId, row]));
+  const vehiclesByEntry = new Map(vehicleRows.map((row) => [row.entryId, row]));
+  const classesByEntry = new Map(classRows.map((row) => [row.entryId, row]));
+  return items.map((item) => {
+    const driver = drivers.get(item.id);
+    const vehicle = vehiclesByEntry.get(item.id);
+    const eventClass = classesByEntry.get(item.id);
+    return {
+      ...item,
+      adminDetails: {
+        driver: {
+          name: [driver?.firstName, driver?.lastName].filter(Boolean).join(' '),
+          dateOfBirth: driver?.dateOfBirth ?? null,
+          country: null,
+          email: driver?.email ?? null,
+          emailVerified: driver?.emailVerified === 'verified',
+        },
+        vehicle: {
+          make: vehicle?.make ?? '',
+          model: vehicle?.model ?? '',
+          year: vehicle?.year ?? null,
+        },
+        eventClass: {
+          code: eventClass?.code ?? '',
+          name: eventClass?.name ?? '',
+        },
+        startNumber: item.requestedStartNumber,
+      },
+    };
+  });
+}
+
 export function createPersonRepository(
   db: Database,
 ): import('@racepilot/core').PersonRepository {
@@ -2835,7 +2939,15 @@ export function createEntryRepository(
             sql`${entries.deletedAt} is null`,
           ),
         );
-      return row ? (await projectEntryRows(db, ctx, [row]))[0]! : null;
+      return row
+        ? (
+            await attachAdminEntryDetails(
+              db,
+              ctx,
+              await projectEntryRows(db, ctx, [row]),
+            )
+          )[0]!
+        : null;
     },
     listAdmin: async (ctx, query) => {
       const predicates = [
@@ -2935,10 +3047,14 @@ export function createEntryRepository(
           .where(where),
       ]);
       return {
-        items: await projectEntryRows(
+        items: await attachAdminEntryDetails(
           db,
           ctx,
-          rows.map((row) => row.entry),
+          await projectEntryRows(
+            db,
+            ctx,
+            rows.map((row) => row.entry),
+          ),
         ),
         total: totals[0]?.total ?? 0,
       };

@@ -1269,6 +1269,19 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(pageA.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       expect(pageA.total).toBe(1);
+      expect(pageA.items[0]?.adminDetails).toEqual({
+        driver: {
+          name: 'Same Name',
+          dateOfBirth: '2000-01-01',
+          country: null,
+          email: 'same@example.test',
+          emailVerified: false,
+        },
+        vehicle: { make: 'X', model: 'Y', year: null },
+        eventClass: { code: 'A', name: 'A' },
+        startNumber: null,
+      });
+      expect(await adminEntries.getById(ctxA, foreignEntryId!)).toBeNull();
       const byDriverName = await adminEntries.listAdmin!(ctxA, {
         page: 1,
         pageSize: 100,
