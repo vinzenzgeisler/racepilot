@@ -111,7 +111,13 @@ export function AdminEntries({
     [],
   );
   const [selected, setSelected] = useState<Entry | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
+  const [selection, setSelection] = useState<{
+    eventId: string;
+    ids: Set<string>;
+  }>({ eventId, ids: new Set() });
+  const selectedIds =
+    selection.eventId === eventId ? selection.ids : new Set<string>();
+  const clearSelection = () => setSelection({ eventId, ids: new Set() });
   useEffect(() => onSelectionChange?.(selected), [onSelectionChange, selected]);
   useEffect(() => {
     const handleKeys = (event: KeyboardEvent) => {
@@ -413,19 +419,21 @@ export function AdminEntries({
     }
   }
 
+  const acceptedStatusKey = workflow?.statuses.find(
+    (status) => status.category === 'accepted',
+  )?.key;
+  const eligibleSelectedItems = items.filter(
+    (item) =>
+      selectedIds.has(item.id) &&
+      acceptedStatusKey !== undefined &&
+      (workflow?.transitions ?? []).some(
+        (edge) =>
+          edge.from === item.acceptanceStatus && edge.to === acceptedStatusKey,
+      ),
+  );
+
   async function bulkAccept() {
-    const eligible = items.filter(
-      (item) =>
-        selectedIds.has(item.id) &&
-        (workflow?.transitions ?? []).some(
-          (edge) =>
-            edge.from === item.acceptanceStatus &&
-            edge.to ===
-              workflow?.statuses.find(
-                (status) => status.category === 'accepted',
-              )?.key,
-        ),
-    );
+    const eligible = eligibleSelectedItems;
     if (!eligible.length) return;
     const requestedReason = window
       .prompt(
@@ -442,7 +450,7 @@ export function AdminEntries({
             method: 'POST',
             body: JSON.stringify({
               transition: 'acceptance',
-              status: 'accepted',
+              status: acceptedStatusKey,
               reason: requestedReason,
             }),
           }),
@@ -450,7 +458,7 @@ export function AdminEntries({
       );
       if (responses.some((response) => !response.ok))
         throw new Error('bulk transition rejected');
-      setSelectedIds(new Set());
+      clearSelection();
       setRefreshRevision((revision) => revision + 1);
     } catch {
       setActionError(
@@ -465,6 +473,7 @@ export function AdminEntries({
   function applyFilters(event: FormEvent) {
     event.preventDefault();
     setPage(1);
+    clearSelection();
     setApplied({ ...draft });
   }
 
@@ -473,6 +482,7 @@ export function AdminEntries({
     if (onSharedEventChange) onSharedEventChange(nextEventId);
     else setLocalEventId(nextEventId);
     setPage(1);
+    clearSelection();
     setDraft({ ...initialQuery });
     setApplied({ ...initialQuery });
     setClasses([]);
@@ -492,6 +502,7 @@ export function AdminEntries({
       direction: nextDirection,
     }));
     setPage(1);
+    clearSelection();
     setApplied((value) => ({
       ...value,
       sort: nextSort,
@@ -676,7 +687,7 @@ export function AdminEntries({
                   <th data-priority="1">Nr.</th>
                   <th data-priority="1">Status</th>
                   <th data-priority="2">Zahlung</th>
-                  <th data-priority="3">Unterlagen</th>
+                  <th data-priority="3">Prüfstatus</th>
                   <th data-priority="1">Aktion</th>
                   <th data-priority="4">Eingang</th>
                 </tr>
@@ -698,11 +709,13 @@ export function AdminEntries({
                           type="checkbox"
                           checked={selectedIds.has(entry.id)}
                           onChange={(event) =>
-                            setSelectedIds((current) => {
-                              const next = new Set(current);
+                            setSelection((current) => {
+                              const next = new Set(
+                                current.eventId === eventId ? current.ids : [],
+                              );
                               if (event.target.checked) next.add(entry.id);
                               else next.delete(entry.id);
-                              return next;
+                              return { eventId, ids: next };
                             })
                           }
                         />
@@ -778,8 +791,14 @@ export function AdminEntries({
                           .map((item) => `${item.label.de}: ${item.value}`)
                           .join(' · ')}
                       >
-                        {entry.statusProjection?.documents.complete ?? 0}/
-                        {entry.statusProjection?.documents.total ?? 0}
+                        {entry.statusProjection?.dimensions
+                          .filter((item) =>
+                            ['technical_inspection', 'waiver'].includes(
+                              item.key,
+                            ),
+                          )
+                          .map((item) => `${item.label.de}: ${item.value}`)
+                          .join(' · ') || '—'}
                       </td>
                       <td
                         data-priority="1"
@@ -822,38 +841,15 @@ export function AdminEntries({
               <strong>
                 {selectedIds.size} von {total} ausgewählt
               </strong>
-              <button type="button" onClick={() => setSelectedIds(new Set())}>
+              <button type="button" onClick={() => clearSelection()}>
                 Auswahl aufheben
               </button>
               <button
                 type="button"
-                disabled={
-                  busy ||
-                  !items.some(
-                    (item) =>
-                      selectedIds.has(item.id) &&
-                      (workflow?.transitions ?? []).some(
-                        (edge) =>
-                          edge.from === item.acceptanceStatus &&
-                          edge.to === 'accepted',
-                      ),
-                  )
-                }
+                disabled={busy || eligibleSelectedItems.length === 0}
                 onClick={() => void bulkAccept()}
               >
-                Zulassen (
-                {
-                  items.filter(
-                    (item) =>
-                      selectedIds.has(item.id) &&
-                      (workflow?.transitions ?? []).some(
-                        (edge) =>
-                          edge.from === item.acceptanceStatus &&
-                          edge.to === 'accepted',
-                      ),
-                  ).length
-                }{' '}
-                von {selectedIds.size})
+                Zulassen ({eligibleSelectedItems.length} von {selectedIds.size})
               </button>
             </div>
           )}
@@ -861,7 +857,10 @@ export function AdminEntries({
             <button
               type="button"
               disabled={page <= 1 || apiState === 'loading'}
-              onClick={() => setPage((value) => value - 1)}
+              onClick={() => {
+                clearSelection();
+                setPage((value) => value - 1);
+              }}
             >
               Previous
             </button>
@@ -871,7 +870,10 @@ export function AdminEntries({
             <button
               type="button"
               disabled={page >= totalPages || apiState === 'loading'}
-              onClick={() => setPage((value) => value + 1)}
+              onClick={() => {
+                clearSelection();
+                setPage((value) => value + 1);
+              }}
             >
               Next
             </button>
@@ -969,17 +971,16 @@ export function AdminEntries({
               </button>
             )}
           </div>
-          <section className="admin-documents" aria-label="Unterlagen">
-            <h4>
-              Unterlagen · {selected.statusProjection?.documents.complete ?? 0}/
-              {selected.statusProjection?.documents.total ?? 0}
-            </h4>
+          <section className="admin-documents" aria-label="Prüfstatus">
+            <h4>Prüfstatus</h4>
+            <p>
+              Echte Nennungsunterlagen und Upload-Zähler sind noch nicht
+              verfügbar.
+            </p>
             <ul>
               {selected.statusProjection?.dimensions
                 .filter((item) =>
-                  ['technical_inspection', 'waiver', 'payment'].includes(
-                    item.key,
-                  ),
+                  ['technical_inspection', 'waiver'].includes(item.key),
                 )
                 .map((item) => (
                   <li key={item.key}>
