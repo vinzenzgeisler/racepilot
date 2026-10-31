@@ -173,7 +173,7 @@
       "id": "admin-entry-get",
       "kind": "route",
       "tenantKey": "server-resolved organizationId",
-      "isolation": "Permission-gated read calls tenant-filtered repository; foreign IDs are not found.",
+      "isolation": "Requires entry:read; tenant-filtered list/detail projection resolves registration-group answers only for the entry's exact organization/event/group, emits files only for consumed uploads bound to that group and never emits upload tokens; foreign IDs are not found.",
       "negativeTests": [
         {
           "file": "packages/api/src/index.test.ts",

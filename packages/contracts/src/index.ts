@@ -469,6 +469,16 @@ export const EntryResponse = z
           .strict(),
         eventClass: z.object({ code: z.string(), name: z.string() }).strict(),
         startNumber: z.string().nullable(),
+        customAnswers: z.array(
+          z
+            .object({
+              key: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+              label: z.string(),
+              value: z.union([z.string(), z.boolean()]).nullable(),
+              fileDownloadUrl: z.string().nullable(),
+            })
+            .strict(),
+        ),
       })
       .strict()
       .optional(),

@@ -138,7 +138,20 @@ Custom form fields are configured as event overrides or organization defaults
 with stable keys, localized labels, and schema-checked type-specific options.
 At submission, the server re-resolves current field definitions, checks answer
 types/requiredness/options, rejects unknown keys, and stores normalized answers
-on the tenant/event-bound registration group. File fields accept only signature-
+on the tenant/event-bound registration group. Consequently custom answers are
+registration-group scoped: when one submission creates multiple vehicle starts,
+the same answers appear on each start's admin detail. F1 currently places these
+questions in the driver step, so they describe the registration/contact group,
+not an individual vehicle/start. Per-start questions would require a deliberate
+schema and form-model change rather than a UI-only reinterpretation.
+The `entry:read` admin entry list/detail projection resolves stored answer keys
+to the event's effective field definitions (event override, then organization
+default) and labels them in the organization's locale. File links are emitted
+only for consumed uploads bound to that exact organization, event, group, and
+field; the download endpoint rechecks that authorization. Upload bearer tokens
+are never included in the admin projection.
+
+File fields accept only signature-
 checked PNG/JPEG/WebP images. Uploads are event/field bound, use a random
 one-time token stored only as SHA-256, expire after seven days, and become
 downloadable only after attachment to a submitted entry group. Admin retrieval

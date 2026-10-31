@@ -1548,6 +1548,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         vehicle: { make: 'X', model: 'Y', year: null },
         eventClass: { code: 'A', name: 'A' },
         startNumber: 'A-01',
+        customAnswers: [],
       });
       expect(await adminEntries.getById(ctxA, foreignEntryId!)).toBeNull();
       const byDriverName = await adminEntries.listAdmin!(ctxA, {
@@ -2432,6 +2433,12 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           customAnswers: { ...body.customAnswers, vehicle_kind: 'forged' },
         }),
       ).rejects.toThrow('Registration unavailable');
+      await expect(
+        service.submit(ctx, event!.slug, {
+          ...body,
+          customAnswers: { ...body.customAnswers, club_name: '   ' },
+        }),
+      ).rejects.toThrow('Registration unavailable');
       expect(
         await Promise.all([
           service.submit(ctx, event!.slug, body),
@@ -2509,6 +2516,73 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         .from(entries)
         .where(eq(entries.organizationId, org!.id));
       expect(savedEntries).toHaveLength(2);
+      const adminEntryRepository = createEntryRepository(db);
+      const projectedGroupAnswers = await Promise.all(
+        savedEntries.map(async (savedEntry) => {
+          const detail = await adminEntryRepository.getById(
+            { ...ctx, permissions: new Set(['entry:read']) },
+            savedEntry.id,
+          );
+          return detail?.adminDetails?.customAnswers;
+        }),
+      );
+      const expectedGroupAnswers = [
+        [
+          {
+            key: 'club_name',
+            label: 'Club',
+            value: 'MSC Beispielstadt',
+            fileDownloadUrl: null,
+          },
+          {
+            key: 'vehicle_kind',
+            label: 'Type',
+            value: 'classic',
+            fileDownloadUrl: null,
+          },
+          {
+            key: 'vehicle_photo',
+            label: 'Vehicle image',
+            value: null,
+            fileDownloadUrl: `/admin/events/${event!.id}/registration-form-uploads/${uploadObjectId}`,
+          },
+        ],
+        [
+          {
+            key: 'club_name',
+            label: 'Club',
+            value: 'MSC Beispielstadt',
+            fileDownloadUrl: null,
+          },
+          {
+            key: 'vehicle_kind',
+            label: 'Type',
+            value: 'classic',
+            fileDownloadUrl: null,
+          },
+          {
+            key: 'vehicle_photo',
+            label: 'Vehicle image',
+            value: null,
+            fileDownloadUrl: `/admin/events/${event!.id}/registration-form-uploads/${uploadObjectId}`,
+          },
+        ],
+      ];
+      expect(projectedGroupAnswers).toEqual(expectedGroupAnswers);
+      const adminList = await adminEntryRepository.listAdmin!(
+        { ...ctx, permissions: new Set(['entry:read']) },
+        {
+          page: 1,
+          pageSize: 100,
+          eventId: event!.id,
+          sort: 'createdAt',
+          direction: 'asc',
+        },
+      );
+      expect(adminList.items).toHaveLength(2);
+      expect(
+        adminList.items.map((entry) => entry.adminDetails?.customAnswers),
+      ).toEqual(expectedGroupAnswers);
       expect(
         savedEntries.every(
           (entry) =>

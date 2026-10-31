@@ -981,6 +981,33 @@ export function AdminEntries({
             </dd>
             <dt>Startnummer</dt>
             <dd>{selected.adminDetails?.startNumber ?? '—'}</dd>
+            <dt>Eigene Angaben</dt>
+            <dd>
+              {selected.adminDetails?.customAnswers.length ? (
+                <ul className="admin-custom-answers">
+                  {selected.adminDetails.customAnswers.map((answer) => (
+                    <li key={answer.key}>
+                      <strong>{answer.label}</strong>:{' '}
+                      {answer.fileDownloadUrl ? (
+                        <a href={answer.fileDownloadUrl}>Datei herunterladen</a>
+                      ) : answer.value === null ? (
+                        '—'
+                      ) : typeof answer.value === 'boolean' ? (
+                        answer.value ? (
+                          'Ja'
+                        ) : (
+                          'Nein'
+                        )
+                      ) : (
+                        answer.value
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                'Keine eigenen Angaben'
+              )}
+            </dd>
             <dt>Acceptance</dt>
             <dd>
               <StatusBadge
