@@ -167,6 +167,20 @@ export const EntryResponse = z
     createdAt: z.string().datetime({ offset: true }),
     deletedAt: z.string().datetime({ offset: true }).nullable(),
     deletionReason: z.string().nullable(),
+    adminHistory: z
+      .array(
+        z
+          .object({
+            id: z.string(),
+            kind: z.enum(['entry', 'status', 'payment', 'email']),
+            label: z.string(),
+            actor: z.string(),
+            occurredAt: z.string().datetime({ offset: true }),
+            detail: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
     adminDetails: z
       .object({
         driver: z

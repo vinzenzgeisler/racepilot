@@ -1184,6 +1184,14 @@ export interface Entry {
   deletedAt: string | null;
   deletionReason: string | null;
   /** Read-model fields computed from the pinned workflow, event configuration and source records. */
+  adminHistory?: Array<{
+    id: string;
+    kind: 'entry' | 'status' | 'payment' | 'email';
+    label: string;
+    actor: string;
+    occurredAt: string;
+    detail: string;
+  }>;
   adminDetails?: {
     driver: {
       name: string;

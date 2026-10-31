@@ -2677,6 +2677,165 @@ async function attachAdminEntryDetails(
         inArray(entries.id, ids),
       ),
     );
+  const [entryAudits, dimensionAudits, paymentAudits, mailRows] =
+    await Promise.all([
+      db
+        .select()
+        .from(entryAuditEvents)
+        .where(
+          and(
+            eq(entryAuditEvents.organizationId, ctx.organizationId),
+            inArray(entryAuditEvents.entryId, ids),
+          ),
+        ),
+      db
+        .select()
+        .from(entryStatusDimensionAudit)
+        .where(
+          and(
+            eq(entryStatusDimensionAudit.organizationId, ctx.organizationId),
+            inArray(entryStatusDimensionAudit.entryId, ids),
+          ),
+        ),
+      db
+        .select({
+          entryId: entries.id,
+          id: invoicePaymentAuditEvents.id,
+          action: invoicePaymentAuditEvents.action,
+          actor: invoicePaymentAuditEvents.actor,
+          reason: invoicePaymentAuditEvents.reason,
+          occurredAt: invoicePaymentAuditEvents.occurredAt,
+        })
+        .from(invoicePaymentAuditEvents)
+        .innerJoin(
+          invoicePayments,
+          and(
+            eq(invoicePayments.id, invoicePaymentAuditEvents.paymentId),
+            eq(invoicePayments.organizationId, ctx.organizationId),
+          ),
+        )
+        .innerJoin(
+          invoices,
+          and(
+            eq(invoices.id, invoicePayments.invoiceId),
+            eq(invoices.organizationId, ctx.organizationId),
+          ),
+        )
+        .innerJoin(
+          registrationGroups,
+          and(
+            eq(registrationGroups.id, invoices.registrationGroupId),
+            eq(registrationGroups.organizationId, ctx.organizationId),
+          ),
+        )
+        .innerJoin(
+          entries,
+          and(
+            eq(entries.registrationGroupId, registrationGroups.id),
+            eq(entries.organizationId, ctx.organizationId),
+          ),
+        )
+        .where(
+          and(
+            eq(invoicePaymentAuditEvents.organizationId, ctx.organizationId),
+            inArray(entries.id, ids),
+          ),
+        ),
+      db
+        .select({
+          entryId: entries.id,
+          id: emailOutbox.id,
+          status: emailOutbox.status,
+          templateKey: emailOutbox.templateKey,
+          recipient: emailOutbox.recipient,
+          createdAt: emailOutbox.createdAt,
+          sentAt: emailOutbox.sentAt,
+        })
+        .from(emailOutbox)
+        .innerJoin(
+          registrationGroups,
+          and(
+            eq(registrationGroups.organizationId, emailOutbox.organizationId),
+            eq(registrationGroups.contactEmail, emailOutbox.recipient),
+          ),
+        )
+        .innerJoin(
+          entries,
+          and(
+            eq(entries.organizationId, registrationGroups.organizationId),
+            eq(entries.registrationGroupId, registrationGroups.id),
+            eq(entries.eventId, emailOutbox.eventId),
+          ),
+        )
+        .where(
+          and(
+            eq(emailOutbox.organizationId, ctx.organizationId),
+            inArray(entries.id, ids),
+          ),
+        ),
+    ]);
+  const historyByEntry = new Map<
+    string,
+    Array<{
+      id: string;
+      kind: 'entry' | 'status' | 'payment' | 'email';
+      label: string;
+      actor: string;
+      occurredAt: string;
+      detail: string;
+    }>
+  >();
+  const appendHistory = (
+    entryId: string,
+    item: {
+      id: string;
+      kind: 'entry' | 'status' | 'payment' | 'email';
+      label: string;
+      actor: string;
+      occurredAt: Date | string;
+      detail: string;
+    },
+  ) => {
+    const list = historyByEntry.get(entryId) ?? [];
+    list.push({ ...item, occurredAt: new Date(item.occurredAt).toISOString() });
+    historyByEntry.set(entryId, list);
+  };
+  for (const row of entryAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'entry',
+      label: `${row.transition}: ${row.fromStatus} → ${row.toStatus}`,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: row.reason,
+    });
+  for (const row of dimensionAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'status',
+      label: `${row.dimension}: ${row.fromValue} → ${row.toValue}`,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: row.reason,
+    });
+  for (const row of paymentAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'payment',
+      label: row.action,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: row.reason,
+    });
+  for (const row of mailRows)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'email',
+      label: `${row.templateKey}: ${row.status}`,
+      actor: 'System',
+      occurredAt: row.sentAt ?? row.createdAt,
+      detail: row.recipient,
+    });
   const drivers = new Map(peopleRows.map((row) => [row.entryId, row]));
   const vehiclesByEntry = new Map(vehicleRows.map((row) => [row.entryId, row]));
   const classesByEntry = new Map(classRows.map((row) => [row.entryId, row]));
@@ -2684,8 +2843,12 @@ async function attachAdminEntryDetails(
     const driver = drivers.get(item.id);
     const vehicle = vehiclesByEntry.get(item.id);
     const eventClass = classesByEntry.get(item.id);
+    const adminHistory = (historyByEntry.get(item.id) ?? []).sort((a, b) =>
+      a.occurredAt.localeCompare(b.occurredAt),
+    );
     return {
       ...item,
+      adminHistory,
       adminDetails: {
         driver: {
           name: [driver?.firstName, driver?.lastName].filter(Boolean).join(' '),
