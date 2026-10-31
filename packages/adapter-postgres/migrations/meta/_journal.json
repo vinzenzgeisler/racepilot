@@ -138,7 +138,6 @@
     {
       "idx": 19,
       "version": "7",
-<<<<<<< HEAD
       "when": 1793446468827,
       "tag": "0019_person_country",
       "breakpoints": false
@@ -148,10 +147,13 @@
       "version": "7",
       "when": 1793446468828,
       "tag": "0020_email_outbox_registration_group",
-=======
-      "when": 1793400000000,
-      "tag": "0019_registration_form_configuration",
->>>>>>> 39880a3 (feat(registration): add tenant-scoped form branding config)
+      "breakpoints": false
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793446468829,
+      "tag": "0021_registration_form_configuration",
       "breakpoints": false
     }
   ]
