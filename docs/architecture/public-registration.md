@@ -114,7 +114,7 @@ families or corresponding license/source set. This implementation exposes the
 specified Brandbook font (Archivo) only rather than inventing choices or loading
 external fonts.
 
-Logos and header images are uploaded to tenant-scoped object storage. PNG/JPEG/
+Logos and header images are uploaded to tenant-scoped object storage. Public asset reads are event-scoped and expose only object IDs present in that event's effective merged organization/event branding configuration; knowing another image object's ID within the same organization does not make it public. PNG/JPEG/
 WebP signatures are checked rather than trusting multipart MIME type. SVG logos
 are parsed and reconstructed from a strict geometry-only allowlist; scripts,
 style, references, DTDs, external resources, and event handlers are rejected.

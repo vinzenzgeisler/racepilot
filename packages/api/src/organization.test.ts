@@ -419,10 +419,64 @@ describe('registration administration and public endpoints', () => {
       delete: async () => undefined,
     };
     const response = await createApp(api).request(
-      `/public/organizations/20000000-0000-4000-8000-000000000002/registration-assets/${crypto.randomUUID()}`,
+      `/public/organizations/20000000-0000-4000-8000-000000000002/events/event/registration-assets/${crypto.randomUUID()}`,
     );
     expect(response.status).toBe(404);
     expect(reads).toBe(0);
+  });
+
+  it('serves only branding objects referenced by the requested event configuration', async () => {
+    const api = deps();
+    const logoA = crypto.randomUUID();
+    const logoB = crypto.randomUUID();
+    const privateImage = crypto.randomUUID();
+    const configFor = (logoLightObjectId: string) => ({
+      ...defaultRegistrationFormConfig,
+      branding: {
+        ...defaultRegistrationFormConfig.branding,
+        logoLightObjectId,
+      },
+    });
+    api.publicRegistration = {
+      getForm: async (_context, slug) => ({
+        registrationFormConfig:
+          slug === 'event-a' ? configFor(logoA) : configFor(logoB),
+      }),
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    const reads: string[] = [];
+    api.objectStorage = {
+      put: async () => {
+        throw new Error('not used');
+      },
+      get: async (_organizationId, objectId) => {
+        reads.push(objectId);
+        return {
+          ref: {
+            organizationId: organizationId(config.organizationId),
+            objectId,
+            contentType: 'image/png',
+            size: 8,
+            sha256: 'a'.repeat(64),
+          },
+          body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+        };
+      },
+      delete: async () => undefined,
+    };
+    const app = createApp(api);
+    const url = (slug: string, objectId: string) =>
+      `/public/organizations/${config.organizationId}/events/${slug}/registration-assets/${objectId}`;
+
+    expect((await app.request(url('event-a', privateImage))).status).toBe(404);
+    expect((await app.request(url('event-a', logoB))).status).toBe(404);
+    expect(reads).toEqual([]);
+    const allowed = await app.request(url('event-a', logoA));
+    expect(allowed.status).toBe(200);
+    expect(allowed.headers.get('content-type')).toContain('image/png');
+    expect(reads).toEqual([logoA]);
   });
 
   it('requires organization update permission before registration asset uploads', async () => {

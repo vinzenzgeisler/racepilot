@@ -992,9 +992,13 @@
     {
       "id": "public-registration-asset-read",
       "kind": "route",
-      "tenantKey": "server-resolved organizationId; objectId is tenant-owned UUID",
-      "isolation": "The public route rejects a client organization selector that does not equal trusted context before accessing storage; responses use nosniff and restrictive CSP.",
+      "tenantKey": "server-resolved organizationId + event resolved by route slug; objectId must be referenced by the effective tenant/event branding configuration",
+      "isolation": "The public route rejects a client organization selector that does not equal trusted context and rejects object IDs absent from the effective org/event logo or header-image configuration before accessing tenant storage; responses use nosniff and restrictive CSP.",
       "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "serves only branding objects referenced by the requested event configuration"
+        },
         {
           "file": "packages/api/src/organization.test.ts",
           "name": "hides registration assets from a forged organization path"

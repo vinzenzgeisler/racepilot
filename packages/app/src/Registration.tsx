@@ -409,14 +409,14 @@ export function Registration({
         {payload.registrationFormConfig.branding.logoLightObjectId && (
           <img
             className="registration-logo"
-            src={`/public/organizations/${encodeURIComponent(organizationId)}/registration-assets/${encodeURIComponent(payload.registrationFormConfig.branding.logoLightObjectId)}`}
+            src={`/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration-assets/${encodeURIComponent(payload.registrationFormConfig.branding.logoLightObjectId)}`}
             alt=""
           />
         )}
         {payload.registrationFormConfig.branding.headerImageObjectId && (
           <img
             className="registration-header-image"
-            src={`/public/organizations/${encodeURIComponent(organizationId)}/registration-assets/${encodeURIComponent(payload.registrationFormConfig.branding.headerImageObjectId)}`}
+            src={`/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration-assets/${encodeURIComponent(payload.registrationFormConfig.branding.headerImageObjectId)}`}
             alt=""
           />
         )}

@@ -1279,7 +1279,7 @@ export function createApp(deps: ApiDeps) {
     }
   });
   app.get(
-    '/public/organizations/:organizationId/registration-assets/:objectId',
+    '/public/organizations/:organizationId/events/:slug/registration-assets/:objectId',
     async (c) => {
       const context = await resolvePublicContext(c.req.raw);
       const organizationParam = c.req.param('organizationId');
@@ -1290,9 +1290,29 @@ export function createApp(deps: ApiDeps) {
       )
         return c.json({ error: 'Not found' }, 404);
       try {
+        const form = await deps.publicRegistration?.getForm(
+          context,
+          c.req.param('slug'),
+        );
+        if (!form) return c.json({ error: 'Not found' }, 404);
+        const formRecord = form as Record<string, unknown>;
+        const formConfig = RegistrationFormConfigPatchSchema.parse(
+          formRecord.registrationFormConfig ?? {},
+        );
+        const branding = formConfig.branding;
+        const allowedObjectIds = new Set(
+          [
+            branding?.logoLightObjectId,
+            branding?.logoDarkObjectId,
+            branding?.headerImageObjectId,
+          ].filter((objectId): objectId is string => Boolean(objectId)),
+        );
+        const objectId = c.req.param('objectId');
+        if (!allowedObjectIds.has(objectId))
+          return c.json({ error: 'Not found' }, 404);
         const object = await deps.objectStorage.get(
           context.organizationId,
-          c.req.param('objectId'),
+          objectId,
         );
         if (
           !object ||
