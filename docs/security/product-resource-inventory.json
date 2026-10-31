@@ -940,6 +940,102 @@
           "name": "isolates status configuration, transitions, and audits by event and organization"
         }
       ]
+    },
+    {
+      "id": "registration-form-config-audit",
+      "kind": "table",
+      "tenantKey": "organization_id + nullable event_id",
+      "isolation": "Composite event FK ensures event overrides remain inside the organization; actor/before/after records are inserted in the configuration update transaction.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "audits organization and event form configuration and rejects a foreign event override"
+        }
+      ]
+    },
+    {
+      "id": "registration-form-draft",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + normalized email; opaque token hash",
+      "isolation": "Composite tenant/event FK, org-scoped reads, SHA-256-only token storage, seven-day expiry, atomic one-time consumption, and replacement-token rotation on save.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "stores registration drafts with one-time hashed tenant-scoped resume links"
+        }
+      ]
+    },
+    {
+      "id": "admin-registration-form-config",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + tenant-bound eventId",
+      "isolation": "Org/event read/write permissions, strict config schemas, event repository predicates scope every operation, and configuration writes are audited.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "audits organization/event form overrides and keeps event configuration tenant-scoped"
+        }
+      ]
+    },
+    {
+      "id": "registration-asset-upload",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId from authenticated membership",
+      "isolation": "Requires organization:update and stores only allowlisted, signature-checked images through the tenant-scoped object storage port; SVG is reconstructed from safe geometry.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "requires organization update permission before registration asset uploads"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-asset-read",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId; objectId is tenant-owned UUID",
+      "isolation": "The public route rejects a client organization selector that does not equal trusted context before accessing storage; responses use nosniff and restrictive CSP.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "hides registration assets from a forged organization path"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-drafts",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + event resolved by route slug",
+      "isolation": "Strict structured draft schema, route/body event match, shared org/event/IP rate limits, generic response, and token never accepted as scope.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "rejects forged tenant/event values for public draft and resume routes"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-resume",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + event attached to the hashed token",
+      "isolation": "Token lookup filters the trusted organization, validates expiry, and consumes a matching token atomically once; invalid/foreign/used links share a generic result.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "rejects forged tenant/event values for public draft and resume routes"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-start-number",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + event resolved by route slug",
+      "isolation": "The number availability query is event- and organization-scoped; the submitted number is independently normalized and uniqueness-checked by the entry repository.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "rejects requested-number lookup under a forged organization"
+        }
+      ]
     }
   ]
 }

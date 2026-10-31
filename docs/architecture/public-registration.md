@@ -91,3 +91,45 @@ Consent configuration is managed through the permission-gated event consents API
 there is no consent text or event-specific legal content embedded in the product
 source. The public app includes keyboard-operable steps, native validation, labels,
 status/error announcements, and German/English copy.
+
+## NENNBOX form configuration and drafts
+
+Organizations manage the registration-form configuration with `GET`/`PUT
+/admin/organization/registration-form-config` (`organization:read` /
+`organization:update`). Events can store partial overrides using `GET`/`PUT
+/admin/events/{eventId}/registration-form-config` (`event:read` / `event:write`).
+Public form resolution merges event overrides over organization settings over
+fixed product defaults. The public client cannot select a tenant, event, brand,
+field policy, price, status, or bucket. Every update stores actor, previous
+value, and new value in `registration_form_config_audit` transactionally.
+
+Source brand colors are accepted and passed through WCAG luminance derivation:
+button text picks the higher-contrast black/white foreground and links are
+darkened until they achieve 4.5:1 against the fixed light surface. The app
+displays a neutral notice when a configured color needs adjustment. The fixed
+three-step structure, IBM Plex body font, and system status colors remain
+product invariants. The public `@racepilot/ui` package and Brandbook M4 specify
+Archivo for headings; F1 mentions six heading fonts but identifies no approved
+families or corresponding license/source set. This implementation exposes the
+specified Brandbook font (Archivo) only rather than inventing choices or loading
+external fonts.
+
+Logos and header images are uploaded to tenant-scoped object storage. PNG/JPEG/
+WebP signatures are checked rather than trusting multipart MIME type. SVG logos
+are parsed and reconstructed from a strict geometry-only allowlist; scripts,
+style, references, DTDs, external resources, and event handlers are rejected.
+Public reads resolve only inside the server-selected organization and return
+`nosniff` plus a restrictive CSP. Header images are darkened in the presentation
+layer. No external asset or font requests are generated.
+
+The visible save action stores a structured event draft and enqueues a
+`registration-resume` mail. Resume credentials contain 256 random bits; only a
+SHA-256 digest is stored, the credential expires after seven days, a subsequent
+save rotates it, and resume consumes it transactionally once. The raw token is
+put in a URL fragment (not sent as an HTTP request target) and the UI removes it
+from browser history before calling the resume API. Save and resume derive
+organization/event scope server-side and use generic outcomes to avoid
+email/event enumeration. The current registration record requires date of birth
+for age/guardian policy checks; F1 marks it configurable. Until the existing
+person/age domain invariant is redesigned, the UI keeps this core field
+required, rather than creating registrations with unverified age eligibility.

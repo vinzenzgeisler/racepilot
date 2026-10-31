@@ -308,9 +308,14 @@ export function createMailOutboxTask(deps: {
       return;
     }
     const variables = { ...row.variables };
-    if (row.templateKey === 'verification') {
+    if (
+      row.templateKey === 'verification' ||
+      row.templateKey === 'registration-resume'
+    ) {
+      const variableName =
+        row.templateKey === 'verification' ? 'verificationUrl' : 'resumeUrl';
       const url = new URL(
-        variables.verificationUrl ?? '/',
+        variables[variableName] ?? '/',
         deps.canonicalBaseUrl,
       );
       const base = new URL(deps.canonicalBaseUrl);
@@ -318,7 +323,7 @@ export function createMailOutboxTask(deps: {
         throw new Error(
           'Verification URL must use the configured canonical origin',
         );
-      variables.verificationUrl = url.href;
+      variables[variableName] = url.href;
     }
     await processMailOutboxJob({
       ctx,

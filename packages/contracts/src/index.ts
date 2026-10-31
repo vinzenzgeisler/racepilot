@@ -33,52 +33,154 @@ const luminance = (color: string) => {
 // the design inaccessible to organizations without helping them fix it.
 const primaryColor = hexColor;
 const brandAccentColor = hexColor;
-export const RegistrationBrandingSchema = z.object({
-  logoLightObjectId: z.string().uuid().nullable(),
-  logoDarkObjectId: z.string().uuid().nullable(),
-  headerImageObjectId: z.string().uuid().nullable(),
-  primaryColor: hexColor,
-  accentColor: hexColor,
-  headingFont: z.enum(['archivo']),
-  corners: z.enum(['square', 'rounded']),
-}).strict();
+export const RegistrationBrandingSchema = z
+  .object({
+    logoLightObjectId: z.string().uuid().nullable(),
+    logoDarkObjectId: z.string().uuid().nullable(),
+    headerImageObjectId: z.string().uuid().nullable(),
+    primaryColor: hexColor,
+    accentColor: hexColor,
+    headingFont: z.enum(['archivo']),
+    corners: z.enum(['square', 'rounded']),
+  })
+  .strict();
 export type RegistrationBranding = z.infer<typeof RegistrationBrandingSchema>;
-export const RegistrationFieldConfigSchema = z.object({
-  state: z.enum(['required', 'optional', 'hidden']),
-}).strict();
+export const RegistrationFieldConfigSchema = z
+  .object({
+    state: z.enum(['required', 'optional', 'hidden']),
+  })
+  .strict();
 const registrationFieldKeys = [
-  'dateOfBirth', 'phone', 'street', 'postalCode', 'city', 'country',
-  'emergencyContact', 'biography', 'organizerNotes', 'requestedStartNumber',
-  'make', 'model', 'year', 'displacement', 'cylinders', 'owner', 'history',
+  'dateOfBirth',
+  'phone',
+  'street',
+  'postalCode',
+  'city',
+  'country',
+  'emergencyContact',
+  'biography',
+  'organizerNotes',
+  'requestedStartNumber',
+  'make',
+  'model',
+  'year',
+  'displacement',
+  'cylinders',
+  'owner',
+  'history',
   'vehicleImage',
 ] as const;
-export const RegistrationFormConfigSchema = z.object({
-  branding: RegistrationBrandingSchema,
-  welcomeText: z.string().max(4000),
-  organizerNotice: z.string().max(10000),
-  fields: z.record(z.enum(registrationFieldKeys), RegistrationFieldConfigSchema),
-  customFields: z.array(z.object({
-    key: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
-    type: z.enum(['text', 'select', 'yes_no', 'file']),
-    required: z.boolean(),
-    label: z.object({ de: z.string().trim().min(1).max(120), en: z.string().trim().min(1).max(120) }).strict(),
-    options: z.array(z.object({ value: z.string().min(1).max(80), label: z.object({ de: z.string().min(1).max(120), en: z.string().min(1).max(120) }).strict() }).strict()).max(30).optional(),
-  }).strict()).max(30),
-  features: z.object({ passenger: z.boolean(), spareVehicle: z.boolean(), multipleEntries: z.boolean() }).strict(),
-}).strict();
-export type RegistrationFormConfig = z.infer<typeof RegistrationFormConfigSchema>;
-export const RegistrationFormConfigPatchSchema = RegistrationFormConfigSchema.partial().strict();
-export type RegistrationFormConfigPatch = z.infer<typeof RegistrationFormConfigPatchSchema>;
+const registrationFormConfigObject = z
+  .object({
+    branding: RegistrationBrandingSchema,
+    welcomeText: z.string().max(4000),
+    organizerNotice: z.string().max(10000),
+    fields: z.record(
+      z.enum(registrationFieldKeys),
+      RegistrationFieldConfigSchema,
+    ),
+    customFields: z
+      .array(
+        z
+          .object({
+            key: z.string().regex(/^[a-z][a-z0-9_-]{0,39}$/),
+            type: z.enum(['text', 'select', 'yes_no', 'file']),
+            required: z.boolean(),
+            label: z
+              .object({
+                de: z.string().trim().min(1).max(120),
+                en: z.string().trim().min(1).max(120),
+              })
+              .strict(),
+            options: z
+              .array(
+                z
+                  .object({
+                    value: z.string().min(1).max(80),
+                    label: z
+                      .object({
+                        de: z.string().min(1).max(120),
+                        en: z.string().min(1).max(120),
+                      })
+                      .strict(),
+                  })
+                  .strict(),
+              )
+              .max(30)
+              .optional(),
+          })
+          .strict(),
+      )
+      .max(30),
+    features: z
+      .object({
+        passenger: z.boolean(),
+        spareVehicle: z.boolean(),
+        multipleEntries: z.boolean(),
+      })
+      .strict(),
+  })
+  .strict();
+export const RegistrationFormConfigSchema =
+  registrationFormConfigObject.superRefine((config, ctx) => {
+    if (config.fields.dateOfBirth?.state !== 'required')
+      ctx.addIssue({
+        code: 'custom',
+        path: ['fields', 'dateOfBirth'],
+        message:
+          'Date of birth is required for age and guardian eligibility checks',
+      });
+  });
+export type RegistrationFormConfig = z.infer<
+  typeof RegistrationFormConfigSchema
+>;
+export const RegistrationFormConfigPatchSchema = registrationFormConfigObject
+  .partial()
+  .strict()
+  .superRefine((config, ctx) => {
+    if (
+      config.fields?.dateOfBirth &&
+      config.fields.dateOfBirth.state !== 'required'
+    )
+      ctx.addIssue({
+        code: 'custom',
+        path: ['fields', 'dateOfBirth'],
+        message:
+          'Date of birth is required for age and guardian eligibility checks',
+      });
+  });
+export type RegistrationFormConfigPatch = z.infer<
+  typeof RegistrationFormConfigPatchSchema
+>;
 export const defaultRegistrationFormConfig: RegistrationFormConfig = {
-  branding: { logoLightObjectId: null, logoDarkObjectId: null, headerImageObjectId: null, primaryColor: '#193B30', accentColor: '#E2531F', headingFont: 'archivo', corners: 'square' },
-  welcomeText: '', organizerNotice: '',
-  fields: Object.fromEntries(registrationFieldKeys.map((key) => [key, { state: key === 'dateOfBirth' ? 'required' : 'optional' }])) as RegistrationFormConfig['fields'],
-  customFields: [], features: { passenger: false, spareVehicle: false, multipleEntries: true },
+  branding: {
+    logoLightObjectId: null,
+    logoDarkObjectId: null,
+    headerImageObjectId: null,
+    primaryColor: '#193B30',
+    accentColor: '#E2531F',
+    headingFont: 'archivo',
+    corners: 'square',
+  },
+  welcomeText: '',
+  organizerNotice: '',
+  fields: Object.fromEntries(
+    registrationFieldKeys.map((key) => [
+      key,
+      { state: key === 'dateOfBirth' ? 'required' : 'optional' },
+    ]),
+  ) as RegistrationFormConfig['fields'],
+  customFields: [],
+  features: { passenger: false, spareVehicle: false, multipleEntries: true },
 };
-export function mergeRegistrationFormConfig(base: RegistrationFormConfig, override?: RegistrationFormConfigPatch | null): RegistrationFormConfig {
+export function mergeRegistrationFormConfig(
+  base: RegistrationFormConfig,
+  override?: RegistrationFormConfigPatch | null,
+): RegistrationFormConfig {
   if (!override) return base;
   return RegistrationFormConfigSchema.parse({
-    ...base, ...override,
+    ...base,
+    ...override,
     branding: { ...base.branding, ...override.branding },
     fields: { ...base.fields, ...override.fields },
     features: { ...base.features, ...override.features },
@@ -86,21 +188,66 @@ export function mergeRegistrationFormConfig(base: RegistrationFormConfig, overri
 }
 export function deriveAccessibleBrandColors(primary: string, accent: string) {
   const contrast = (a: string, b: string) => {
-    const l1 = luminance(a), l2 = luminance(b);
+    const l1 = luminance(a),
+      l2 = luminance(b);
     return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
   };
-  const dark = '#111A16', light = '#FFFFFF';
-  const foreground = (background: string) => contrast(background, light) >= contrast(background, dark) ? light : dark;
-  const darkenUntilReadable = (color: string) => {
-    if (contrast(color, dark) >= 4.5) return color.toUpperCase();
-    const values = color.slice(1).match(/../g)!.map((part) => parseInt(part, 16));
+  const dark = '#111A16',
+    light = '#FFFFFF';
+  const darkenForSurface = (color: string) => {
+    if (Math.max(contrast(color, light), contrast(color, dark)) >= 4.5)
+      return color.toUpperCase();
+    const values = color
+      .slice(1)
+      .match(/../g)!
+      .map((part) => parseInt(part, 16));
     for (let step = 99; step >= 0; step--) {
-      const candidate = `#${values.map((value) => Math.round(value * step / 100).toString(16).padStart(2, '0')).join('')}`;
-      if (contrast(candidate, dark) >= 4.5) return candidate.toUpperCase();
+      const candidate = `#${values
+        .map((value) =>
+          Math.round((value * step) / 100)
+            .toString(16)
+            .padStart(2, '0'),
+        )
+        .join('')}`;
+      if (contrast(candidate, light) >= 4.5) return candidate.toUpperCase();
     }
     return dark;
   };
-  return { primaryForeground: foreground(primary), accentForeground: foreground(accent), linkColor: darkenUntilReadable(primary), contrastNotice: contrast(primary, light) < 4.5 || contrast(primary, dark) < 4.5 || contrast(accent, light) < 4.5 || contrast(accent, dark) < 4.5 };
+  const primarySurface = darkenForSurface(primary),
+    accentSurface = darkenForSurface(accent);
+  const foreground = (background: string) =>
+    contrast(background, light) >= contrast(background, dark) ? light : dark;
+  let linkColor = primary.toUpperCase();
+  if (contrast(linkColor, '#F5F4EE') < 4.5) {
+    const values = linkColor
+      .slice(1)
+      .match(/../g)!
+      .map((part) => parseInt(part, 16));
+    for (let step = 99; step >= 0; step--) {
+      const candidate = `#${values
+        .map((value) =>
+          Math.round((value * step) / 100)
+            .toString(16)
+            .padStart(2, '0'),
+        )
+        .join('')}`;
+      if (contrast(candidate, '#F5F4EE') >= 4.5) {
+        linkColor = candidate.toUpperCase();
+        break;
+      }
+    }
+  }
+  return {
+    primarySurface,
+    accentSurface,
+    primaryForeground: foreground(primarySurface),
+    accentForeground: foreground(accentSurface),
+    linkColor,
+    contrastNotice:
+      primarySurface !== primary.toUpperCase() ||
+      accentSurface !== accent.toUpperCase() ||
+      linkColor !== primary.toUpperCase(),
+  };
 }
 export const RuntimeBootstrapResponse = z
   .object({
@@ -571,6 +718,12 @@ export const PublicRegistrationRequestSchema = z
         z
           .object({
             classId: z.string().uuid(),
+            requestedStartNumber: z
+              .string()
+              .trim()
+              .max(64)
+              .nullable()
+              .optional(),
             vehicle: z
               .object({
                 make: z.string().trim().min(1).max(100),
@@ -602,14 +755,42 @@ export const PublicRegistrationRequestSchema = z
 export type PublicRegistrationRequest = z.infer<
   typeof PublicRegistrationRequestSchema
 >;
-export const RegistrationDraftSchema = z.object({
-  firstName: z.string().max(100), lastName: z.string().max(100), email: z.string().email().max(254), dateOfBirth: z.string().max(10),
-  guardianName: z.string().max(200), guardianEmail: z.string().max(254),
-  vehicles: z.array(z.object({ classId: z.string().uuid().or(z.literal('')), make: z.string().max(100), model: z.string().max(100), year: z.string().max(4), registration: z.string().max(64) }).strict()).max(8),
-  accepted: z.record(z.string().max(120), z.boolean()),
-}).strict();
-export const SaveRegistrationDraftRequestSchema = z.object({ eventSlug: z.string().trim().min(1).max(100), language: z.enum(['de', 'en']), draft: RegistrationDraftSchema }).strict();
-export const ResumeRegistrationRequestSchema = z.object({ token: z.string().regex(/^[A-Za-z0-9_-]{40,64}$/) }).strict();
+export const RegistrationDraftSchema = z
+  .object({
+    firstName: z.string().max(100),
+    lastName: z.string().max(100),
+    email: z.string().email().max(254),
+    dateOfBirth: z.string().max(10),
+    guardianName: z.string().max(200),
+    guardianEmail: z.string().max(254),
+    vehicles: z
+      .array(
+        z
+          .object({
+            classId: z.string().uuid().or(z.literal('')),
+            make: z.string().max(100),
+            model: z.string().max(100),
+            year: z.string().max(4),
+            registration: z.string().max(64),
+            requestedStartNumber: z.string().max(64),
+          })
+          .strict(),
+      )
+      .max(8),
+    accepted: z.record(z.string().max(120), z.boolean()),
+  })
+  .strict();
+export type RegistrationDraft = z.infer<typeof RegistrationDraftSchema>;
+export const SaveRegistrationDraftRequestSchema = z
+  .object({
+    eventSlug: z.string().trim().min(1).max(100),
+    language: z.enum(['de', 'en']),
+    draft: RegistrationDraftSchema,
+  })
+  .strict();
+export const ResumeRegistrationRequestSchema = z
+  .object({ token: z.string().regex(/^[A-Za-z0-9_-]{40,64}$/) })
+  .strict();
 export const standardRegistrationForm: StandardRegistrationForm = {
   version: '1.0',
   steps: [
