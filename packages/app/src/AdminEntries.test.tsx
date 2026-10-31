@@ -471,9 +471,15 @@ describe('AdminEntries', () => {
     expect(firstRow.textContent).toContain('Touring A');
     expect(firstRow.textContent).toContain('42');
     expect(firstRow.textContent).not.toContain(entryA);
-    expect(firstRow.querySelectorAll('.entry-row-actions button')).toHaveLength(
-      1,
-    );
+    expect(
+      firstRow.querySelectorAll('.entry-row-actions > button'),
+    ).toHaveLength(1);
+    expect(
+      firstRow.querySelector('.entry-more-actions summary')?.textContent,
+    ).toBe('Mehr');
+    expect(
+      firstRow.querySelectorAll('.entry-more-actions [role=menuitem]').length,
+    ).toBeGreaterThan(0);
     expect(firstRow.querySelector('.entry-vehicle-placeholder')).not.toBeNull();
   });
 
@@ -564,6 +570,100 @@ describe('AdminEntries', () => {
     await flush();
     expect(transitionBodies).toHaveLength(1);
     expect(transitionBodies[0]?.status).toBe('confirmed');
+  });
+
+  it('opens the next pending entry after acceptance using the configured accepted key', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Reviewed');
+    const second = entry(entryA2, eventA, classA);
+    const updatedFirst = { ...itemsA[0]!, acceptanceStatus: 'confirmed' };
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url.endsWith('/registration-workflow'))
+        return Response.json({
+          workflow: {
+            statuses: [
+              {
+                key: 'pending',
+                labels: { de: 'Offen', en: 'Pending' },
+                color: '#777',
+                category: 'pending',
+              },
+              {
+                key: 'confirmed',
+                labels: { de: 'Bestätigt', en: 'Confirmed' },
+                color: '#070',
+                category: 'accepted',
+              },
+            ],
+            transitions: [
+              { from: 'pending', to: 'confirmed', reasonRequired: true },
+            ],
+          },
+        });
+      if (url === `/admin/entries/${entryA}`) return Response.json(itemsA[0]);
+      if (url === `/admin/entries/${entryA2}`) return Response.json(second);
+      if (
+        url === `/admin/entries/${entryA}/transitions` &&
+        init?.method === 'POST'
+      )
+        return Response.json(updatedFirst);
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await setInput('Reason (required for audit)', 'Reviewed');
+    await click('confirmed');
+    expect(detailEntryId()).toBe(entryA2);
+  });
+
+  it('keeps the accepted entry selected when no next pending entry exists', async () => {
+    vi.spyOn(window, 'prompt').mockReturnValue('Reviewed');
+    const onlyEntry = [itemsA[0]!];
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(onlyEntry);
+      if (url.endsWith('/registration-workflow'))
+        return Response.json({
+          workflow: {
+            statuses: [
+              {
+                key: 'pending',
+                labels: { de: 'Offen', en: 'Pending' },
+                color: '#777',
+                category: 'pending',
+              },
+              {
+                key: 'confirmed',
+                labels: { de: 'Bestätigt', en: 'Confirmed' },
+                color: '#070',
+                category: 'accepted',
+              },
+            ],
+            transitions: [
+              { from: 'pending', to: 'confirmed', reasonRequired: true },
+            ],
+          },
+        });
+      if (url === `/admin/entries/${entryA}`)
+        return Response.json(onlyEntry[0]);
+      if (
+        url === `/admin/entries/${entryA}/transitions` &&
+        init?.method === 'POST'
+      )
+        return Response.json({
+          ...onlyEntry[0],
+          acceptanceStatus: 'confirmed',
+        });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await setInput('Reason (required for audit)', 'Reviewed');
+    await click('confirmed');
+    expect(detailEntryId()).toBe(entryA);
   });
 
   it('clears bulk selection when changing pages, filters, and events', async () => {

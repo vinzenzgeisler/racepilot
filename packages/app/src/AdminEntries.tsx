@@ -404,6 +404,26 @@ export function AdminEntries({
       setSelected(updated);
       setReason('');
       setRefreshRevision((revision) => revision + 1);
+      const acceptedCategory = workflow?.statuses.find(
+        (item) => item.key === status && item.category === 'accepted',
+      );
+      if (transitionType === 'acceptance' && acceptedCategory) {
+        const currentIndex = items.findIndex((item) => item.id === current.id);
+        const nextOpen = items
+          .slice(Math.max(0, currentIndex + 1))
+          .find(
+            (item) =>
+              workflow?.statuses.find(
+                (candidate) => candidate.key === item.acceptanceStatus,
+              )?.category === 'pending' &&
+              workflow.transitions.some(
+                (edge) =>
+                  edge.from === item.acceptanceStatus &&
+                  edge.to === acceptedCategory.key,
+              ),
+          );
+        if (nextOpen) void openEntry(nextOpen.id);
+      }
     } catch {
       if (isCurrent(transitionGate.current, generation, controller))
         setActionError('The status change could not be completed.');
@@ -817,6 +837,53 @@ export function AdminEntries({
                               (item) => item.nextAction,
                             )?.nextAction?.label.de ?? 'Öffnen'}
                           </button>
+                          {(() => {
+                            const rowTransitions = (workflow?.transitions ?? [])
+                              .filter(
+                                (edge) => edge.from === entry.acceptanceStatus,
+                              )
+                              .filter((edge) => edge.to !== acceptedStatusKey);
+                            const hasVerificationAction =
+                              entry.verificationStatus !== 'verified';
+                            if (
+                              rowTransitions.length === 0 &&
+                              !hasVerificationAction
+                            )
+                              return null;
+                            return (
+                              <details className="entry-more-actions">
+                                <summary aria-label="Weitere Aktionen">
+                                  Mehr
+                                </summary>
+                                <div role="menu" aria-label="Weitere Aktionen">
+                                  {rowTransitions.map((edge) => {
+                                    const status = workflow?.statuses.find(
+                                      (item) => item.key === edge.to,
+                                    );
+                                    return (
+                                      <button
+                                        key={edge.to}
+                                        type="button"
+                                        role="menuitem"
+                                        onClick={() => void openEntry(entry.id)}
+                                      >
+                                        {status?.labels.de ?? edge.to} …
+                                      </button>
+                                    );
+                                  })}
+                                  {hasVerificationAction && (
+                                    <button
+                                      type="button"
+                                      role="menuitem"
+                                      onClick={() => void openEntry(entry.id)}
+                                    >
+                                      Verifikation …
+                                    </button>
+                                  )}
+                                </div>
+                              </details>
+                            );
+                          })()}
                         </div>
                       </td>
                       <td data-priority="4">
