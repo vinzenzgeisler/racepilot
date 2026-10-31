@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import { runMigrations } from 'graphile-worker';
 import {
   organizationId,
@@ -35,10 +35,10 @@ import {
   invoicePayments,
   invoicePaymentAuditEvents,
   eventClassPricingRules,
-  createInvoicePaymentRepository,
   createPersonRepository,
   createVehicleRepository,
   createEntryRepository,
+  createInvoicePaymentRepository,
   createInvoiceRepository,
   createPublicRegistrationService,
   createRegistrationSettingsRepository,
@@ -49,6 +49,7 @@ import {
   eventConsentTermsAudit,
   groupEmailVerifications,
   saveMailTemplateVersion,
+  enqueueMailOutbox,
   emailOutbox,
   consentEvidence,
   createEntryExportRepository,
@@ -66,6 +67,260 @@ import {
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
+  it('keeps shared-email outbox history group-specific and returns chronological tenant-scoped entry history', async () => {
+    await runMigrations({ connectionString: url! });
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    let orgId: string | undefined;
+    let eventId: string | undefined;
+    let mailJobId: string | undefined;
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          slug: `entry-history-${suffix}`,
+          name: 'History',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      orgId = org!.id;
+      const [event] = await db
+        .insert(events)
+        .values({
+          organizationId: orgId,
+          slug: 'event',
+          name: 'History event',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-01',
+        })
+        .returning();
+      eventId = event!.id;
+      const [klass] = await db
+        .insert(eventClasses)
+        .values({
+          organizationId: orgId,
+          eventId,
+          name: 'Touring',
+          code: 'TOUR',
+          vehicleType: 'car',
+        })
+        .returning();
+      const [driverA, driverB] = await db
+        .insert(people)
+        .values([
+          {
+            organizationId: orgId,
+            firstName: 'Alex',
+            lastName: 'One',
+            email: 'family@example.test',
+          },
+          {
+            organizationId: orgId,
+            firstName: 'Alex',
+            lastName: 'Two',
+            email: 'family@example.test',
+          },
+        ])
+        .returning();
+      const [vehicleA, vehicleB] = await db
+        .insert(vehicles)
+        .values([
+          { organizationId: orgId, make: 'Test', model: 'One' },
+          { organizationId: orgId, make: 'Test', model: 'Two' },
+        ])
+        .returning();
+      const [groupA, groupB] = await db
+        .insert(registrationGroups)
+        .values([
+          {
+            organizationId: orgId,
+            eventId,
+            personId: driverA!.id,
+            contactEmail: 'family@example.test',
+          },
+          {
+            organizationId: orgId,
+            eventId,
+            personId: driverB!.id,
+            contactEmail: 'family@example.test',
+          },
+        ])
+        .returning();
+      const [entryA, entryB] = await db
+        .insert(entries)
+        .values([
+          {
+            organizationId: orgId,
+            eventId,
+            classId: klass!.id,
+            registrationGroupId: groupA!.id,
+            driverPersonId: driverA!.id,
+            vehicleId: vehicleA!.id,
+            requestedStartNumber: '41',
+          },
+          {
+            organizationId: orgId,
+            eventId,
+            classId: klass!.id,
+            registrationGroupId: groupB!.id,
+            driverPersonId: driverB!.id,
+            vehicleId: vehicleB!.id,
+            requestedStartNumber: '42',
+          },
+        ])
+        .returning();
+      const ctx = (tenantId: string) =>
+        createRequestContext({
+          deploymentMode: 'cloud',
+          organizationId: organizationId(tenantId),
+          permissions: new Set([
+            'event:read',
+            'event:write',
+            'entry:read',
+            'entry:write',
+          ]),
+          capabilities: new Set(),
+          correlationId: suffix,
+        });
+      const workflowRevision = await createEntryWorkflowRepository(
+        db,
+      ).getOrganization(ctx(orgId));
+      if (!workflowRevision)
+        throw new Error('Organization workflow was not initialized');
+      await createEntryRepository(db).transition(
+        ctx(orgId),
+        entryA!.id,
+        'acceptance',
+        'pending',
+        'accepted',
+        'admin',
+        'Reviewed',
+        { statusCategory: 'accepted', workflowRevisionId: workflowRevision.id },
+      );
+      const [invoice] = await db
+        .insert(invoices)
+        .values({
+          organizationId: orgId,
+          eventId,
+          registrationGroupId: groupA!.id,
+          totalCents: 1000,
+          currency: 'EUR',
+          paymentReference: createPaymentReference(`history-${suffix}`),
+        })
+        .returning();
+      const payments = createInvoicePaymentRepository(db);
+      const payment = await payments.record(
+        ctx(orgId),
+        invoice!.id,
+        500,
+        'admin',
+        'Initial payment',
+      );
+      if (!payment) throw new Error('Initial payment was not recorded');
+      await payments.correct(
+        ctx(orgId),
+        (payment as { id: string }).id,
+        'admin',
+        'Corrected payment',
+      );
+      mailJobId = await enqueueMailOutbox(db, orgId, {
+        eventId,
+        registrationGroupId: groupA!.id,
+        templateKey: 'status-change',
+        templateVersion: 1,
+        locale: 'en',
+        recipient: 'family@example.test',
+        idempotencyKey: `history-${suffix}`,
+        variables: {},
+      });
+      await db
+        .update(emailOutbox)
+        .set({ createdAt: new Date('2030-01-01T00:00:00.000Z') })
+        .where(eq(emailOutbox.id, mailJobId));
+      await db
+        .update(invoicePaymentAuditEvents)
+        .set({ occurredAt: new Date('2030-01-01T00:00:01.000Z') })
+        .where(
+          and(
+            eq(invoicePaymentAuditEvents.organizationId, orgId),
+            eq(invoicePaymentAuditEvents.action, 'recorded'),
+          ),
+        );
+      await db
+        .update(invoicePaymentAuditEvents)
+        .set({ occurredAt: new Date('2030-01-01T00:00:02.000Z') })
+        .where(
+          and(
+            eq(invoicePaymentAuditEvents.organizationId, orgId),
+            eq(invoicePaymentAuditEvents.action, 'reversal'),
+          ),
+        );
+      await db
+        .update(entryAuditEvents)
+        .set({ occurredAt: new Date('2030-01-01T00:00:03.000Z') })
+        .where(
+          and(
+            eq(entryAuditEvents.organizationId, orgId),
+            eq(entryAuditEvents.entryId, entryA!.id),
+          ),
+        );
+      const query = {
+        page: 1,
+        pageSize: 25,
+        eventId,
+        sort: 'createdAt' as const,
+        direction: 'asc' as const,
+      };
+      const result = await createEntryRepository(db).listAdmin!(
+        ctx(orgId),
+        query,
+      );
+      const first = result.items.find((item) => item.id === entryA!.id)!;
+      const second = result.items.find((item) => item.id === entryB!.id)!;
+      expect(first.adminHistory?.map((item) => item.kind)).toEqual([
+        'email',
+        'payment',
+        'payment',
+        'entry',
+      ]);
+      expect(second.adminHistory?.some((item) => item.kind === 'email')).toBe(
+        false,
+      );
+      const times = first.adminHistory!.map((item) =>
+        Date.parse(item.occurredAt),
+      );
+      expect(times).toEqual([...times].sort((a, b) => a - b));
+      expect(
+        first.adminHistory?.filter((item) => item.kind === 'payment'),
+      ).toHaveLength(2);
+      expect(
+        first.adminHistory?.find(
+          (item) => item.kind === 'payment' && item.label === 'reversal',
+        ),
+      ).toBeDefined();
+      expect(
+        (
+          await createEntryRepository(db).listAdmin!(
+            ctx('00000000-0000-4000-8000-000000000000'),
+            query,
+          )
+        ).items,
+      ).toHaveLength(0);
+    } finally {
+      if (mailJobId) {
+        await db.execute(
+          sql`select graphile_worker.remove_job(${`mail-outbox:${mailJobId}`})`,
+        );
+        await db.delete(emailOutbox).where(eq(emailOutbox.id, mailJobId));
+      }
+      if (orgId) {
+        await db.delete(events).where(eq(events.organizationId, orgId));
+        await db.delete(organizations).where(eq(organizations.id, orgId));
+      }
+      await pool.end();
+    }
+  });
   it('isolates status configuration, transitions, and audits by event and organization', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();

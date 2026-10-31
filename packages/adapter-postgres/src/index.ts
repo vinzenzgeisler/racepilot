@@ -2034,6 +2034,7 @@ export const emailOutbox = pgTable(
     id: uuid('id').defaultRandom().primaryKey(),
     organizationId: uuid('organization_id').notNull(),
     eventId: uuid('event_id'),
+    registrationGroupId: uuid('registration_group_id'),
     templateKey: text('template_key').notNull(),
     templateVersion: integer('template_version').notNull(),
     templateVersionId: uuid('template_version_id'),
@@ -2073,6 +2074,15 @@ export const emailOutbox = pgTable(
       name: 'email_outbox_org_event_fk',
     }),
     foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'email_outbox_org_event_group_fk',
+    }),
+    foreignKey({
       columns: [
         t.organizationId,
         t.templateVersionId,
@@ -2103,6 +2113,9 @@ export const emailOutbox = pgTable(
     index('email_outbox_due_idx')
       .on(t.availableAt)
       .where(sql`${t.status} in ('pending','sending')`),
+    index('email_outbox_registration_group_idx')
+      .on(t.organizationId, t.eventId, t.registrationGroupId)
+      .where(sql`${t.registrationGroupId} is not null`),
   ],
 );
 export const emailDeliveries = pgTable(
@@ -2758,7 +2771,8 @@ async function attachAdminEntryDetails(
           registrationGroups,
           and(
             eq(registrationGroups.organizationId, emailOutbox.organizationId),
-            eq(registrationGroups.contactEmail, emailOutbox.recipient),
+            eq(registrationGroups.id, emailOutbox.registrationGroupId),
+            eq(registrationGroups.eventId, emailOutbox.eventId),
           ),
         )
         .innerJoin(
@@ -3330,6 +3344,7 @@ export function createEntryRepository(
               ctx.organizationId,
               {
                 eventId: row.eventId,
+                registrationGroupId: row.registrationGroupId,
                 templateKey: 'status-change',
                 templateVersion: 1,
                 locale: recipient.locale === 'en' ? 'en' : 'de',
@@ -3675,6 +3690,7 @@ export type MailOutboxExecutor = Pick<
 >;
 export interface NewMailOutboxMessage {
   eventId?: string | null;
+  registrationGroupId?: string | null;
   templateKey: string;
   templateVersion: number;
   templateVersionId?: string | null;
@@ -3696,6 +3712,7 @@ export async function enqueueMailOutbox(
     .values({
       organizationId: organization,
       eventId: input.eventId ?? null,
+      registrationGroupId: input.registrationGroupId ?? null,
       templateKey: input.templateKey,
       templateVersion: input.templateVersion,
       templateVersionId: input.templateVersionId ?? null,
@@ -4530,6 +4547,7 @@ export function createPublicRegistrationService(
           ctx.organizationId,
           {
             eventId: event.id,
+            registrationGroupId: group!.id,
             templateKey: 'verification',
             templateVersion: template?.version ?? 1,
             templateVersionId: template?.id ?? null,

@@ -118,9 +118,7 @@ export function AdminEntries({
       if (
         !items.length ||
         (event.target instanceof HTMLElement &&
-          ['INPUT', 'SELECT', 'TEXTAREA', 'BUTTON'].includes(
-            event.target.tagName,
-          ))
+          ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName))
       )
         return;
       const index = items.findIndex((item) => item.id === selected?.id);
@@ -135,10 +133,16 @@ export function AdminEntries({
             `[data-entry-action="${items[next]!.id}"]`,
           )
           ?.click();
-      } else if (event.key === 'Enter' && selected) {
-        document
-          .querySelector<HTMLButtonElement>('[data-selected-entry]')
-          ?.click();
+      } else if (event.key === 'Escape' && selected) {
+        setSelected(null);
+      } else if (event.key === 'Enter') {
+        const focusedAction = (
+          event.target as HTMLElement | null
+        )?.closest<HTMLButtonElement>('[data-entry-action]');
+        (
+          focusedAction ??
+          document.querySelector<HTMLButtonElement>('[data-selected-entry]')
+        )?.click();
       }
     };
     document.addEventListener('keydown', handleKeys);
@@ -736,20 +740,6 @@ export function AdminEntries({
                               {hint.key.replaceAll('_', ' ').toUpperCase()}
                             </small>
                           ))}
-                        <button
-                          className="link-button"
-                          data-selected-entry={
-                            selected?.id === entry.id ? true : undefined
-                          }
-                          data-entry-action={entry.id}
-                          type="button"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            void openEntry(entry.id);
-                          }}
-                        >
-                          {entry.id}
-                        </button>
                       </td>
                       <td data-priority="2">
                         {entry.adminDetails?.eventClass.name ??
@@ -798,24 +788,16 @@ export function AdminEntries({
                         <div className="entry-row-actions">
                           <button
                             type="button"
+                            data-selected-entry={
+                              selected?.id === entry.id ? true : undefined
+                            }
+                            data-entry-action={entry.id}
                             onClick={() => void openEntry(entry.id)}
                           >
                             {entry.statusProjection?.dimensions.find(
                               (item) => item.nextAction,
                             )?.nextAction?.label.de ?? 'Öffnen'}
                           </button>
-                          <details>
-                            <summary aria-label="Weitere Aktionen">⋯</summary>
-                            <div role="menu">
-                              <button
-                                type="button"
-                                role="menuitem"
-                                onClick={() => void openEntry(entry.id)}
-                              >
-                                Details öffnen
-                              </button>
-                            </div>
-                          </details>
                         </div>
                       </td>
                       <td data-priority="4">
@@ -977,17 +959,15 @@ export function AdminEntries({
                   </button>
                 );
               })}
-            <button
-              type="button"
-              disabled={
-                busy ||
-                !reason.trim() ||
-                selected.verificationStatus === 'verified'
-              }
-              onClick={() => void transition('verification', 'verified')}
-            >
-              Mark verified
-            </button>
+            {selected.verificationStatus !== 'verified' && (
+              <button
+                type="button"
+                disabled={busy || !reason.trim()}
+                onClick={() => void transition('verification', 'verified')}
+              >
+                Mark verified
+              </button>
+            )}
           </div>
           <section className="admin-documents" aria-label="Unterlagen">
             <h4>

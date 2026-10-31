@@ -141,6 +141,13 @@
       "when": 1793446468827,
       "tag": "0019_person_country",
       "breakpoints": false
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793446468828,
+      "tag": "0020_email_outbox_registration_group",
+      "breakpoints": false
     }
   ]
 }
