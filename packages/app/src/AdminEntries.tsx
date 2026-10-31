@@ -83,10 +83,19 @@ function isCurrent(
   return gate.generation === generation && !controller.signal.aborted;
 }
 
-export function AdminEntries() {
+export function AdminEntries({
+  onSelectionChange,
+  eventId: sharedEventId,
+  onEventChange: onSharedEventChange,
+}: {
+  onSelectionChange?: (entry: Entry | null) => void;
+  eventId?: string;
+  onEventChange?: (id: string) => void;
+} = {}) {
   const [apiState, setApiState] = useState<ApiState>('loading');
   const [events, setEvents] = useState<Event[]>([]);
-  const [eventId, setEventId] = useState('');
+  const [localEventId, setLocalEventId] = useState('');
+  const eventId = sharedEventId ?? localEventId;
   const [workflow, setWorkflow] = useState<WorkflowView | null>(null);
   const [items, setItems] = useState<Entry[]>([]);
   const [total, setTotal] = useState(0);
@@ -100,6 +109,7 @@ export function AdminEntries() {
     [],
   );
   const [selected, setSelected] = useState<Entry | null>(null);
+  useEffect(() => onSelectionChange?.(selected), [onSelectionChange, selected]);
   const [reason, setReason] = useState('');
   const [actionError, setActionError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -368,7 +378,8 @@ export function AdminEntries() {
 
   function changeEvent(nextEventId: string) {
     invalidateContextRequests();
-    setEventId(nextEventId);
+    if (onSharedEventChange) onSharedEventChange(nextEventId);
+    else setLocalEventId(nextEventId);
     setPage(1);
     setDraft({ ...initialQuery });
     setApplied({ ...initialQuery });
@@ -509,7 +520,7 @@ export function AdminEntries() {
                 onChange={(e) =>
                   setDraft((value) => ({ ...value, search: e.target.value }))
                 }
-                placeholder="Name or entry ID"
+                placeholder="Startnummer, Name oder Nennungs-ID"
               />
             </label>
             <label>
@@ -546,31 +557,39 @@ export function AdminEntries() {
             <table>
               <thead>
                 <tr>
-                  <th>Entry</th>
-                  <th>Class</th>
-                  <th>Acceptance</th>
-                  <th>Verification</th>
-                  <th>Received</th>
+                  <th data-priority="1">Entry</th>
+                  <th data-priority="2">Class</th>
+                  <th data-priority="1">Acceptance</th>
+                  <th data-priority="2">Verification</th>
+                  <th data-priority="4">Received</th>
                 </tr>
               </thead>
               <tbody>
                 {apiState === 'ready' &&
                   items.map((entry) => (
                     <tr key={entry.id}>
-                      <td>
+                      <td data-priority="1">
+                        {entry.requestedStartNumber ? (
+                          <strong className="app-start-number">
+                            {entry.requestedStartNumber}
+                          </strong>
+                        ) : null}
                         <button
                           className="link-button"
+                          data-selected-entry={
+                            selected?.id === entry.id ? true : undefined
+                          }
                           type="button"
                           onClick={() => void openEntry(entry.id)}
                         >
                           {entry.id}
                         </button>
                       </td>
-                      <td>
+                      <td data-priority="2">
                         {classes.find((item) => item.id === entry.classId)
                           ?.name ?? entry.classId}
                       </td>
-                      <td>
+                      <td data-priority="1">
                         <StatusBadge
                           status={workflow?.statuses.find(
                             (item) => item.key === entry.acceptanceStatus,
@@ -578,8 +597,10 @@ export function AdminEntries() {
                           fallback={entry.acceptanceStatus}
                         />
                       </td>
-                      <td>{entry.verificationStatus}</td>
-                      <td>{new Date(entry.createdAt).toLocaleString()}</td>
+                      <td data-priority="2">{entry.verificationStatus}</td>
+                      <td data-priority="4">
+                        {new Date(entry.createdAt).toLocaleString()}
+                      </td>
                     </tr>
                   ))}
                 {apiState === 'ready' && items.length === 0 && (
