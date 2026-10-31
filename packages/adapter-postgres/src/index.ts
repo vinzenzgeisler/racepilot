@@ -2596,8 +2596,8 @@ async function projectEntryRows(
       acceptanceStatus: row.acceptanceStatus,
       paymentStatus,
       technicalStatus:
-        stateMap.get(`${row.id}:technical_inspection`) ?? 'pending',
-      waiverStatus: stateMap.get(`${row.id}:waiver`) ?? 'f_pending',
+        stateMap.get(`${row.id}:technical_inspection`) ?? 'not_relevant',
+      waiverStatus: stateMap.get(`${row.id}:waiver`) ?? 'not_relevant',
       emailStatus: row.verificationStatus,
       config: configMap.get(row.eventId) ?? defaultEntryStatusDimensionConfig,
       hints,

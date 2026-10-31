@@ -1023,8 +1023,9 @@ export function projectEntryStatuses(input: {
   ];
   const documents = dimensions.filter(
     (item) =>
-      (item.key === 'technical_inspection' || item.key === 'waiver') &&
-      item.required,
+      ['payment', 'technical_inspection', 'waiver'].includes(item.key) &&
+      item.required &&
+      item.meaning !== 'not_relevant',
   );
   const hints = (['double_starter', 'passenger', 'late_entry'] as const).map(
     (key) => ({
