@@ -133,3 +133,25 @@ email/event enumeration. The current registration record requires date of birth
 for age/guardian policy checks; F1 marks it configurable. Until the existing
 person/age domain invariant is redesigned, the UI keeps this core field
 required, rather than creating registrations with unverified age eligibility.
+
+Custom form fields are configured as event overrides or organization defaults
+with stable keys, localized labels, and schema-checked type-specific options.
+At submission, the server re-resolves current field definitions, checks answer
+types/requiredness/options, rejects unknown keys, and stores normalized answers
+on the tenant/event-bound registration group. File fields accept only signature-
+checked PNG/JPEG/WebP images. Uploads are event/field bound, use a random
+one-time token stored only as SHA-256, expire after seven days, and become
+downloadable only after attachment to a submitted entry group. Admin retrieval
+requires `entry:read` and streams as an octet-stream attachment with `nosniff`;
+there is no public read route for participant uploads. Draft persistence strips
+upload bearer tokens from JSON; resuming a draft atomically rotates the stored
+digest and returns a replacement token. Draft and upload tokens are each
+single-use, so a stale browser draft cannot replay a prior upload credential.
+
+The public form payload includes the event's registration-close timestamp and
+class pricing rules selected by both trusted organization and event. The
+participant sidebar calculates the current estimate using the same base fee,
+additional-entry adjustment, and early-bird rule as final server pricing. If no
+price rule exists for a selected class, it reports that price is unavailable
+rather than showing a guessed amount. A null registration-close time is
+presented as no deadline configured.

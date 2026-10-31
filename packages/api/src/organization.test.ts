@@ -479,6 +479,105 @@ describe('registration administration and public endpoints', () => {
     expect(reads).toEqual([logoA]);
   });
 
+  it('accepts custom-field uploads only for configured file fields and returns a one-time upload token', async () => {
+    const api = deps();
+    const objectId = crypto.randomUUID();
+    const registered: unknown[] = [];
+    let writes = 0;
+    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    api.publicRegistration = {
+      getForm: async () => ({
+        registrationFormConfig: {
+          ...defaultRegistrationFormConfig,
+          customFields: [
+            {
+              key: 'vehicle_photo',
+              type: 'file',
+              required: true,
+              label: { de: 'Bild', en: 'Photo' },
+            },
+          ],
+        },
+      }),
+      registerCustomFieldUpload: async (...args) => {
+        registered.push(args);
+        return true;
+      },
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    api.objectStorage = {
+      put: async ({ organizationId, body, contentType }) => {
+        writes++;
+        return {
+          organizationId,
+          objectId,
+          size: body.byteLength,
+          contentType,
+          sha256: 'a'.repeat(64),
+        };
+      },
+      get: async () => null,
+      delete: async () => undefined,
+    };
+    const form = new FormData();
+    form.set(
+      'file',
+      new Blob([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], {
+        type: 'image/png',
+      }),
+      'photo.png',
+    );
+    const response = await createApp(api).request(
+      `/public/organizations/${config.organizationId}/events/event/registration/custom-fields/vehicle_photo/upload`,
+      { method: 'POST', body: form },
+      { incoming: { socket: { remoteAddress: '192.0.2.1' } } },
+    );
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ objectId });
+    expect(registered).toHaveLength(1);
+    expect((registered[0] as unknown[])[2]).toBe('vehicle_photo');
+    expect((registered[0] as unknown[])[4]).toMatch(/^[a-f0-9]{64}$/);
+    const rejected = await createApp(api).request(
+      `/public/organizations/${config.organizationId}/events/event/registration/custom-fields/private_photo/upload`,
+      { method: 'POST', body: form },
+      { incoming: { socket: { remoteAddress: '192.0.2.1' } } },
+    );
+    expect(rejected.status).toBe(404);
+    expect(writes).toBe(1);
+    expect(registered).toHaveLength(1);
+  });
+
+  it('keeps custom field files private unless bound to a tenant event entry', async () => {
+    const api = deps();
+    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    api.memberships = {
+      resolvePermissions: async () => new Set(['entry:read']),
+    };
+    let reads = 0;
+    api.publicRegistration = {
+      getForm: async () => null,
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+      canDownloadCustomFieldUpload: async () => false,
+    };
+    api.objectStorage = {
+      put: async () => {
+        throw new Error('not used');
+      },
+      get: async () => {
+        reads++;
+        return null;
+      },
+      delete: async () => undefined,
+    };
+    const response = await createApp(api).request(
+      `/admin/events/${crypto.randomUUID()}/registration-form-uploads/${crypto.randomUUID()}`,
+    );
+    expect(response.status).toBe(404);
+    expect(reads).toBe(0);
+  });
+
   it('requires organization update permission before registration asset uploads', async () => {
     const api = deps();
     api.memberships = {

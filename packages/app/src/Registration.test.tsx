@@ -2,8 +2,15 @@
 import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { standardRegistrationForm } from '@racepilot/contracts';
-import { Registration, RegistrationVerification } from './Registration.js';
+import {
+  defaultRegistrationFormConfig,
+  standardRegistrationForm,
+} from '@racepilot/contracts';
+import {
+  estimateRegistrationTotal,
+  Registration,
+  RegistrationVerification,
+} from './Registration.js';
 import './styles.css';
 
 const terms = [
@@ -29,6 +36,28 @@ const registrationForm = {
     slug: 'demo',
     name: 'Demo Event',
     startsOn: '2030-01-01',
+    registrationClosesAt: '2029-12-01T18:00:00.000Z',
+  },
+  currency: 'EUR',
+  pricing: [
+    {
+      classId: '30000000-0000-4000-8000-000000000001',
+      baseCents: 12500,
+      additionalEntryAdjustmentCents: -1000,
+      earlyBirdDeadline: null,
+      earlyBirdDiscountCents: 0,
+    },
+  ],
+  registrationFormConfig: {
+    ...defaultRegistrationFormConfig,
+    customFields: [
+      {
+        key: 'club_name',
+        type: 'text',
+        required: true,
+        label: { de: 'Verein', en: 'Club' },
+      },
+    ],
   },
   classes: [
     {
@@ -51,6 +80,29 @@ const registrationForm = {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('public registration UI', () => {
+  it('estimates fees from event class pricing rules without inventing missing prices', () => {
+    const classId = 'class-a';
+    const rules = [
+      {
+        classId,
+        baseCents: 10000,
+        additionalEntryAdjustmentCents: -2000,
+        earlyBirdDeadline: '2030-01-01T12:00:00.000Z',
+        earlyBirdDiscountCents: 1000,
+      },
+    ];
+    expect(
+      estimateRegistrationTotal(
+        [{ classId }, { classId }],
+        rules,
+        new Date('2030-01-01T11:00:00.000Z'),
+      ),
+    ).toBe(16000);
+    expect(
+      estimateRegistrationTotal([{ classId: 'unpriced' }], rules),
+    ).toBeNull();
+  });
+
   it('renders the versioned form with accessible labels and conditionally requests a guardian', async () => {
     vi.stubGlobal(
       'fetch',
@@ -71,6 +123,9 @@ describe('public registration UI', () => {
         ),
       );
       expect(container.textContent).toContain('Demo Event');
+      expect(container.textContent).toContain('Deadline');
+      expect(container.textContent).toContain('Select a class');
+      expect(container.textContent).toContain('Club');
       expect(
         Array.from(container.querySelectorAll('label')).some((label) =>
           label.textContent?.includes('First name'),

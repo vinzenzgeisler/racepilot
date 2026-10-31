@@ -137,11 +137,11 @@
       "id": "registration_group",
       "kind": "table",
       "tenantKey": "organization_id + event_id",
-      "isolation": "Composite keys bind event and person ownership to the same organization.",
+      "isolation": "Composite keys bind event and person ownership to the same organization. Custom field answers are revalidated against the current tenant/event form configuration and store no raw file-upload token.",
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "isolates registration resources and serializes duplicate start numbers"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -381,7 +381,7 @@
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -393,7 +393,7 @@
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -405,7 +405,7 @@
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -417,7 +417,7 @@
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -429,7 +429,7 @@
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -453,7 +453,7 @@
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -465,7 +465,7 @@
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -501,7 +501,7 @@
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
-          "name": "submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation"
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     },
@@ -957,7 +957,7 @@
       "id": "registration-form-draft",
       "kind": "table",
       "tenantKey": "organization_id + event_id + normalized email; opaque token hash",
-      "isolation": "Composite tenant/event FK, org-scoped reads, SHA-256-only token storage, seven-day expiry, atomic one-time consumption, and replacement-token rotation on save.",
+      "isolation": "Composite tenant/event FK, org-scoped reads, SHA-256-only resume-token storage, seven-day expiry, atomic one-time consumption, replacement-token rotation on save; file-upload bearer tokens are stripped from draft JSON and rotated on resume.",
       "negativeTests": [
         {
           "file": "packages/adapter-postgres/src/integration.test.ts",
@@ -1038,6 +1038,46 @@
         {
           "file": "packages/api/src/organization.test.ts",
           "name": "rejects requested-number lookup under a forged organization"
+        }
+      ]
+    },
+    {
+      "id": "registration-form-upload",
+      "kind": "table",
+      "tenantKey": "organization_id + event_id + field_key + object_id; SHA-256 upload token hash",
+      "isolation": "Composite event and registration-group foreign keys bind uploads to one tenant/event; token is one-time, stored only as SHA-256, and expires; unattached files are private and never publicly readable.",
+      "negativeTests": [
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
+        }
+      ]
+    },
+    {
+      "id": "public-registration-custom-field-upload",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + event resolved by route slug + config-declared file field",
+      "isolation": "Shared org/event/IP rate limits, signature-checked raster formats, server-side config type validation, tenant-scoped storage, random upload token returned once and persisted only as a digest.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "accepts custom-field uploads only for configured file fields and returns a one-time upload token"
+        }
+      ]
+    },
+    {
+      "id": "admin-registration-custom-field-download",
+      "kind": "route",
+      "tenantKey": "server-resolved organizationId + eventId + consumed upload bound to registration group",
+      "isolation": "Requires entry:read; adapter verifies the uploaded object is bound to the requested tenant/event group before storage access; response is an attachment with octet-stream and nosniff.",
+      "negativeTests": [
+        {
+          "file": "packages/api/src/organization.test.ts",
+          "name": "keeps custom field files private unless bound to a tenant event entry"
+        },
+        {
+          "file": "packages/adapter-postgres/src/integration.test.ts",
+          "name": "submits public registrations atomically, validates custom fields and files, and verifies tenant isolation"
         }
       ]
     }

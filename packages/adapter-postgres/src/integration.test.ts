@@ -50,6 +50,7 @@ import {
   eventConsentTermsAudit,
   groupEmailVerifications,
   registrationFormDrafts,
+  registrationFormUploads,
   registrationFormConfigAudit,
   saveMailTemplateVersion,
   enqueueMailOutbox,
@@ -2134,7 +2135,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
     }
   });
 
-  it('submits public registrations atomically and idempotently, then verifies one-time tokens with Cloud fixture tenant isolation', async () => {
+  it('submits public registrations atomically, validates custom fields and files, and verifies tenant isolation', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();
     const [org] = await db
@@ -2151,7 +2152,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
     let foreignOrgId: string | null = null;
     try {
       const termText = 'Terms configured by the event organizer.';
-      const { createHash } = await import('node:crypto');
+      const { createHash, randomBytes } = await import('node:crypto');
       const termHash = createHash('sha256').update(termText).digest('hex');
       const [event] = await db
         .insert(events)
@@ -2162,7 +2163,36 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           name: 'E2E Event',
           startsOn: '2030-10-20',
           endsOn: '2030-10-21',
+          registrationClosesAt: new Date('2030-10-01T23:59:00.000Z'),
           status: 'open',
+          registrationFormConfig: {
+            customFields: [
+              {
+                key: 'club_name',
+                type: 'text',
+                required: true,
+                label: { de: 'Verein', en: 'Club' },
+              },
+              {
+                key: 'vehicle_kind',
+                type: 'select',
+                required: true,
+                label: { de: 'Typ', en: 'Type' },
+                options: [
+                  {
+                    value: 'classic',
+                    label: { de: 'Klassisch', en: 'Classic' },
+                  },
+                ],
+              },
+              {
+                key: 'vehicle_photo',
+                type: 'file',
+                required: false,
+                label: { de: 'Fahrzeugbild', en: 'Vehicle image' },
+              },
+            ],
+          },
           consentTerms: [
             {
               key: 'terms',
@@ -2287,6 +2317,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         formVersion: '1.0' as const,
         eventSlug: event!.slug,
         language: 'en' as const,
+        customAnswers: { club_name: 'MSC', vehicle_kind: 'classic' },
         person: { ...person, email: person.email ?? 'family@example.test' },
         entries: classes.map((eventClass, index) => ({
           classId: eventClass.id,
@@ -2351,11 +2382,56 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           .where(eq(entries.organizationId, foreignOrg!.id)),
       ).toHaveLength(0);
       const submissionId = crypto.randomUUID();
-      const body = input(submissionId, {
+      const body: ReturnType<typeof input> & {
+        customAnswers?: Record<
+          string,
+          string | boolean | { objectId: string; uploadToken: string }
+        >;
+      } = input(submissionId, {
         firstName: 'Avery',
         lastName: 'Driver',
         dateOfBirth: '1990-01-01',
       });
+      const uploadObjectId = crypto.randomUUID();
+      const uploadToken = randomBytes(32).toString('base64url');
+      const uploadTokenHash = createHash('sha256')
+        .update(uploadToken)
+        .digest('hex');
+      expect(
+        await service.registerCustomFieldUpload(
+          ctx,
+          event!.slug,
+          'vehicle_photo',
+          uploadObjectId,
+          uploadTokenHash,
+        ),
+      ).toBe(true);
+      expect(
+        await service.registerCustomFieldUpload(
+          ctx,
+          event!.slug,
+          'unknown_field',
+          crypto.randomUUID(),
+          uploadTokenHash,
+        ),
+      ).toBe(false);
+      body.customAnswers = {
+        club_name: 'MSC Beispielstadt',
+        vehicle_kind: 'classic',
+        vehicle_photo: { objectId: uploadObjectId, uploadToken },
+      };
+      const publicForm = await service.getForm(ctx, event!.slug);
+      expect(publicForm?.event.registrationClosesAt).toBe(
+        '2030-10-01T23:59:00.000Z',
+      );
+      expect(publicForm?.pricing).toHaveLength(2);
+      expect(publicForm?.pricing[0]).toMatchObject({ baseCents: 5000 });
+      await expect(
+        service.submit(ctx, event!.slug, {
+          ...body,
+          customAnswers: { ...body.customAnswers, vehicle_kind: 'forged' },
+        }),
+      ).rejects.toThrow('Registration unavailable');
       expect(
         await Promise.all([
           service.submit(ctx, event!.slug, body),
@@ -2399,6 +2475,35 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         .from(registrationGroups)
         .where(eq(registrationGroups.organizationId, org!.id));
       expect(groups).toHaveLength(1);
+      expect(groups[0]!.customAnswers).toEqual({
+        club_name: 'MSC Beispielstadt',
+        vehicle_kind: 'classic',
+        vehicle_photo: { objectId: uploadObjectId },
+      });
+      const storedCustomUpload = (
+        await db
+          .select()
+          .from(registrationFormUploads)
+          .where(eq(registrationFormUploads.objectId, uploadObjectId))
+      )[0]!;
+      expect(storedCustomUpload).toMatchObject({
+        registrationGroupId: groups[0]!.id,
+        consumedAt: expect.any(Date),
+      });
+      expect(
+        await service.canDownloadCustomFieldUpload(
+          ctx,
+          event!.id,
+          uploadObjectId,
+        ),
+      ).toBe(true);
+      expect(
+        await service.canDownloadCustomFieldUpload(
+          { ...ctx, organizationId: organizationId(foreignOrg!.id) },
+          event!.id,
+          uploadObjectId,
+        ),
+      ).toBe(false);
       const savedEntries = await db
         .select()
         .from(entries)
@@ -2473,15 +2578,14 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         entryCount: 2,
       });
       // A different person may use the same contact address with the default organization policy.
-      await service.submit(
-        ctx,
-        event!.slug,
-        input(crypto.randomUUID(), {
+      await service.submit(ctx, event!.slug, {
+        ...input(crypto.randomUUID(), {
           firstName: 'Casey',
           lastName: 'Driver',
           dateOfBirth: '2000-02-02',
         }),
-      );
+        customAnswers: { club_name: 'MSC', vehicle_kind: 'classic' },
+      });
       const newSettings = {
         sharedContactEmail: 'disallowed' as const,
         minimumAge: 16,
@@ -2833,6 +2937,16 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           startsOn: '2030-01-01',
           endsOn: '2030-01-02',
           status: 'open',
+          registrationFormConfig: {
+            customFields: [
+              {
+                key: 'photo',
+                type: 'file',
+                required: true,
+                label: { de: 'Foto', en: 'Photo' },
+              },
+            ],
+          },
         },
         {
           organizationId: orgB!.id,
@@ -2866,12 +2980,27 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         vehicles: [],
         accepted: {},
       };
+      const { createHash, randomBytes } = await import('node:crypto');
+      const uploadToken = randomBytes(32).toString('base64url');
+      const objectId = crypto.randomUUID();
+      await db.insert(registrationFormUploads).values({
+        organizationId: orgA!.id,
+        eventId: eventA!.id,
+        fieldKey: 'photo',
+        objectId,
+        uploadTokenHash: createHash('sha256').update(uploadToken).digest('hex'),
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      const draftWithFile = {
+        ...draft,
+        customAnswers: { photo: { objectId, uploadToken } },
+      };
       await service.saveDraft(
         context(orgA!.id),
         eventA!.slug,
         draft.email,
         'en',
-        draft,
+        draftWithFile,
       );
       const record = (
         await db
@@ -2889,10 +3018,31 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         '#token='.length,
       );
       expect(record.resumeTokenHash).not.toBe(rawToken);
+      expect(record.draftData.customAnswers).toEqual({ photo: { objectId } });
+      expect(JSON.stringify(record.draftData)).not.toContain(uploadToken);
       expect(await service.resumeDraft(context(orgB!.id), rawToken)).toBeNull();
-      expect(
-        await service.resumeDraft(context(orgA!.id), rawToken),
-      ).toMatchObject({ eventSlug: eventA!.slug, language: 'en', draft });
+      const resumed = await service.resumeDraft(context(orgA!.id), rawToken);
+      expect(resumed).toMatchObject({
+        eventSlug: eventA!.slug,
+        language: 'en',
+      });
+      const resumedAnswers = resumed!.draft.customAnswers as Record<
+        string,
+        { objectId: string; uploadToken: string }
+      >;
+      expect(resumedAnswers.photo!.objectId).toBe(objectId);
+      expect(resumedAnswers.photo!.uploadToken).not.toBe(uploadToken);
+      const rotatedUpload = (
+        await db
+          .select()
+          .from(registrationFormUploads)
+          .where(eq(registrationFormUploads.objectId, objectId))
+      )[0]!;
+      expect(rotatedUpload.uploadTokenHash).toBe(
+        createHash('sha256')
+          .update(resumedAnswers.photo!.uploadToken)
+          .digest('hex'),
+      );
       expect(await service.resumeDraft(context(orgA!.id), rawToken)).toBeNull();
       await service.saveDraft(
         context(orgA!.id),
