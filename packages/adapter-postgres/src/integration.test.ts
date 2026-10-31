@@ -42,12 +42,15 @@ import {
   createInvoiceRepository,
   createPublicRegistrationService,
   createRegistrationSettingsRepository,
+  createRegistrationFormConfigRepository,
   createEntryWorkflowRepository,
   createEntryStatusDimensionRepository,
   createEventConsentRepository,
   registrationSettingsAudit,
   eventConsentTermsAudit,
   groupEmailVerifications,
+  registrationFormDrafts,
+  registrationFormConfigAudit,
   saveMailTemplateVersion,
   enqueueMailOutbox,
   emailOutbox,
@@ -2719,6 +2722,206 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       await pool.end();
     }
   });
+  it('audits organization and event form configuration and rejects a foreign event override', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    const [orgA, orgB] = await db
+      .insert(organizations)
+      .values([
+        {
+          slug: `form-a-${suffix}`,
+          name: 'Form A',
+          timezone: 'UTC',
+          locale: 'en',
+        },
+        {
+          slug: `form-b-${suffix}`,
+          name: 'Form B',
+          timezone: 'UTC',
+          locale: 'en',
+        },
+      ])
+      .returning();
+    const [eventA, eventB] = await db
+      .insert(events)
+      .values([
+        {
+          organizationId: orgA!.id,
+          slug: `form-${suffix}`,
+          name: 'Form event A',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-02',
+          status: 'open',
+        },
+        {
+          organizationId: orgB!.id,
+          slug: `form-${suffix}`,
+          name: 'Form event B',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-02',
+        },
+      ])
+      .returning();
+    const ctx = createRequestContext({
+      deploymentMode: 'community',
+      organizationId: organizationId(orgA!.id),
+      permissions: new Set(['organization:update', 'event:write']),
+      capabilities: new Set(),
+      correlationId: suffix,
+    });
+    try {
+      const repo = createRegistrationFormConfigRepository(db);
+      const orgConfig = {
+        branding: { primaryColor: '#1F4AA8' },
+        customFields: [],
+      };
+      const eventConfig = { branding: { accentColor: '#F5C518' } };
+      await repo.updateOrganization(ctx, orgConfig, 'admin-a');
+      await repo.updateEvent(ctx, eventA!.id, eventConfig, 'admin-a');
+      expect(await repo.getEvent(ctx, eventA!.id)).toEqual(eventConfig);
+      expect(await repo.getEvent(ctx, eventB!.id)).toBeNull();
+      const publicForm = await createPublicRegistrationService(db, {
+        canonicalBaseUrl: 'https://entries.example.test',
+      }).getForm(ctx, eventA!.slug);
+      expect(publicForm?.registrationFormConfig).toMatchObject({
+        branding: { primaryColor: '#1F4AA8', accentColor: '#F5C518' },
+      });
+      const audit = await db
+        .select()
+        .from(registrationFormConfigAudit)
+        .where(eq(registrationFormConfigAudit.organizationId, orgA!.id));
+      expect(audit).toHaveLength(2);
+      expect(audit.map((row) => row.actor)).toEqual(['admin-a', 'admin-a']);
+    } finally {
+      await db
+        .delete(events)
+        .where(inArray(events.id, [eventA!.id, eventB!.id]));
+      await db
+        .delete(organizations)
+        .where(inArray(organizations.id, [orgA!.id, orgB!.id]));
+      await pool.end();
+    }
+  });
+
+  it('stores registration drafts with one-time hashed tenant-scoped resume links', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    const [orgA, orgB] = await db
+      .insert(organizations)
+      .values([
+        {
+          slug: `draft-a-${suffix}`,
+          name: 'Draft A',
+          timezone: 'UTC',
+          locale: 'en',
+        },
+        {
+          slug: `draft-b-${suffix}`,
+          name: 'Draft B',
+          timezone: 'UTC',
+          locale: 'en',
+        },
+      ])
+      .returning();
+    const [eventA, eventB] = await db
+      .insert(events)
+      .values([
+        {
+          organizationId: orgA!.id,
+          slug: `event-${suffix}`,
+          name: 'Draft event A',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-02',
+          status: 'open',
+        },
+        {
+          organizationId: orgB!.id,
+          slug: `event-${suffix}`,
+          name: 'Draft event B',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-02',
+          status: 'open',
+        },
+      ])
+      .returning();
+    const context = (id: string) =>
+      createRequestContext({
+        deploymentMode: 'community',
+        organizationId: organizationId(id),
+        permissions: new Set(),
+        capabilities: new Set(),
+        correlationId: suffix,
+      });
+    try {
+      const service = createPublicRegistrationService(db, {
+        canonicalBaseUrl: 'https://entries.example.test',
+      });
+      const draft = {
+        firstName: 'Alex',
+        lastName: 'Example',
+        email: `alex-${suffix}@example.test`,
+        dateOfBirth: '',
+        guardianName: '',
+        guardianEmail: '',
+        vehicles: [],
+        accepted: {},
+      };
+      await service.saveDraft(
+        context(orgA!.id),
+        eventA!.slug,
+        draft.email,
+        'en',
+        draft,
+      );
+      const record = (
+        await db
+          .select()
+          .from(registrationFormDrafts)
+          .where(eq(registrationFormDrafts.organizationId, orgA!.id))
+      )[0]!;
+      const message = (
+        await db
+          .select()
+          .from(emailOutbox)
+          .where(eq(emailOutbox.organizationId, orgA!.id))
+      )[0]!;
+      const rawToken = new URL(message.variables.resumeUrl!).hash.slice(
+        '#token='.length,
+      );
+      expect(record.resumeTokenHash).not.toBe(rawToken);
+      expect(await service.resumeDraft(context(orgB!.id), rawToken)).toBeNull();
+      expect(
+        await service.resumeDraft(context(orgA!.id), rawToken),
+      ).toMatchObject({ eventSlug: eventA!.slug, language: 'en', draft });
+      expect(await service.resumeDraft(context(orgA!.id), rawToken)).toBeNull();
+      await service.saveDraft(
+        context(orgA!.id),
+        eventA!.slug,
+        draft.email,
+        'en',
+        draft,
+      );
+      const rotated = (
+        await db
+          .select()
+          .from(registrationFormDrafts)
+          .where(eq(registrationFormDrafts.organizationId, orgA!.id))
+      )[0]!;
+      expect(rotated.resumeTokenHash).not.toBe(record.resumeTokenHash);
+    } finally {
+      await db
+        .delete(emailOutbox)
+        .where(inArray(emailOutbox.organizationId, [orgA!.id, orgB!.id]));
+      await db
+        .delete(events)
+        .where(inArray(events.id, [eventA!.id, eventB!.id]));
+      await db
+        .delete(organizations)
+        .where(inArray(organizations.id, [orgA!.id, orgB!.id]));
+      await pool.end();
+    }
+  });
+
   it('persists tenant-bound, versioned module activation with audit and no data loss', async () => {
     const { db, pool } = await createDatabase(url!);
     const suffix = crypto.randomUUID();

@@ -108,6 +108,10 @@ export const organizations = pgTable(
         guardianRequiredBelowAge: 18,
         maximumClassesPerGroup: 8,
       }),
+    registrationFormConfig: jsonb('registration_form_config').$type<Record<
+      string,
+      unknown
+    > | null>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -163,10 +167,15 @@ export const events = pgTable(
           language: 'de' | 'en';
           text: string;
           hash: string;
+          required?: boolean;
         }>
       >()
       .notNull()
       .default([]),
+    registrationFormConfig: jsonb('registration_form_config').$type<Record<
+      string,
+      unknown
+    > | null>(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -992,6 +1001,37 @@ export const groupEmailVerifications = pgTable(
       .where(sql`${t.consumedAt} is null`),
   ],
 );
+export const registrationFormDrafts = pgTable(
+  'registration_form_draft',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    emailNormalized: text('email_normalized').notNull(),
+    recipientEmail: text('recipient_email').notNull(),
+    language: text('language').notNull(),
+    draftData: jsonb('draft_data').$type<Record<string, unknown>>().notNull(),
+    resumeTokenHash: text('resume_token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('registration_form_draft_scope_email_unique').on(
+      t.organizationId,
+      t.eventId,
+      t.emailNormalized,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'registration_form_draft_event_fk',
+    }).onDelete('cascade'),
+    index('registration_form_draft_expiry_idx').on(t.expiresAt),
+  ],
+);
 export const consentEvidence = pgTable(
   'consent_evidence',
   {
@@ -1056,6 +1096,32 @@ export const registrationSettingsAudit = pgTable(
       .notNull()
       .defaultNow(),
   },
+);
+export const registrationFormConfigAudit = pgTable(
+  'registration_form_config_audit',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id'),
+    actor: text('actor').notNull(),
+    beforeConfig: jsonb('before_config'),
+    afterConfig: jsonb('after_config').notNull(),
+    occurredAt: timestamp('occurred_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.organizationId],
+      foreignColumns: [organizations.id],
+      name: 'registration_form_config_audit_org_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'registration_form_config_audit_event_fk',
+    }).onDelete('cascade'),
+  ],
 );
 const uuidPattern =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -2019,7 +2085,7 @@ export const emailTemplateVersions = pgTable(
     }).onDelete('cascade'),
     check(
       'email_template_version_key_check',
-      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected','status-change')`,
+      sql`${t.templateKey} in ('verification','registration-resume','entry-received','accepted','rejected','status-change')`,
     ),
     check('email_template_version_version_check', sql`${t.version} > 0`),
     check(
@@ -2103,7 +2169,7 @@ export const emailOutbox = pgTable(
     check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
     check(
       'email_outbox_template_key_check',
-      sql`${t.templateKey} in ('verification','entry-received','accepted','rejected','status-change')`,
+      sql`${t.templateKey} in ('verification','registration-resume','entry-received','accepted','rejected','status-change')`,
     ),
     check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
     check(
@@ -3833,6 +3899,7 @@ export function createMailOutboxRepository(
     eventId: row.eventId,
     templateKey: row.templateKey as
       | 'verification'
+      | 'registration-resume'
       | 'entry-received'
       | 'accepted'
       | 'rejected'
@@ -4042,6 +4109,92 @@ export function createRegistrationSettingsRepository(db: Database) {
   };
 }
 
+export function createRegistrationFormConfigRepository(db: Database) {
+  return {
+    getOrganization: async (ctx: RequestContext) => {
+      const [row] = await db
+        .select({ config: organizations.registrationFormConfig })
+        .from(organizations)
+        .where(eq(organizations.id, ctx.organizationId));
+      return row?.config ?? null;
+    },
+    updateOrganization: async (
+      ctx: RequestContext,
+      config: Record<string, unknown>,
+      actor: string,
+    ) =>
+      db.transaction(async (tx) => {
+        const [before] = await tx
+          .select({ config: organizations.registrationFormConfig })
+          .from(organizations)
+          .where(eq(organizations.id, ctx.organizationId))
+          .for('update');
+        if (!before) return null;
+        const [after] = await tx
+          .update(organizations)
+          .set({ registrationFormConfig: config, updatedAt: new Date() })
+          .where(eq(organizations.id, ctx.organizationId))
+          .returning({ config: organizations.registrationFormConfig });
+        await tx.insert(registrationFormConfigAudit).values({
+          organizationId: ctx.organizationId,
+          actor,
+          beforeConfig: before.config,
+          afterConfig: config,
+        });
+        return after?.config ?? null;
+      }),
+    getEvent: async (ctx: RequestContext, eventId: string) => {
+      const [row] = await db
+        .select({ config: events.registrationFormConfig })
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.id, eventId),
+          ),
+        );
+      return row?.config ?? null;
+    },
+    updateEvent: async (
+      ctx: RequestContext,
+      eventId: string,
+      config: Record<string, unknown>,
+      actor: string,
+    ) =>
+      db.transaction(async (tx) => {
+        const [before] = await tx
+          .select({ config: events.registrationFormConfig })
+          .from(events)
+          .where(
+            and(
+              eq(events.organizationId, ctx.organizationId),
+              eq(events.id, eventId),
+            ),
+          )
+          .for('update');
+        if (!before) return null;
+        const [after] = await tx
+          .update(events)
+          .set({ registrationFormConfig: config, updatedAt: new Date() })
+          .where(
+            and(
+              eq(events.organizationId, ctx.organizationId),
+              eq(events.id, eventId),
+            ),
+          )
+          .returning({ config: events.registrationFormConfig });
+        await tx.insert(registrationFormConfigAudit).values({
+          organizationId: ctx.organizationId,
+          eventId,
+          actor,
+          beforeConfig: before.config,
+          afterConfig: config,
+        });
+        return after?.config ?? null;
+      }),
+  };
+}
+
 export interface PublicRegistrationPayload {
   submissionId: string;
   formVersion: '1.0';
@@ -4058,6 +4211,7 @@ export interface PublicRegistrationPayload {
   };
   entries: Array<{
     classId: string;
+    requestedStartNumber?: string | null | undefined;
     vehicle: {
       make: string;
       model: string;
@@ -4082,6 +4236,183 @@ export function createPublicRegistrationService(
   const hashToken = (token: string) =>
     createHash('sha256').update(token).digest('hex');
   return {
+    checkRequestedStartNumber: async (
+      ctx: RequestContext,
+      eventSlug: string,
+      input: string,
+    ) => {
+      let number: string;
+      try {
+        number = normalizeRequestedStartNumber(input)!;
+      } catch {
+        return { available: false };
+      }
+      const [event] = await db
+        .select({ id: events.id })
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.slug, eventSlug),
+            eq(events.status, 'open'),
+          ),
+        )
+        .limit(1);
+      if (!event) return null;
+      const [existing] = await db
+        .select({ id: entries.id })
+        .from(entries)
+        .where(
+          and(
+            eq(entries.organizationId, ctx.organizationId),
+            eq(entries.eventId, event.id),
+            eq(entries.requestedStartNumber, number),
+            sql`${entries.deletedAt} is null`,
+            sql`${entries.acceptanceStatus} <> 'withdrawn'`,
+          ),
+        )
+        .limit(1);
+      return { available: !existing };
+    },
+    saveDraft: async (
+      ctx: RequestContext,
+      eventSlug: string,
+      email: string,
+      language: 'de' | 'en',
+      draftData: Record<string, unknown>,
+    ) => {
+      const token = randomBytes(32).toString('base64url');
+      const tokenHash = hashToken(token);
+      const normalized = normalizeEmail(email);
+      const now = new Date();
+      const ttl = 7 * 24 * 60 * 60_000;
+      return db.transaction(async (tx) => {
+        const [event] = await tx
+          .select()
+          .from(events)
+          .where(
+            and(
+              eq(events.organizationId, ctx.organizationId),
+              eq(events.slug, eventSlug),
+              eq(events.status, 'open'),
+            ),
+          )
+          .limit(1)
+          .for('share');
+        if (
+          !event ||
+          (event.registrationClosesAt && event.registrationClosesAt <= now)
+        )
+          throw new Error('Registration unavailable');
+        await tx
+          .insert(registrationFormDrafts)
+          .values({
+            organizationId: ctx.organizationId,
+            eventId: event.id,
+            emailNormalized: normalized,
+            recipientEmail: email.trim(),
+            language,
+            draftData,
+            resumeTokenHash: tokenHash,
+            expiresAt: new Date(now.getTime() + ttl),
+            consumedAt: null,
+            updatedAt: now,
+          })
+          .onConflictDoUpdate({
+            target: [
+              registrationFormDrafts.organizationId,
+              registrationFormDrafts.eventId,
+              registrationFormDrafts.emailNormalized,
+            ],
+            set: {
+              recipientEmail: email.trim(),
+              language,
+              draftData,
+              resumeTokenHash: tokenHash,
+              expiresAt: new Date(now.getTime() + ttl),
+              consumedAt: null,
+              updatedAt: now,
+            },
+          });
+        const resumeUrl = new URL(
+          `/registration/resume#token=${encodeURIComponent(token)}`,
+          canonicalBase,
+        ).toString();
+        await enqueueMailOutbox(
+          db,
+          ctx.organizationId,
+          {
+            eventId: event.id,
+            templateKey: 'registration-resume',
+            templateVersion: 1,
+            templateVersionId: null,
+            locale: language,
+            recipient: email.trim(),
+            idempotencyKey: `registration-resume:${event.id}:${tokenHash}`,
+            variables: {
+              recipientName:
+                typeof draftData.firstName === 'string'
+                  ? draftData.firstName.slice(0, 100)
+                  : '',
+              resumeUrl,
+            },
+            correlationId: randomUUID(),
+          },
+          tx,
+        );
+        return { sent: true as const };
+      });
+    },
+    resumeDraft: async (ctx: RequestContext, token: string) =>
+      db.transaction(async (tx) => {
+        const now = new Date();
+        const digest = hashToken(token);
+        const [draft] = await tx
+          .select()
+          .from(registrationFormDrafts)
+          .where(
+            and(
+              eq(registrationFormDrafts.organizationId, ctx.organizationId),
+              eq(registrationFormDrafts.resumeTokenHash, digest),
+              sql`${registrationFormDrafts.expiresAt} > ${now}`,
+              sql`${registrationFormDrafts.consumedAt} is null`,
+            ),
+          )
+          .for('update')
+          .limit(1);
+        if (!draft) return null;
+        const [consumed] = await tx
+          .update(registrationFormDrafts)
+          .set({ consumedAt: now })
+          .where(
+            and(
+              eq(registrationFormDrafts.id, draft.id),
+              eq(registrationFormDrafts.resumeTokenHash, digest),
+              sql`${registrationFormDrafts.consumedAt} is null`,
+              sql`${registrationFormDrafts.expiresAt} > ${now}`,
+            ),
+          )
+          .returning({ id: registrationFormDrafts.id });
+        return consumed
+          ? {
+              eventSlug:
+                (
+                  await tx
+                    .select({ slug: events.slug })
+                    .from(events)
+                    .where(
+                      and(
+                        eq(events.organizationId, ctx.organizationId),
+                        eq(events.id, draft.eventId),
+                      ),
+                    )
+                    .limit(1)
+                )[0]?.slug ?? null,
+              language: draft.language,
+              draft: draft.draftData,
+            }
+          : null;
+      }),
     getForm: async (ctx: RequestContext, eventSlug: string) => {
       const [event] = await db
         .select()
@@ -4112,10 +4443,34 @@ export function createPublicRegistrationService(
         )
         .orderBy(eventClasses.sortOrder);
       const [organization] = await db
-        .select({ registrationSettings: organizations.registrationSettings })
+        .select({
+          registrationSettings: organizations.registrationSettings,
+          registrationFormConfig: organizations.registrationFormConfig,
+        })
         .from(organizations)
         .where(eq(organizations.id, ctx.organizationId))
         .limit(1);
+      const organizationConfig = organization?.registrationFormConfig as
+        Record<string, unknown> | null | undefined;
+      const eventConfig = event.registrationFormConfig as Record<
+        string,
+        unknown
+      > | null;
+      const mergeSection = (key: string) => ({
+        ...((organizationConfig?.[key] as
+          Record<string, unknown> | undefined) ?? {}),
+        ...((eventConfig?.[key] as Record<string, unknown> | undefined) ?? {}),
+      });
+      const registrationFormConfig =
+        organizationConfig && eventConfig
+          ? {
+              ...organizationConfig,
+              ...eventConfig,
+              branding: mergeSection('branding'),
+              fields: mergeSection('fields'),
+              features: mergeSection('features'),
+            }
+          : (eventConfig ?? organizationConfig ?? null);
       return {
         event: {
           id: event.id,
@@ -4131,6 +4486,7 @@ export function createPublicRegistrationService(
           guardianRequiredBelowAge: 18,
           maximumClassesPerGroup: 8,
         },
+        registrationFormConfig,
       };
     },
     submit: async (
@@ -4194,6 +4550,45 @@ export function createPublicRegistrationService(
             event.registrationOpensAt > receivedAt) ||
           (event.registrationClosesAt &&
             event.registrationClosesAt < receivedAt)
+        )
+          throw unavailable();
+        const formConfig = (event.registrationFormConfig ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const formFeatures = (formConfig.features ?? {}) as Record<
+          string,
+          unknown
+        >;
+        const orgFormConfig = (
+          await tx
+            .select({ config: organizations.registrationFormConfig })
+            .from(organizations)
+            .where(eq(organizations.id, ctx.organizationId))
+            .limit(1)
+        )[0]?.config as Record<string, unknown> | null | undefined;
+        const orgFormFeatures = (orgFormConfig?.features ?? {}) as Record<
+          string,
+          unknown
+        >;
+        if (
+          payload.entries.length > 1 &&
+          (formFeatures.multipleEntries ?? orgFormFeatures.multipleEntries) ===
+            false
+        )
+          throw unavailable();
+        const eventNumberState = (
+          (formConfig.fields ?? {}) as Record<string, Record<string, unknown>>
+        ).requestedStartNumber?.state;
+        const orgNumberState = (
+          (orgFormConfig?.fields ?? {}) as Record<
+            string,
+            Record<string, unknown>
+          >
+        ).requestedStartNumber?.state;
+        if (
+          (eventNumberState ?? orgNumberState) === 'hidden' &&
+          payload.entries.some((entry) => entry.requestedStartNumber)
         )
           throw unavailable();
         if (!existingSubmission) {
@@ -4401,9 +4796,17 @@ export function createPublicRegistrationService(
           return term;
         });
         if (
-          selectedTerms.length !==
-          consentTerms.filter((term) => term.language === payload.language)
-            .length
+          consentTerms.some(
+            (term) =>
+              term.language === payload.language &&
+              term.required !== false &&
+              !selectedTerms.some(
+                (selected) =>
+                  selected.key === term.key &&
+                  selected.version === term.version &&
+                  selected.hash === term.hash,
+              ),
+          )
         )
           throw unavailable();
         const [priorGroup] = await tx
@@ -4507,7 +4910,9 @@ export function createPublicRegistrationService(
               registrationGroupId: group!.id,
               driverPersonId: personId,
               vehicleId: vehicle!.id,
-              requestedStartNumber: null,
+              requestedStartNumber: normalizeRequestedStartNumber(
+                requestEntry.requestedStartNumber,
+              ),
               priceSnapshotVersion: snapshot?.version ?? null,
               priceSnapshot: snapshot,
               formSnapshotVersion: payload.formVersion,

@@ -4,6 +4,7 @@ import type { RequestContext, DeploymentMode } from '@racepilot/core';
 import { z } from 'zod';
 import { installModules, type ModuleApiDeps } from './modules.js';
 import { resolveOrganizationModuleCapabilities } from '@racepilot/core';
+import { validateRegistrationImage } from './registration-assets.js';
 export * from './modules.js';
 import {
   mailConfigSchema,
@@ -80,6 +81,12 @@ import {
   standardRegistrationForm,
   PublicRegistrationRequestSchema,
   EntryStatusDimensionConfigSchema,
+  RegistrationFormConfigSchema,
+  RegistrationFormConfigPatchSchema,
+  defaultRegistrationFormConfig,
+  mergeRegistrationFormConfig,
+  SaveRegistrationDraftRequestSchema,
+  ResumeRegistrationRequestSchema,
 } from '@racepilot/contracts';
 export function health(version: string) {
   return healthResponseSchema.parse({ status: 'ok', version });
@@ -247,6 +254,11 @@ export interface ApiDeps {
     ): Promise<RegistrationSettings>;
   };
   publicRegistration?: {
+    checkRequestedStartNumber?(
+      context: RequestContext,
+      eventSlug: string,
+      number: string,
+    ): Promise<{ available: boolean } | null>;
     getForm(
       context: import('@racepilot/core').RequestContext,
       eventSlug: string,
@@ -260,6 +272,32 @@ export interface ApiDeps {
       context: import('@racepilot/core').RequestContext,
       token: string,
     ): Promise<boolean>;
+    saveDraft?(
+      context: RequestContext,
+      eventSlug: string,
+      email: string,
+      language: 'de' | 'en',
+      draft: Record<string, unknown>,
+    ): Promise<{ sent: true }>;
+    resumeDraft?(
+      context: RequestContext,
+      token: string,
+    ): Promise<unknown | null>;
+  };
+  registrationFormConfigs?: {
+    getOrganization(context: RequestContext): Promise<unknown | null>;
+    updateOrganization(
+      context: RequestContext,
+      config: Record<string, unknown>,
+      actor: string,
+    ): Promise<unknown | null>;
+    getEvent(context: RequestContext, eventId: string): Promise<unknown | null>;
+    updateEvent(
+      context: RequestContext,
+      eventId: string,
+      config: Record<string, unknown>,
+      actor: string,
+    ): Promise<unknown | null>;
   };
   registrationRateLimiter?: RegistrationRateLimiter;
   publicRegistrationRateLimits?: {
@@ -1155,7 +1193,17 @@ export function createApp(deps: ApiDeps) {
           c.req.param('slug'),
         );
         return result
-          ? c.json({ form: standardRegistrationForm, ...(result as object) })
+          ? c.json({
+              form: standardRegistrationForm,
+              ...(result as object),
+              registrationFormConfig: mergeRegistrationFormConfig(
+                defaultRegistrationFormConfig,
+                RegistrationFormConfigPatchSchema.parse(
+                  (result as Record<string, unknown>).registrationFormConfig ??
+                    {},
+                ),
+              ),
+            })
           : c.json({ error: 'Not found' }, 404);
       }
       const event = await getPublicEvent(
@@ -1165,10 +1213,195 @@ export function createApp(deps: ApiDeps) {
         { events: deps.events },
       );
       return event
-        ? c.json({ form: standardRegistrationForm, event, consents: [] })
+        ? c.json({
+            form: standardRegistrationForm,
+            event,
+            consents: [],
+            registrationFormConfig: defaultRegistrationFormConfig,
+          })
         : c.json({ error: 'Not found' }, 404);
     },
   );
+  app.get('/admin/organization/registration-form-config', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationFormConfigs)
+      return c.json({ error: 'Not found' }, 404);
+    const config = await deps.registrationFormConfigs.getOrganization(context);
+    return c.json({
+      config: config
+        ? RegistrationFormConfigSchema.parse(config)
+        : defaultRegistrationFormConfig,
+    });
+  });
+  app.post('/admin/organization/registration-assets', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:update'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.objectStorage)
+      return c.json({ error: 'Storage unavailable' }, 503);
+    const form = await c.req.formData().catch(() => null);
+    const kind = form?.get('kind');
+    const file = form?.get('file');
+    if (
+      !form ||
+      !['logoLight', 'logoDark', 'headerImage'].includes(String(kind)) ||
+      !(file instanceof File)
+    )
+      return c.json({ error: 'Invalid image' }, 400);
+    const maxBytes = kind === 'headerImage' ? 6_000_000 : 1_000_000;
+    if (file.size === 0 || file.size > maxBytes)
+      return c.json({ error: 'Invalid image size' }, 413);
+    try {
+      const checked = validateRegistrationImage(
+        String(kind),
+        new Uint8Array(await file.arrayBuffer()),
+        file.type,
+      );
+      const stored = await deps.objectStorage.put({
+        organizationId: context.organizationId,
+        body: checked.body,
+        contentType: checked.contentType,
+      });
+      return c.json(
+        {
+          objectId: stored.objectId,
+          contentType: stored.contentType,
+          size: stored.size,
+        },
+        201,
+      );
+    } catch {
+      return c.json({ error: 'Unsupported or unsafe image' }, 400);
+    }
+  });
+  app.get(
+    '/public/organizations/:organizationId/events/:slug/registration-assets/:objectId',
+    async (c) => {
+      const context = await resolvePublicContext(c.req.raw);
+      const organizationParam = c.req.param('organizationId');
+      if (
+        !context ||
+        organizationParam !== context.organizationId ||
+        !deps.objectStorage
+      )
+        return c.json({ error: 'Not found' }, 404);
+      try {
+        const form = await deps.publicRegistration?.getForm(
+          context,
+          c.req.param('slug'),
+        );
+        if (!form) return c.json({ error: 'Not found' }, 404);
+        const formRecord = form as Record<string, unknown>;
+        const formConfig = RegistrationFormConfigPatchSchema.parse(
+          formRecord.registrationFormConfig ?? {},
+        );
+        const branding = formConfig.branding;
+        const allowedObjectIds = new Set(
+          [
+            branding?.logoLightObjectId,
+            branding?.logoDarkObjectId,
+            branding?.headerImageObjectId,
+          ].filter((objectId): objectId is string => Boolean(objectId)),
+        );
+        const objectId = c.req.param('objectId');
+        if (!allowedObjectIds.has(objectId))
+          return c.json({ error: 'Not found' }, 404);
+        const object = await deps.objectStorage.get(
+          context.organizationId,
+          objectId,
+        );
+        if (
+          !object ||
+          !['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml'].includes(
+            object.ref.contentType,
+          )
+        )
+          return c.json({ error: 'Not found' }, 404);
+        c.header('Content-Type', object.ref.contentType);
+        c.header('X-Content-Type-Options', 'nosniff');
+        c.header('Content-Security-Policy', "default-src 'none'; sandbox");
+        c.header('Cache-Control', 'public, max-age=86400, immutable');
+        return new Response(Buffer.from(object.body), {
+          headers: c.res.headers,
+        });
+      } catch {
+        return c.json({ error: 'Not found' }, 404);
+      }
+    },
+  );
+  app.put('/admin/organization/registration-form-config', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('organization:update'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationFormConfigs)
+      return c.json({ error: 'Not found' }, 404);
+    const parsed = RegistrationFormConfigSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success)
+      return c.json({ error: 'Invalid registration form configuration' }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : 'unknown';
+    return c.json({
+      config: await deps.registrationFormConfigs.updateOrganization(
+        context,
+        parsed.data,
+        actor,
+      ),
+    });
+  });
+  app.get('/admin/events/:eventId/registration-form-config', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationFormConfigs)
+      return c.json({ error: 'Not found' }, 404);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success)
+      return c.json({ error: 'Not found' }, 404);
+    const config = await deps.registrationFormConfigs.getEvent(
+      context,
+      eventId,
+    );
+    return config === null
+      ? c.json({ error: 'Not found' }, 404)
+      : c.json({ config: RegistrationFormConfigPatchSchema.parse(config) });
+  });
+  app.put('/admin/events/:eventId/registration-form-config', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.registrationFormConfigs)
+      return c.json({ error: 'Not found' }, 404);
+    const eventId = c.req.param('eventId');
+    if (!z.string().uuid().safeParse(eventId).success)
+      return c.json({ error: 'Not found' }, 404);
+    const parsed = RegistrationFormConfigPatchSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!parsed.success || Object.keys(parsed.data ?? {}).length === 0)
+      return c.json({ error: 'Invalid registration form configuration' }, 400);
+    const actor = context.subject
+      ? `${context.subject.issuer}|${context.subject.subject}`
+      : 'unknown';
+    const config = await deps.registrationFormConfigs.updateEvent(
+      context,
+      eventId,
+      parsed.data as Record<string, unknown>,
+      actor,
+    );
+    return config === null
+      ? c.json({ error: 'Not found' }, 404)
+      : c.json({ config: RegistrationFormConfigPatchSchema.parse(config) });
+  });
   app.post(
     '/public/organizations/:organizationId/events/:slug/registration/submissions',
     async (c) => {
@@ -1241,6 +1474,117 @@ export function createApp(deps: ApiDeps) {
       }
     },
   );
+  app.get(
+    '/public/organizations/:organizationId/events/:slug/registration/start-number',
+    async (c) => {
+      const context = await resolvePublicContext(c.req.raw);
+      if (
+        !context ||
+        c.req.param('organizationId') !== context.organizationId ||
+        !deps.publicRegistration?.checkRequestedStartNumber
+      )
+        return c.json({ error: 'Not found' }, 404);
+      const number = z
+        .string()
+        .trim()
+        .min(1)
+        .max(64)
+        .safeParse(c.req.query('number'));
+      if (!number.success) return c.json({ error: 'Invalid number' }, 400);
+      try {
+        const result = await deps.publicRegistration.checkRequestedStartNumber(
+          context,
+          c.req.param('slug'),
+          number.data,
+        );
+        return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
+      } catch {
+        return c.json({ error: 'Registration unavailable' }, 503);
+      }
+    },
+  );
+  app.post(
+    '/public/organizations/:organizationId/events/:slug/registration/drafts',
+    async (c) => {
+      const context = await resolvePublicContext(c.req.raw);
+      const organizationParam = c.req.param('organizationId');
+      const eventSlug = c.req.param('slug');
+      if (
+        !context ||
+        organizationParam !== context.organizationId ||
+        !deps.publicRegistration?.saveDraft ||
+        !deps.publicRegistrationRateLimits
+      )
+        return c.json({ error: 'Registration unavailable' }, 404);
+      const parsed = SaveRegistrationDraftRequestSchema.safeParse(
+        await c.req.json().catch(() => null),
+      );
+      if (!parsed.success || parsed.data.eventSlug !== eventSlug)
+        return c.json({ error: 'Invalid draft' }, 400);
+      let configured;
+      try {
+        configured = await deps.publicRegistrationRateLimits.resolvePublicEvent(
+          context,
+          eventSlug,
+        );
+      } catch {
+        return c.json({ error: 'Registration unavailable' }, 503);
+      }
+      if (!configured) return c.json({ sent: true }, 202);
+      const limits = resolveRegistrationRateLimits(
+        rateLimitDefaults,
+        configured.organization,
+        configured.event,
+      );
+      const budget = await consumeRegistrationBudget(c, [
+        {
+          key: `organization:${context.organizationId}`,
+          ...limits.organization,
+        },
+        {
+          key: `event:${context.organizationId}:${configured.eventId}`,
+          ...limits.event,
+        },
+      ]);
+      if (budget.unavailable)
+        return c.json({ error: 'Registration unavailable' }, 503);
+      if (!budget.allowed) {
+        setRetryAfter(c, budget.retryAfterMs);
+        return c.json({ error: 'Registration unavailable' }, 429);
+      }
+      try {
+        await deps.publicRegistration.saveDraft(
+          context,
+          eventSlug,
+          parsed.data.draft.email,
+          parsed.data.language,
+          parsed.data.draft,
+        );
+      } catch {
+        /* intentionally avoid event/email enumeration */
+      }
+      return c.json({ sent: true }, 202);
+    },
+  );
+  app.post('/public/registration/resume', async (c) => {
+    const context = await resolvePublicContext(c.req.raw);
+    const parsed = ResumeRegistrationRequestSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!context || !parsed.success || !deps.publicRegistration?.resumeDraft)
+      return c.json({ error: 'Resume link unavailable' }, 404);
+    try {
+      const result = await deps.publicRegistration.resumeDraft(
+        context,
+        parsed.data.token,
+      );
+      return result
+        ? c.json(result)
+        : c.json({ error: 'Resume link unavailable' }, 404);
+    } catch {
+      return c.json({ error: 'Resume link unavailable' }, 404);
+    }
+  });
   app.post('/public/registration/verify', async (c) => {
     const body = await c.req.json().catch(() => null);
     const token = z.string().min(1).max(512).safeParse(body?.token);
@@ -1260,6 +1604,7 @@ export function createApp(deps: ApiDeps) {
       language: z.enum(['de', 'en']),
       text: z.string().min(1).max(20000),
       hash: z.string().regex(/^[a-f0-9]{64}$/),
+      required: z.boolean().default(true),
     })
     .strict();
   app.get('/admin/organization/public-registration-rate-limits', async (c) => {

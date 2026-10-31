@@ -6,6 +6,7 @@ import {
   type ApiDeps,
 } from './index.js';
 import type { RegistrationSettings } from '@racepilot/contracts';
+import { defaultRegistrationFormConfig } from '@racepilot/contracts';
 import {
   createRequestContext,
   getEvent,
@@ -276,6 +277,232 @@ describe('admin organization routes', () => {
 });
 
 describe('registration administration and public endpoints', () => {
+  it('audits organization/event form overrides and keeps event configuration tenant-scoped', async () => {
+    const api = deps();
+    api.memberships = {
+      resolvePermissions: async () =>
+        new Set([
+          'organization:read',
+          'organization:update',
+          'event:read',
+          'event:write',
+        ]),
+    };
+    const writes: string[] = [];
+    api.registrationFormConfigs = {
+      getOrganization: async () => null,
+      updateOrganization: async (_ctx, config, actor) => {
+        writes.push(`org:${actor}`);
+        return config;
+      },
+      getEvent: async (_ctx, eventId) =>
+        eventId === foreignEventId ? null : null,
+      updateEvent: async (_ctx, eventId, _config, actor) => {
+        if (eventId === foreignEventId) return null;
+        writes.push(`event:${eventId}:${actor}`);
+        return defaultRegistrationFormConfig;
+      },
+    };
+    const app = createApp(api);
+    const get = await app.request(
+      '/admin/organization/registration-form-config',
+    );
+    expect(get.status).toBe(200);
+    expect((await get.json()).config).toMatchObject(
+      defaultRegistrationFormConfig,
+    );
+    const put = await app.request(
+      '/admin/organization/registration-form-config',
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(defaultRegistrationFormConfig),
+      },
+    );
+    expect(put.status).toBe(200);
+    const foreign = await app.request(
+      `/admin/events/${foreignEventId}/registration-form-config`,
+      {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(defaultRegistrationFormConfig),
+      },
+    );
+    expect(foreign.status).toBe(404);
+    expect(writes).toHaveLength(1);
+  });
+
+  it('rejects forged tenant/event values for public draft and resume routes', async () => {
+    const api = deps();
+    let saved = 0;
+    api.publicRegistration = {
+      getForm: async () => null,
+      submit: async () => ({}),
+      verify: async () => false,
+      saveDraft: async () => {
+        saved++;
+        return { sent: true };
+      },
+      resumeDraft: async () => null,
+    };
+    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    const app = createApp(api);
+    const draft = {
+      firstName: 'A',
+      lastName: 'B',
+      email: 'a@example.test',
+      dateOfBirth: '',
+      guardianName: '',
+      guardianEmail: '',
+      vehicles: [],
+      accepted: {},
+    };
+    const forged = await app.request(
+      '/public/organizations/20000000-0000-4000-8000-000000000002/events/event/registration/drafts',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ eventSlug: 'event', language: 'en', draft }),
+      },
+    );
+    expect(forged.status).toBe(404);
+    const mismatch = await app.request(
+      `/public/organizations/${config.organizationId}/events/event/registration/drafts`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ eventSlug: 'other', language: 'en', draft }),
+      },
+    );
+    expect(mismatch.status).toBe(400);
+    expect(saved).toBe(0);
+    const invalidResume = await app.request('/public/registration/resume', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ token: 'not-a-valid-token' }),
+    });
+    expect(invalidResume.status).toBe(404);
+  });
+
+  it('rejects requested-number lookup under a forged organization', async () => {
+    const api = deps();
+    let checked = 0;
+    api.publicRegistration = {
+      getForm: async () => null,
+      submit: async () => ({}),
+      verify: async () => false,
+      checkRequestedStartNumber: async () => {
+        checked++;
+        return { available: true };
+      },
+    };
+    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    const app = createApp(api);
+    const response = await app.request(
+      '/public/organizations/20000000-0000-4000-8000-000000000002/events/event/registration/start-number?number=88',
+    );
+    expect(response.status).toBe(404);
+    expect(checked).toBe(0);
+  });
+
+  it('hides registration assets from a forged organization path', async () => {
+    const api = deps();
+    let reads = 0;
+    api.objectStorage = {
+      put: async () => {
+        throw new Error('not used');
+      },
+      get: async () => {
+        reads++;
+        return null;
+      },
+      delete: async () => undefined,
+    };
+    const response = await createApp(api).request(
+      `/public/organizations/20000000-0000-4000-8000-000000000002/events/event/registration-assets/${crypto.randomUUID()}`,
+    );
+    expect(response.status).toBe(404);
+    expect(reads).toBe(0);
+  });
+
+  it('serves only branding objects referenced by the requested event configuration', async () => {
+    const api = deps();
+    const logoA = crypto.randomUUID();
+    const logoB = crypto.randomUUID();
+    const privateImage = crypto.randomUUID();
+    const configFor = (logoLightObjectId: string) => ({
+      ...defaultRegistrationFormConfig,
+      branding: {
+        ...defaultRegistrationFormConfig.branding,
+        logoLightObjectId,
+      },
+    });
+    api.publicRegistration = {
+      getForm: async (_context, slug) => ({
+        registrationFormConfig:
+          slug === 'event-a' ? configFor(logoA) : configFor(logoB),
+      }),
+      submit: async () => ({ accepted: true }),
+      verify: async () => false,
+    };
+    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    const reads: string[] = [];
+    api.objectStorage = {
+      put: async () => {
+        throw new Error('not used');
+      },
+      get: async (_organizationId, objectId) => {
+        reads.push(objectId);
+        return {
+          ref: {
+            organizationId: organizationId(config.organizationId),
+            objectId,
+            contentType: 'image/png',
+            size: 8,
+            sha256: 'a'.repeat(64),
+          },
+          body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
+        };
+      },
+      delete: async () => undefined,
+    };
+    const app = createApp(api);
+    const url = (slug: string, objectId: string) =>
+      `/public/organizations/${config.organizationId}/events/${slug}/registration-assets/${objectId}`;
+
+    expect((await app.request(url('event-a', privateImage))).status).toBe(404);
+    expect((await app.request(url('event-a', logoB))).status).toBe(404);
+    expect(reads).toEqual([]);
+    const allowed = await app.request(url('event-a', logoA));
+    expect(allowed.status).toBe(200);
+    expect(allowed.headers.get('content-type')).toContain('image/png');
+    expect(reads).toEqual([logoA]);
+  });
+
+  it('requires organization update permission before registration asset uploads', async () => {
+    const api = deps();
+    api.memberships = {
+      resolvePermissions: async () => new Set(['organization:read']),
+    };
+    let writes = 0;
+    api.objectStorage = {
+      put: async () => {
+        writes++;
+        throw new Error('unexpected');
+      },
+      get: async () => null,
+      delete: async () => undefined,
+    };
+    const form = new FormData();
+    form.set('kind', 'logoLight');
+    form.set('file', new Blob(['fake'], { type: 'image/png' }), 'logo.png');
+    const response = await createApp(api).request(
+      '/admin/organization/registration-assets',
+      { method: 'POST', body: form },
+    );
+    expect(response.status).toBe(403);
+    expect(writes).toBe(0);
+  });
   it('reads defaults and records actor-scoped audited setting updates', async () => {
     const api = deps();
     let settings: RegistrationSettings = {

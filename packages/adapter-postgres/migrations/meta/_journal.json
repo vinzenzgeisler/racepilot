@@ -148,6 +148,13 @@
       "when": 1793446468828,
       "tag": "0020_email_outbox_registration_group",
       "breakpoints": false
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793446468829,
+      "tag": "0021_registration_form_configuration",
+      "breakpoints": false
     }
   ]
 }

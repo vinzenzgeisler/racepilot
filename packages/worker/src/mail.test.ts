@@ -3,6 +3,7 @@ import {
   createMailOutboxTask,
   processMailOutboxJob,
   renderMailTemplate,
+  defaultMailTemplate,
   type MailOutboxRepository,
 } from './mail.js';
 import type { JobContext } from '@racepilot/core';
@@ -70,6 +71,21 @@ function setup() {
   };
 }
 describe('mail outbox worker', () => {
+  it('provides a complete escaped registration-resume template in both supported locales', () => {
+    for (const locale of ['de', 'en'] as const) {
+      const rendered = renderMailTemplate(
+        defaultMailTemplate('registration-resume', locale),
+        'registration-resume',
+        {
+          recipientName: '<Sam>',
+          resumeUrl: 'https://example.test/registration/resume#token=opaque',
+        },
+      );
+      expect(rendered.subject).toBeTruthy();
+      expect(rendered.html).toContain('&lt;Sam&gt;');
+      expect(rendered.html).toContain('registration/resume#token=opaque');
+    }
+  });
   it('escapes HTML values and rejects unknown placeholders', () => {
     expect(
       renderMailTemplate(

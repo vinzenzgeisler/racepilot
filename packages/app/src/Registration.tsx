@@ -2,9 +2,16 @@ import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   PublicRegistrationRequestSchema,
   StandardRegistrationFormSchema,
+  RegistrationFormConfigSchema,
+  defaultRegistrationFormConfig,
+  deriveAccessibleBrandColors,
   type RegistrationSettings,
   type StandardRegistrationForm,
+  type RegistrationFormConfig,
+  RegistrationDraftSchema,
+  type RegistrationDraft,
 } from '@racepilot/contracts';
+import type { CSSProperties } from 'react';
 
 type FormPayload = {
   form: StandardRegistrationForm;
@@ -22,8 +29,10 @@ type FormPayload = {
     language: 'de' | 'en';
     text: string;
     hash: string;
+    required?: boolean;
   }>;
   registrationSettings: RegistrationSettings;
+  registrationFormConfig: RegistrationFormConfig;
 };
 type VehicleEntry = {
   classId: string;
@@ -31,6 +40,7 @@ type VehicleEntry = {
   model: string;
   year: string;
   registration: string;
+  requestedStartNumber: string;
 };
 const translations = {
   de: {
@@ -104,10 +114,12 @@ export function Registration({
   organizationId,
   eventSlug,
   defaultLocale,
+  initialDraft,
 }: {
   organizationId: string;
   eventSlug: string;
   defaultLocale: string;
+  initialDraft?: RegistrationDraft;
 }) {
   const [locale, setLocale] = useState<'de' | 'en'>(
     defaultLocale.toLowerCase().startsWith('de') ? 'de' : 'en',
@@ -117,21 +129,38 @@ export function Registration({
   const [loadError, setLoadError] = useState(false);
   const [step, setStep] = useState(0);
   const [values, setValues] = useState({
-    firstName: '',
-    lastName: '',
-    email: '',
-    dateOfBirth: '',
-    guardianName: '',
-    guardianEmail: '',
+    firstName: initialDraft?.firstName ?? '',
+    lastName: initialDraft?.lastName ?? '',
+    email: initialDraft?.email ?? '',
+    dateOfBirth: initialDraft?.dateOfBirth ?? '',
+    guardianName: initialDraft?.guardianName ?? '',
+    guardianEmail: initialDraft?.guardianEmail ?? '',
   });
-  const [vehicles, setVehicles] = useState<VehicleEntry[]>([
-    { classId: '', make: '', model: '', year: '', registration: '' },
-  ]);
-  const [accepted, setAccepted] = useState<Record<string, boolean>>({});
+  const [vehicles, setVehicles] = useState<VehicleEntry[]>(
+    initialDraft?.vehicles ?? [
+      {
+        classId: '',
+        make: '',
+        model: '',
+        year: '',
+        registration: '',
+        requestedStartNumber: '',
+      },
+    ],
+  );
+  const [accepted, setAccepted] = useState<Record<string, boolean>>(
+    initialDraft?.accepted ?? {},
+  );
   const [submissionId] = useState(() => crypto.randomUUID());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [numberAvailability, setNumberAvailability] = useState<
+    Record<number, boolean | null>
+  >({});
+  const numberLookup = useRef<Record<number, string>>({});
   const [submitted, setSubmitted] = useState(false);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [draftMessage, setDraftMessage] = useState('');
   const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
@@ -148,7 +177,10 @@ export function Registration({
         if (!alive || !body || typeof body !== 'object') return;
         const value = body as FormPayload;
         const form = StandardRegistrationFormSchema.parse(value.form);
-        if (alive) setPayload({ ...value, form });
+        const registrationFormConfig = RegistrationFormConfigSchema.parse(
+          value.registrationFormConfig ?? defaultRegistrationFormConfig,
+        );
+        if (alive) setPayload({ ...value, form, registrationFormConfig });
       })
       .catch(() => {
         if (alive) setLoadError(true);
@@ -173,6 +205,10 @@ export function Registration({
     );
   const steps = payload.form.steps;
   const currentStep = steps[step];
+  const contrastColors = deriveAccessibleBrandColors(
+    payload.registrationFormConfig.branding.primaryColor,
+    payload.registrationFormConfig.branding.accentColor,
+  );
   const age = getAge(values.dateOfBirth, payload.event.startsOn);
   const guardianRequired =
     age < payload.registrationSettings.guardianRequiredBelowAge;
@@ -197,6 +233,21 @@ export function Registration({
       setError(t.minAge);
       return;
     }
+    if (
+      payload!.consents
+        .filter((item) => item.language === locale && item.required !== false)
+        .some(
+          (item) =>
+            accepted[`${item.key}:${item.version}:${item.language}`] !== true,
+        )
+    ) {
+      setError(
+        locale === 'de'
+          ? 'Bitte bestätige alle erforderlichen Bedingungen.'
+          : 'Please accept all required terms.',
+      );
+      return;
+    }
     setSubmitting(true);
     const request = {
       submissionId,
@@ -217,6 +268,7 @@ export function Registration({
       },
       entries: vehicles.map((item) => ({
         classId: item.classId,
+        requestedStartNumber: item.requestedStartNumber || null,
         vehicle: {
           make: item.make,
           model: item.model,
@@ -225,13 +277,16 @@ export function Registration({
         },
       })),
       consents: payload!.consents
-        .filter((item) => item.language === locale)
+        .filter(
+          (item) =>
+            item.language === locale &&
+            accepted[`${item.key}:${item.version}:${item.language}`] === true,
+        )
         .map((item) => ({
           key: item.key,
           version: item.version,
           hash: item.hash,
-          accepted:
-            accepted[`${item.key}:${item.version}:${item.language}`] === true,
+          accepted: true as const,
         })),
     };
     const parsed = PublicRegistrationRequestSchema.safeParse(request);
@@ -258,6 +313,44 @@ export function Registration({
     }
   }
 
+  async function saveDraft() {
+    const draft = RegistrationDraftSchema.safeParse({
+      ...values,
+      vehicles,
+      accepted,
+    });
+    if (!draft.success || !values.email) {
+      setDraftMessage(t.emailError);
+      return;
+    }
+    setSavingDraft(true);
+    setDraftMessage('');
+    try {
+      const response = await fetch(
+        `/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration/drafts`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            eventSlug,
+            language: locale,
+            draft: draft.data,
+          }),
+        },
+      );
+      if (!response.ok) throw new Error();
+      setDraftMessage(
+        locale === 'de'
+          ? 'Wenn die Nennung gespeichert werden kann, erhältst du einen Link per E-Mail.'
+          : 'If this entry can be saved, you will receive a continuation link by email.',
+      );
+    } catch {
+      setDraftMessage(t.retry);
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
   if (submitted)
     return (
       <section aria-labelledby="registration-success">
@@ -275,7 +368,23 @@ export function Registration({
     );
 
   return (
-    <section className="registration" aria-labelledby="registration-title">
+    <section
+      className="registration"
+      aria-labelledby="registration-title"
+      style={
+        {
+          '--brand-primary': contrastColors.primarySurface,
+          '--brand-accent': contrastColors.accentSurface,
+          '--brand-primary-text': contrastColors.primaryForeground,
+          '--brand-accent-text': contrastColors.accentForeground,
+          '--brand-link': contrastColors.linkColor,
+          '--brand-radius':
+            payload.registrationFormConfig.branding.corners === 'rounded'
+              ? '6px'
+              : '0',
+        } as CSSProperties
+      }
+    >
       <div
         className="registration-language"
         role="group"
@@ -296,7 +405,34 @@ export function Registration({
           English
         </button>
       </div>
-      <h2 id="registration-title">{payload.event.name}</h2>
+      <header className="registration-header">
+        {payload.registrationFormConfig.branding.logoLightObjectId && (
+          <img
+            className="registration-logo"
+            src={`/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration-assets/${encodeURIComponent(payload.registrationFormConfig.branding.logoLightObjectId)}`}
+            alt=""
+          />
+        )}
+        {payload.registrationFormConfig.branding.headerImageObjectId && (
+          <img
+            className="registration-header-image"
+            src={`/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration-assets/${encodeURIComponent(payload.registrationFormConfig.branding.headerImageObjectId)}`}
+            alt=""
+          />
+        )}
+        <p className="registration-event-date">{payload.event.startsOn}</p>
+        <h2 id="registration-title">{payload.event.name}</h2>
+        {payload.registrationFormConfig.welcomeText && (
+          <p>{payload.registrationFormConfig.welcomeText}</p>
+        )}
+      </header>
+      {contrastColors.contrastNotice && (
+        <p className="registration-contrast-note" role="note">
+          {locale === 'de'
+            ? 'Schriftfarben werden automatisch für gute Lesbarkeit angepasst.'
+            : 'Text colors are automatically adjusted for readability.'}
+        </p>
+      )}
       <ol
         className="registration-steps"
         aria-label={locale === 'de' ? 'Anmeldeschritte' : 'Registration steps'}
@@ -307,222 +443,390 @@ export function Registration({
           </li>
         ))}
       </ol>
-      <form ref={formRef} onSubmit={submit} noValidate={false}>
-        <fieldset>
-          <legend>{currentStep?.title[locale]}</legend>
-          {currentStep?.fields.map((field) => {
-            if (field.key === 'entries')
-              return (
-                <div key={field.key}>
-                  {vehicles.map((item, index) => (
-                    <fieldset className="vehicle-card" key={index}>
-                      <legend>
-                        {field.label[locale]} {index + 1}
-                      </legend>
-                      <label>
-                        {t.class}
-                        <select
-                          required
-                          value={item.classId}
-                          onChange={(e) =>
-                            setVehicle(index, { classId: e.target.value })
-                          }
-                        >
-                          <option value="">—</option>
-                          {payload.classes.map((option) => (
-                            <option
-                              key={option.id}
-                              value={option.id}
-                              disabled={
-                                new Set(
-                                  vehicles
-                                    .map((entry) => entry.classId)
-                                    .filter(Boolean),
-                                ).size >=
-                                  payload.registrationSettings
-                                    .maximumClassesPerGroup &&
-                                !vehicles.some(
-                                  (entry, i) =>
-                                    i !== index && entry.classId === option.id,
-                                ) &&
-                                item.classId !== option.id
-                              }
-                            >
-                              {option.name} ({option.code})
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
-                        {t.make}
-                        <input
-                          required
-                          value={item.make}
-                          onChange={(e) =>
-                            setVehicle(index, { make: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        {t.model}
-                        <input
-                          required
-                          value={item.model}
-                          onChange={(e) =>
-                            setVehicle(index, { model: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        {t.year}
-                        <input
-                          type="number"
-                          min="1886"
-                          max="2200"
-                          value={item.year}
-                          onChange={(e) =>
-                            setVehicle(index, { year: e.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        {t.registration}
-                        <input
-                          value={item.registration}
-                          onChange={(e) =>
-                            setVehicle(index, { registration: e.target.value })
-                          }
-                        />
-                      </label>
-                      {vehicles.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setVehicles((old) =>
-                              old.filter((_, i) => i !== index),
-                            )
-                          }
-                        >
-                          {t.remove}
-                        </button>
-                      )}
-                    </fieldset>
-                  ))}
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setVehicles((old) => [
-                        ...old,
-                        {
-                          classId: '',
-                          make: '',
-                          model: '',
-                          year: '',
-                          registration: '',
-                        },
-                      ])
-                    }
-                  >
-                    {t.addVehicle}
-                  </button>
-                </div>
-              );
-            if (field.key === 'consent')
-              return (
-                <div key={field.key} className="consent-list">
-                  {payload.consents
-                    .filter((item) => item.language === locale)
-                    .map((term) => (
-                      <label
-                        className="consent"
-                        key={`${term.key}:${term.version}:${term.language}`}
-                      >
-                        <input
-                          type="checkbox"
-                          required
-                          checked={
-                            accepted[
-                              `${term.key}:${term.version}:${term.language}`
-                            ] ?? false
-                          }
-                          onChange={(e) =>
-                            setAccepted((old) => ({
-                              ...old,
-                              [`${term.key}:${term.version}:${term.language}`]:
-                                e.target.checked,
-                            }))
-                          }
-                        />
-                        <span>
-                          {term.text} ({t.consent})
-                        </span>
-                      </label>
+      <div className="registration-layout">
+        <form ref={formRef} onSubmit={submit} noValidate={false}>
+          <fieldset>
+            <legend>{currentStep?.title[locale]}</legend>
+            {currentStep?.fields.map((field) => {
+              if (field.key === 'entries')
+                return (
+                  <div key={field.key}>
+                    {vehicles.map((item, index) => (
+                      <fieldset className="vehicle-card" key={index}>
+                        <legend>
+                          {field.label[locale]} {index + 1}
+                        </legend>
+                        <label>
+                          {t.class}
+                          <select
+                            required
+                            value={item.classId}
+                            onChange={(e) =>
+                              setVehicle(index, { classId: e.target.value })
+                            }
+                          >
+                            <option value="">—</option>
+                            {payload.classes.map((option) => (
+                              <option
+                                key={option.id}
+                                value={option.id}
+                                disabled={
+                                  new Set(
+                                    vehicles
+                                      .map((entry) => entry.classId)
+                                      .filter(Boolean),
+                                  ).size >=
+                                    payload.registrationSettings
+                                      .maximumClassesPerGroup &&
+                                  !vehicles.some(
+                                    (entry, i) =>
+                                      i !== index &&
+                                      entry.classId === option.id,
+                                  ) &&
+                                  item.classId !== option.id
+                                }
+                              >
+                                {option.name} ({option.code})
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label>
+                          {t.make}
+                          <input
+                            required
+                            value={item.make}
+                            onChange={(e) =>
+                              setVehicle(index, { make: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.model}
+                          <input
+                            required
+                            value={item.model}
+                            onChange={(e) =>
+                              setVehicle(index, { model: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.year}
+                          <input
+                            type="number"
+                            min="1886"
+                            max="2200"
+                            value={item.year}
+                            onChange={(e) =>
+                              setVehicle(index, { year: e.target.value })
+                            }
+                          />
+                        </label>
+                        <label>
+                          {t.registration}
+                          <input
+                            value={item.registration}
+                            onChange={(e) =>
+                              setVehicle(index, {
+                                registration: e.target.value,
+                              })
+                            }
+                          />
+                        </label>
+                        {payload.registrationFormConfig.fields
+                          .requestedStartNumber.state !== 'hidden' && (
+                          <label>
+                            {locale === 'de'
+                              ? 'Wunsch-Startnummer'
+                              : 'Requested number'}
+                            <input
+                              maxLength={16}
+                              value={item.requestedStartNumber}
+                              onChange={(e) => {
+                                const requestedStartNumber = e.target.value;
+                                numberLookup.current[index] =
+                                  requestedStartNumber;
+                                setVehicle(index, { requestedStartNumber });
+                                setNumberAvailability((old) => ({
+                                  ...old,
+                                  [index]: null,
+                                }));
+                                if (requestedStartNumber.trim())
+                                  void fetch(
+                                    `/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration/start-number?number=${encodeURIComponent(requestedStartNumber)}`,
+                                  )
+                                    .then((response) =>
+                                      response.ok ? response.json() : null,
+                                    )
+                                    .then(
+                                      (
+                                        body: { available?: boolean } | null,
+                                      ) => {
+                                        if (
+                                          body &&
+                                          numberLookup.current[index] ===
+                                            requestedStartNumber
+                                        )
+                                          setNumberAvailability((old) => ({
+                                            ...old,
+                                            [index]: body.available === true,
+                                          }));
+                                      },
+                                    )
+                                    .catch(() => undefined);
+                              }}
+                            />
+                            {item.requestedStartNumber && (
+                              <small role="status">
+                                {numberAvailability[index] === true
+                                  ? locale === 'de'
+                                    ? 'Startnummer ist frei'
+                                    : 'Number is available'
+                                  : numberAvailability[index] === false
+                                    ? locale === 'de'
+                                      ? 'Startnummer ist bereits vergeben'
+                                      : 'Number is already taken'
+                                    : locale === 'de'
+                                      ? 'Startnummer wird geprüft …'
+                                      : 'Checking number …'}
+                              </small>
+                            )}
+                          </label>
+                        )}
+                        {vehicles.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setVehicles((old) =>
+                                old.filter((_, i) => i !== index),
+                              )
+                            }
+                          >
+                            {t.remove}
+                          </button>
+                        )}
+                      </fieldset>
                     ))}
-                </div>
+                    {payload.registrationFormConfig.features
+                      .multipleEntries && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setVehicles((old) => [
+                            ...old,
+                            {
+                              classId: '',
+                              make: '',
+                              model: '',
+                              year: '',
+                              registration: '',
+                              requestedStartNumber: '',
+                            },
+                          ])
+                        }
+                      >
+                        {t.addVehicle}
+                      </button>
+                    )}
+                  </div>
+                );
+              if (field.key === 'consent')
+                return (
+                  <div key={field.key} className="consent-list">
+                    {payload.consents
+                      .filter((item) => item.language === locale)
+                      .map((term) => (
+                        <label
+                          className="consent"
+                          key={`${term.key}:${term.version}:${term.language}`}
+                        >
+                          <input
+                            type="checkbox"
+                            required={term.required !== false}
+                            checked={
+                              accepted[
+                                `${term.key}:${term.version}:${term.language}`
+                              ] ?? false
+                            }
+                            onChange={(e) =>
+                              setAccepted((old) => ({
+                                ...old,
+                                [`${term.key}:${term.version}:${term.language}`]:
+                                  e.target.checked,
+                              }))
+                            }
+                          />
+                          <span>
+                            {term.required === false
+                              ? locale === 'de'
+                                ? 'Freiwillig · '
+                                : 'Optional · '
+                              : locale === 'de'
+                                ? 'Erforderlich · '
+                                : 'Required · '}
+                            {term.text} ({t.consent})
+                          </span>
+                        </label>
+                      ))}
+                  </div>
+                );
+              const key = field.key as keyof typeof values;
+              return (
+                <label key={field.key}>
+                  {field.label[locale]}
+                  <input
+                    type={field.type}
+                    required={field.required}
+                    value={values[key]}
+                    onChange={(e) =>
+                      setValues((old) => ({ ...old, [key]: e.target.value }))
+                    }
+                  />
+                </label>
               );
-            const key = field.key as keyof typeof values;
-            return (
-              <label key={field.key}>
-                {field.label[locale]}
-                <input
-                  type={field.type}
-                  required={field.required}
-                  value={values[key]}
-                  onChange={(e) =>
-                    setValues((old) => ({ ...old, [key]: e.target.value }))
-                  }
-                />
-              </label>
-            );
-          })}
-          {currentStep?.id === 'driver' && guardianRequired && (
-            <div className="guardian-fields">
-              <label>
-                {t.guardianName}
-                <input
-                  required
-                  value={values.guardianName}
-                  onChange={(e) =>
-                    setValues((old) => ({
-                      ...old,
-                      guardianName: e.target.value,
-                    }))
-                  }
-                />
-              </label>
-              <label>
-                {t.guardianEmail}
-                <input
-                  type="email"
-                  required
-                  value={values.guardianEmail}
-                  onChange={(e) =>
-                    setValues((old) => ({
-                      ...old,
-                      guardianEmail: e.target.value,
-                    }))
-                  }
-                />
-              </label>
-            </div>
-          )}
-        </fieldset>
-        {error && <p role="alert">{error}</p>}
-        <div className="registration-actions">
-          {step > 0 && (
-            <button type="button" onClick={() => setStep(step - 1)}>
-              {t.previous}
+            })}
+            {currentStep?.id === 'driver' && guardianRequired && (
+              <div className="guardian-fields">
+                <label>
+                  {t.guardianName}
+                  <input
+                    required
+                    value={values.guardianName}
+                    onChange={(e) =>
+                      setValues((old) => ({
+                        ...old,
+                        guardianName: e.target.value,
+                      }))
+                    }
+                  />
+                </label>
+                <label>
+                  {t.guardianEmail}
+                  <input
+                    type="email"
+                    required
+                    value={values.guardianEmail}
+                    onChange={(e) =>
+                      setValues((old) => ({
+                        ...old,
+                        guardianEmail: e.target.value,
+                      }))
+                    }
+                  />
+                </label>
+              </div>
+            )}
+          </fieldset>
+          {error && <p role="alert">{error}</p>}
+          <div className="registration-actions">
+            {step > 0 && (
+              <button type="button" onClick={() => setStep(step - 1)}>
+                {t.previous}
+              </button>
+            )}
+            <button type="submit" disabled={submitting}>
+              {submitting
+                ? t.sending
+                : step === steps.length - 1
+                  ? t.submit
+                  : t.next}
             </button>
-          )}
-          <button type="submit" disabled={submitting}>
-            {submitting
-              ? t.sending
-              : step === steps.length - 1
-                ? t.submit
-                : t.next}
-          </button>
-        </div>
-      </form>
+            <button
+              type="button"
+              disabled={savingDraft}
+              onClick={() => void saveDraft()}
+            >
+              {savingDraft
+                ? t.sending
+                : locale === 'de'
+                  ? 'Zwischenspeichern'
+                  : 'Save for later'}
+            </button>
+          </div>
+          {draftMessage && <p role="status">{draftMessage}</p>}
+        </form>
+        <aside
+          className="registration-summary"
+          aria-label={locale === 'de' ? 'Deine Nennung' : 'Your entry'}
+        >
+          <h3>{locale === 'de' ? 'Deine Nennung' : 'Your entry'}</h3>
+          <p>
+            {vehicles.length}{' '}
+            {locale === 'de' ? 'Startmeldung(en)' : 'entry/entries'}
+          </p>
+          <p>
+            {locale === 'de' ? 'Startgeld' : 'Entry fee'} · {vehicles.length} ×
+            —
+          </p>
+          <p>{locale === 'de' ? 'Nennungsschluss' : 'Deadline'} · —</p>
+        </aside>
+      </div>
+      <footer className="registration-footer">
+        {payload.event.name} · Nennung mit NENNBOX
+      </footer>
+    </section>
+  );
+}
+
+export function RegistrationResume({
+  organizationId,
+}: {
+  organizationId: string;
+}) {
+  const [resume, setResume] = useState<{
+    eventSlug: string;
+    language: 'de' | 'en';
+    draft: RegistrationDraft;
+  } | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    const token = new URLSearchParams(location.hash.slice(1)).get('token');
+    history.replaceState(null, '', '/registration/resume');
+    const request = token
+      ? fetch('/public/registration/resume', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ token }),
+        })
+      : Promise.reject(new Error('Missing resume token'));
+    request
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        return response.json();
+      })
+      .then(
+        (result: {
+          eventSlug: string;
+          language: 'de' | 'en';
+          draft: unknown;
+        }) => {
+          const draft = RegistrationDraftSchema.parse(result.draft);
+          setResume({
+            eventSlug: result.eventSlug,
+            language: result.language,
+            draft,
+          });
+        },
+      )
+      .catch(() => setFailed(true));
+  }, []);
+  if (resume)
+    return (
+      <Registration
+        organizationId={organizationId}
+        eventSlug={resume.eventSlug}
+        defaultLocale={resume.language}
+        initialDraft={resume.draft}
+      />
+    );
+  return (
+    <section>
+      <p role={failed ? 'alert' : 'status'}>
+        {failed
+          ? 'Dieser Fortsetzungslink ist ungültig, abgelaufen oder bereits verwendet.'
+          : 'Nennung wird geladen …'}
+      </p>
     </section>
   );
 }

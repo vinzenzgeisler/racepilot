@@ -5,12 +5,17 @@ import {
   type RuntimeBootstrapResponse as RuntimeConfig,
 } from '@racepilot/contracts';
 import './styles.css';
-import { Registration, RegistrationVerification } from './Registration.js';
+import {
+  Registration,
+  RegistrationResume,
+  RegistrationVerification,
+} from './Registration.js';
 import { AdminEntries } from './AdminEntries.js';
 import { AdminModules } from './AdminModules.js';
 import { ComponentGallery } from './ComponentGallery.js';
 import { AppShell, type ShellModule } from './AppShell.js';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
+import { RegistrationFormSettings } from './RegistrationFormSettings.js';
 
 type State =
   | { kind: 'loading' }
@@ -73,6 +78,12 @@ export function App({ renderContribution }: AppProps = {}) {
     return (
       <main className="shell">
         <RegistrationVerification locale={config.locale} />
+      </main>
+    );
+  if (window.location.pathname === '/registration/resume')
+    return (
+      <main className="shell">
+        <RegistrationResume organizationId={config.organization.id} />
       </main>
     );
   const registrationMatch = window.location.pathname.match(
@@ -313,6 +324,8 @@ function AdminApplication() {
               navigator.language.toLowerCase().startsWith('de') ? 'de' : 'en'
             }
           />
+        ) : view === 'account' ? (
+          <RegistrationFormSettings eventId={selectedEvent} />
         ) : (
           <section className="app-empty-view">
             <h2>
