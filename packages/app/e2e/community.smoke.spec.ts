@@ -45,30 +45,40 @@ test('first Community admin can log in and load the protected event list', async
   }
   await expect(page).toHaveURL(/\/app$/);
   await expect(page.getByRole('heading', { name: 'Nennungen' })).toBeVisible();
+  // CI keeps these reference captures with the run for design review.
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.screenshot({
+    path: 'test-results/alpha/admin-entries-1440.png',
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({
+    path: 'test-results/alpha/admin-entries-390.png',
+    fullPage: true,
+  });
 });
 
-// The shell, API and worker are started by .github/workflows/ci.yml before
-// Playwright. The browser journey below records the remaining product gaps;
-// these are intentionally fixme (rather than API/DB shortcuts) until the
-// corresponding user-facing screens exist.
+// The community stack is started by .github/workflows/ci.yml. These cases
+// document missing user-facing capabilities; API setup is not a substitute
+// for those user journeys.
 test.fixme('admin creates an event, classes and registration fields, then opens registration', async () => {
-  // The current admin navigation only exposes Nennungen, Module and form
-  // settings for an already-existing event. There is no event-creation or
-  // class-management screen, nor a registration-open control.
+  // Observed in AppShell/AdminModules: no event-creation screen, class
+  // management screen, or event registration-open control is rendered.
 });
 
-test.fixme('participant submits an open registration, verifies email from Mailpit and uploads a document', async () => {
-  // The public form supports submission/verification/upload only when a
-  // configured open event and its classes/form fields exist. Step 3 cannot
-  // create that prerequisite through the browser; do not seed via DB/API.
+test.fixme('participant uploads a supporting document during registration', async () => {
+  // Observed in Registration.tsx and the public API routes: registration has
+  // no document input/storage endpoint. A configured field of type=file is
+  // accepted by the contract but not rendered or persisted by this UI flow.
 });
 
-test.fixme('admin reviews submitted documents, sets acceptance and payment, and sees history', async () => {
-  // The admin list/detail workflow requires a real submitted registration;
-  // step 4 is blocked. The detail UI also explicitly reports that real
-  // documents and upload counts are not yet available.
+test.fixme('admin reviews uploaded documents and records payment in the entry detail', async () => {
+  // AdminEntries.tsx explicitly renders “Echte Nennungsunterlagen und
+  // Upload-Zähler sind noch nicht verfügbar.” No payment-entry control is
+  // present in the detail UI. Acceptance transitions/history are implemented.
 });
 
-test.fixme('admin exports the entry list as CSV', async () => {
-  // The current Nennungen screen has no export action or export endpoint.
+test.fixme('admin starts CSV export from the Nennungen screen', async () => {
+  // GET /admin/events/:eventId/entries.csv exists, but the Nennungen UI has
+  // no export control. The API creates an asynchronous artifact job.
 });
