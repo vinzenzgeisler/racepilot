@@ -16,6 +16,7 @@ import { ComponentGallery } from './ComponentGallery.js';
 import { AppShell, type ShellModule } from './AppShell.js';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { RegistrationFormSettings } from './RegistrationFormSettings.js';
+import { adminFetch, restoreAdminSession, signIn } from './auth.js';
 
 type State =
   | { kind: 'loading' }
@@ -30,7 +31,8 @@ export function App({ renderContribution }: AppProps = {}) {
   const [state, setState] = useState<State>({ kind: 'loading' });
   const isAdmin =
     window.location.pathname.startsWith('/admin') ||
-    window.location.pathname.startsWith('/app');
+    window.location.pathname.startsWith('/app') ||
+    window.location.pathname === '/auth/callback';
   const isComponentGallery = window.location.pathname === '/components';
   useEffect(() => {
     if (isAdmin || isComponentGallery) return;
@@ -57,18 +59,18 @@ export function App({ renderContribution }: AppProps = {}) {
 
   if (isComponentGallery) return <ComponentGallery />;
 
-  if (isAdmin) return <AdminApplication />;
+  if (isAdmin) return <AuthenticatedAdmin />;
 
   if (state.kind === 'loading')
     return (
       <main className="shell" aria-busy="true">
-        <p role="status">Loading RacePilot…</p>
+        <p role="status">NENNBOX lädt…</p>
       </main>
     );
   if (state.kind === 'unavailable')
     return (
       <main className="shell">
-        <h1>RacePilot</h1>
+        <h1>NENNBOX</h1>
         <p role="alert">This service is currently unavailable.</p>
       </main>
     );
@@ -114,7 +116,7 @@ export function App({ renderContribution }: AppProps = {}) {
           <img className="logo" src={config.branding.logoUrl} alt="" />
         ) : null}
         <div>
-          <p className="eyebrow">RacePilot · {config.deploymentMode}</p>
+          <p className="eyebrow">NENNBOX · {config.deploymentMode}</p>
           <h1>{config.organization.name}</h1>
         </div>
       </header>
@@ -153,6 +155,53 @@ export function App({ renderContribution }: AppProps = {}) {
   );
 }
 
+function AuthenticatedAdmin() {
+  const [session, setSession] = useState<
+    'loading' | 'ready' | 'signed-out' | 'disabled' | 'error'
+  >('loading');
+  useEffect(() => {
+    let active = true;
+    void restoreAdminSession()
+      .then((result) => {
+        if (active) setSession(result);
+      })
+      .catch(() => {
+        if (active) setSession('error');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  if (session === 'loading')
+    return (
+      <main className="shell" aria-busy="true">
+        <p role="status">NENNBOX lädt…</p>
+      </main>
+    );
+  if (session === 'ready') return <AdminApplication />;
+  return (
+    <main className="shell">
+      <h1>NENNBOX</h1>
+      {session === 'signed-out' ? (
+        <>
+          <p>Bitte anmelden, um die Veranstaltung zu verwalten.</p>
+          <Button
+            onClick={() => void signIn().catch(() => setSession('error'))}
+          >
+            Anmelden
+          </Button>
+        </>
+      ) : (
+        <p role="alert">
+          {session === 'disabled'
+            ? 'Die Anmeldung ist noch nicht eingerichtet.'
+            : 'Die Anmeldung ist derzeit nicht verfügbar.'}
+        </p>
+      )}
+    </main>
+  );
+}
+
 function AdminApplication() {
   const [events, setEvents] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedEvent, setSelectedEvent] = useState('');
@@ -162,7 +211,7 @@ function AdminApplication() {
   const closePreview = () => setPreviewOpen(false);
   useEffect(() => {
     let active = true;
-    void fetch('/admin/events', {
+    void adminFetch('/admin/events', {
       credentials: 'same-origin',
       cache: 'no-store',
     })
@@ -187,10 +236,13 @@ function AdminApplication() {
   useEffect(() => {
     if (!selectedEvent) return;
     let active = true;
-    void fetch(`/admin/events/${encodeURIComponent(selectedEvent)}/modules`, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-    })
+    void adminFetch(
+      `/admin/events/${encodeURIComponent(selectedEvent)}/modules`,
+      {
+        credentials: 'same-origin',
+        cache: 'no-store',
+      },
+    )
       .then((response) => (response.ok ? response.json() : { modules: [] }))
       .then((payload: unknown) => {
         if (

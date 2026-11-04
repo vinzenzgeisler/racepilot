@@ -1,3 +1,4 @@
+import { adminFetch } from './auth.js';
 import {
   useCallback,
   useEffect,
@@ -54,7 +55,7 @@ type WorkflowView = {
 };
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
-  return fetch(path, {
+  return adminFetch(path, {
     ...init,
     credentials: 'same-origin',
     cache: 'no-store',
@@ -198,7 +199,7 @@ export function AdminEntries({
   useEffect(() => {
     if (!eventId) return;
     const controller = new AbortController();
-    fetch(
+    adminFetch(
       `/admin/events/${encodeURIComponent(eventId)}/registration-workflow`,
       {
         credentials: 'same-origin',

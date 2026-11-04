@@ -1,3 +1,4 @@
+import { adminFetch } from './auth.js';
 import { useEffect, useState } from 'react';
 import { EventSchema } from '@racepilot/contracts';
 
@@ -39,7 +40,7 @@ export function AdminWorkflow({
   useEffect(() => {
     if (!eventId) return;
     const abort = new AbortController();
-    fetch(
+    adminFetch(
       `/admin/events/${encodeURIComponent(eventId)}/registration-workflow`,
       { credentials: 'same-origin', cache: 'no-store', signal: abort.signal },
     )
@@ -74,7 +75,7 @@ export function AdminWorkflow({
     setBusy(true);
     setMessage('');
     try {
-      const response = await fetch(
+      const response = await adminFetch(
         `/admin/events/${encodeURIComponent(eventId)}/registration-workflow`,
         {
           method: 'PUT',
