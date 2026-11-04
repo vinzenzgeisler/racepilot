@@ -188,7 +188,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await shots('admin-entry-detail');
   await page.getByLabel('Reason (required for audit)').fill('Alpha E2E review');
   await page
-    .getByRole('button', { name: /Accepted|Zugelassen|Annehmen/i })
+    .getByRole('button', { name: /Accepted|Angenommen|Zugelassen|Annehmen/i })
     .first()
     .click();
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
