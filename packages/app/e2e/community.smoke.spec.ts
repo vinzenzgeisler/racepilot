@@ -129,12 +129,20 @@ test('Community registration and admin lifecycle with API setup', async ({
   const participant = `alpha-${randomUUID().slice(0, 8)}@example.test`;
   mkdirSync('packages/app/test-results/alpha', { recursive: true });
   const shots = async (name: string) => {
-    for (const width of [1440, 390]) {
-      await page.setViewportSize({ width, height: width === 390 ? 844 : 1000 });
-      await page.screenshot({
-        path: `packages/app/test-results/alpha/${name}-${width}.png`,
-        fullPage: true,
-      });
+    const viewport = page.viewportSize();
+    try {
+      for (const width of [1440, 390]) {
+        await page.setViewportSize({
+          width,
+          height: width === 390 ? 844 : 1000,
+        });
+        await page.screenshot({
+          path: `packages/app/test-results/alpha/${name}-${width}.png`,
+          fullPage: true,
+        });
+      }
+    } finally {
+      if (viewport) await page.setViewportSize(viewport);
     }
   };
   await page.goto(`/events/${slug}/register`);
@@ -205,7 +213,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await expect(page.getByText(participant)).toBeVisible();
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: participant });
-  await row.getByRole('button', { name: /Öffnen/ }).click();
+  await row.locator('button[data-entry-action]').click();
   await expect(
     page.getByRole('heading', { name: 'Entry detail' }),
   ).toBeVisible();
