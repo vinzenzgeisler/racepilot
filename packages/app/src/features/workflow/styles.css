@@ -1,0 +1,14 @@
+.admin-workflow {
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border, var(--color-line));
+  border-radius: 0;
+}
+.admin-workflow summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+.admin-workflow textarea {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+}

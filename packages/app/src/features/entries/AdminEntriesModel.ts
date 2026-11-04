@@ -1,4 +1,4 @@
-import { adminFetch } from './auth.js';
+import { adminFetch } from '../../auth.js';
 import { EventSchema } from '@racepilot/contracts';
 
 export type Event = ReturnType<typeof EventSchema.parse>;

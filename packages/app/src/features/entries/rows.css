@@ -10,22 +10,18 @@
   color: #6b746f;
   font-size: 22px;
 }
-
 .entry-driver-name {
   display: block;
   font-weight: 600;
 }
-
 .entry-row-actions {
   display: flex;
   align-items: center;
   gap: 8px;
 }
-
 .entry-row-actions details {
   position: relative;
 }
-
 .entry-row-actions details > div {
   position: absolute;
   right: 0;
@@ -34,12 +30,10 @@
   background: #fff;
   box-shadow: 0 2px 12px #111a1620;
 }
-
 .admin-table-wrap tr.is-selected {
   background: #f5f4ee;
   box-shadow: inset 3px 0 #193b30;
 }
-
 .entry-selection-bar {
   position: sticky;
   bottom: 0;
@@ -51,66 +45,17 @@
   background: #193b30;
   color: #f5f4ee;
 }
-
 .entry-selection-bar button {
   min-height: 40px;
 }
-
 .admin-documents ul {
   padding: 0;
   list-style: none;
 }
-
 .admin-documents li {
   display: flex;
   justify-content: space-between;
   gap: 16px;
   padding: 8px 0;
   border-bottom: 1px solid var(--color-line);
-}
-
-.app-preview-vehicle {
-  width: 100%;
-  height: 180px;
-  background: #e4eae3;
-  font-size: 48px;
-}
-
-@media (min-width: 1680px) {
-  .app-main-content .admin-detail {
-    max-width: none;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) 360px;
-    gap: 24px;
-  }
-  .app-main-content .admin-detail > h3 {
-    grid-column: 1 / -1;
-  }
-  .app-main-content .admin-detail > dl {
-    grid-column: 1;
-  }
-  .app-main-content .admin-detail > .admin-documents,
-  .app-main-content .admin-detail > section[aria-label='Verlauf'],
-  .app-main-content .admin-detail > label,
-  .app-main-content .admin-detail > .admin-actions {
-    grid-column: 2;
-  }
-}
-
-.entry-driver-name,
-.entry-vehicle-name,
-.entry-hint {
-  display: block;
-}
-
-.entry-hint {
-  align-self: flex-start;
-  padding: 1px 6px;
-  box-shadow: inset 0 0 0 1px #111a16;
-  font: 500 10px var(--font-mono);
-}
-
-.entry-vehicle-name {
-  color: #4f5a54;
-  font-size: 13px;
 }

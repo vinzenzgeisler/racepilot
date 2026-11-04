@@ -1,0 +1,8 @@
+.entry-status {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  padding: 0.15rem 0.55rem;
+  font-weight: 600;
+}

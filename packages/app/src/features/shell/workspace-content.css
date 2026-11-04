@@ -1,124 +1,15 @@
-@media (max-width: 767px) {
-  .app-shell {
-    display: block;
-    padding-bottom: 64px;
-  }
-  .app-sidebar {
-    display: none;
-  }
-  .app-header {
-    height: 64px;
-    padding-inline: 16px;
-  }
-  .app-header h1 {
-    font-size: 22px;
-  }
-  .app-header .nb-button {
-    display: none;
-  }
-  .app-view-switch button {
-    min-height: 44px;
-    padding-inline: 8px;
-    font-size: 12px;
-  }
-  .app-filter-bar {
-    min-height: 52px;
-    padding: 6px 16px;
-    overflow-x: auto;
-  }
-  .app-filter-chip {
-    flex: 0 0 auto;
-  }
-  .app-filter-clear {
-    display: none;
-  }
-  .app-main {
-    padding: 16px;
-  }
-  .app-main-content .admin-filters {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .app-main-content .admin-table-wrap {
-    overflow: visible;
-    border: 0;
-  }
-  .app-main-content table,
-  .app-main-content thead,
-  .app-main-content tbody,
-  .app-main-content tr,
-  .app-main-content td {
-    display: block;
-    width: 100%;
-  }
-  .app-main-content thead {
-    position: absolute;
-    clip-path: inset(50%);
-  }
-  .app-main-content tbody tr {
-    margin-bottom: 8px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--color-line);
-  }
-  .app-main-content tbody td {
-    min-height: 56px;
-    padding: 12px 4px;
-    white-space: normal;
-  }
-  .app-bottom-nav {
-    position: fixed;
-    inset: auto 0 0;
-    z-index: 5;
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    min-height: 64px;
-    padding-bottom: env(safe-area-inset-bottom);
-    background: var(--color-green);
-    color: var(--color-ivory);
-  }
-  .app-bottom-nav .app-nav-item {
-    min-height: 56px;
-    flex-direction: column;
-    justify-content: center;
-    gap: 2px;
-    font-size: 10px;
-  }
-  .app-bottom-nav .app-nav-label {
-    position: static;
-    width: auto;
-    height: auto;
-    overflow: visible;
-    clip-path: none;
-    font-size: 10px;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-shell *,
-  .app-shell *::before,
-  .app-shell *::after {
-    scroll-behavior: auto !important;
-    transition-duration: 0s !important;
-    animation-duration: 0s !important;
-  }
-}
-
 .app-main-content .admin-entries > label {
   max-width: 720px;
 }
-
 .app-main-content .admin-detail {
   max-width: 720px;
 }
-
 .app-empty-view {
   max-width: 720px;
 }
-
 .app-event-picker {
   position: relative;
 }
-
 @media (max-width: 1279px) {
   .app-event-picker::after {
     content: '▾';
@@ -142,11 +33,9 @@
     font-size: 14px;
   }
 }
-
 .app-preview {
   position: relative;
 }
-
 .app-preview-close {
   position: absolute;
   top: 16px;
@@ -158,13 +47,11 @@
   font-size: 22px;
   cursor: pointer;
 }
-
 .app-preview-status {
   margin: 24px 0;
   padding: 0;
   list-style: none;
 }
-
 .app-preview-status li {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -172,56 +59,47 @@
   padding: 12px 0;
   border-bottom: 1px solid var(--color-line);
 }
-
 .app-preview-status small {
   grid-column: 1 / -1;
   color: var(--color-graphite);
 }
-
 .app-preview-extra {
   display: none;
   margin-top: 32px;
   padding-top: 16px;
   border-top: 2px solid var(--color-ink);
 }
-
 .app-preview-extra h3 {
   margin: 0;
   font: 700 18px var(--font-archivo);
 }
-
 .app-start-number {
   display: inline-block;
   margin-right: 8px;
   font: 900 20px/0.9 var(--font-archivo);
   font-stretch: condensed;
 }
-
 @media (max-width: 1679px) {
   .app-main-content [data-priority='3'],
   .app-main-content [data-priority='4'] {
     display: none;
   }
 }
-
 @media (min-width: 1280px) and (max-width: 1679px) {
   .app-main-content [data-priority='3'] {
     display: none;
   }
 }
-
 @media (min-width: 1680px) and (max-width: 2199px) {
   .app-main-content [data-priority='4'] {
     display: none;
   }
 }
-
 @media (min-width: 2200px) {
   .app-preview-extra {
     display: block;
   }
 }
-
 @media (max-width: 767px) {
   .app-preview-close {
     display: none;
@@ -230,7 +108,6 @@
     display: block;
   }
 }
-
 @media (max-width: 767px) {
   .app-header {
     gap: 8px;
@@ -247,11 +124,9 @@
     font-size: 11px;
   }
 }
-
 .app-event-switch-icon {
   display: none;
 }
-
 @media (max-width: 1279px) {
   .app-event-picker::after {
     content: none;
@@ -270,7 +145,6 @@
     z-index: 0;
   }
 }
-
 @media (max-width: 767px) {
   .app-bottom-nav {
     grid-template-columns: repeat(4, 1fr);

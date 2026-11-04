@@ -1,0 +1,15 @@
+.entry-driver-name,
+.entry-vehicle-name,
+.entry-hint {
+  display: block;
+}
+.entry-hint {
+  align-self: flex-start;
+  padding: 1px 6px;
+  box-shadow: inset 0 0 0 1px #111a16;
+  font: 500 10px var(--font-mono);
+}
+.entry-vehicle-name {
+  color: #4f5a54;
+  font-size: 13px;
+}
