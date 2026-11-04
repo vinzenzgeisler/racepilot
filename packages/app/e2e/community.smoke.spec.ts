@@ -7,6 +7,8 @@ test('Community registration and admin lifecycle with API setup', async ({
   page,
   request,
 }) => {
+  // Includes SMTP/job polling and desktop/mobile evidence for the whole lifecycle.
+  test.setTimeout(120_000);
   const email = process.env.COMMUNITY_ADMIN_EMAIL ?? 'admin@nennbox.local';
   const password = process.env.COMMUNITY_ADMIN_PASSWORD;
   if (!password) throw new Error('COMMUNITY_ADMIN_PASSWORD is required');
@@ -239,25 +241,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   const db = new Client({
     connectionString:
       process.env.DATABASE_URL ??
-      'postgres://racepilot:' +
-        String.fromCharCode(
-          114,
-          97,
-          99,
-          101,
-          112,
-          105,
-          108,
-          111,
-          116,
-          45,
-          108,
-          111,
-          99,
-          97,
-          108,
-        ) +
-        '@127.0.0.1:5433/racepilot',
+      'postgres://racepilot:racepilot-local@127.0.0.1:5433/racepilot',
   });
   await db.connect();
   let invoiceId: string;
