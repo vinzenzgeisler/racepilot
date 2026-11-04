@@ -79,6 +79,7 @@ export function RegistrationView({
               if (field.key === 'entries')
                 return (
                   <RegistrationVehicleFields
+                    key={field.key}
                     field={field}
                     locale={locale}
                     vehicles={vehicles}
