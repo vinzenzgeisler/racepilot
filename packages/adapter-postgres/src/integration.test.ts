@@ -1054,6 +1054,26 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         capabilities: new Set<string>(),
         correlationId: 'test',
       };
+      const projectedEvent = await repo.create!(ctx, {
+        slug: `projected-${crypto.randomUUID()}`,
+        name: 'Projected event',
+        startsOn: '2027-01-01',
+        endsOn: '2027-01-02',
+      });
+      expect(Object.keys(projectedEvent).sort()).toEqual([
+        'archivedAt',
+        'closedAt',
+        'endsOn',
+        'id',
+        'name',
+        'openedAt',
+        'organizationId',
+        'registrationClosesAt',
+        'registrationOpensAt',
+        'slug',
+        'startsOn',
+        'status',
+      ]);
       const [b] = await db
         .insert(organizations)
         .values({

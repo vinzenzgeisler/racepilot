@@ -2297,8 +2297,12 @@ export function createOrganizationRepository(
 }
 export function createEventRepository(db: Database): EventRepository {
   const mapEvent = (row: typeof events.$inferSelect): Event => ({
-    ...row,
+    id: row.id,
     organizationId: organizationId(row.organizationId),
+    slug: row.slug,
+    name: row.name,
+    startsOn: row.startsOn,
+    endsOn: row.endsOn,
     status: row.status as EventStatus,
     registrationOpensAt: row.registrationOpensAt?.toISOString() ?? null,
     registrationClosesAt: row.registrationClosesAt?.toISOString() ?? null,
