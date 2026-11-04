@@ -773,7 +773,17 @@ function mapEntry(
   row: typeof entries.$inferSelect,
 ): import('@racepilot/core').Entry {
   return {
-    ...row,
+    id: row.id,
+    eventId: row.eventId,
+    classId: row.classId,
+    registrationGroupId: row.registrationGroupId,
+    driverPersonId: row.driverPersonId,
+    vehicleId: row.vehicleId,
+    requestedStartNumber: row.requestedStartNumber,
+    priceSnapshotVersion: row.priceSnapshotVersion,
+    formSnapshotVersion: row.formSnapshotVersion,
+    priceSnapshot: row.priceSnapshot,
+    deletionReason: row.deletionReason,
     organizationId: organizationId(row.organizationId),
     verificationStatus:
       row.verificationStatus as import('@racepilot/core').Entry['verificationStatus'],

@@ -1548,6 +1548,29 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(pageA.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       expect(pageA.total).toBe(1);
+      expect(Object.keys(pageA.items[0]!).sort()).toEqual(
+        [
+          'id',
+          'organizationId',
+          'eventId',
+          'classId',
+          'registrationGroupId',
+          'driverPersonId',
+          'vehicleId',
+          'verificationStatus',
+          'acceptanceStatus',
+          'requestedStartNumber',
+          'priceSnapshotVersion',
+          'formSnapshotVersion',
+          'priceSnapshot',
+          'createdAt',
+          'deletedAt',
+          'deletionReason',
+          'statusProjection',
+          'adminHistory',
+          'adminDetails',
+        ].sort(),
+      );
       const noInvoice = await adminEntries.listAdmin!(ctxA, {
         page: 1,
         pageSize: 100,

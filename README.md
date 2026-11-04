@@ -1,16 +1,17 @@
-# RacePilot
+# NENNBOX
 
-This is the public product repository for RacePilot, a clean rebuild that uses the MSC
-event application only as a read-only reference. It contains the shared product core,
-contracts, API, worker, UI, and adapters. It does not yet provide a Community
-distribution or production Cloud platform. Cloud infrastructure, control plane, and the
-separately deployed product website live in a private repository.
+NENNBOX (formerly RacePilot) is an event registration and management application.
+This public repository contains the shared product core, contracts, API, worker, UI,
+and adapters, plus a runnable **Community Alpha local preview**. It is not yet a
+production-ready Community distribution or Cloud platform. Cloud infrastructure,
+control plane, and the separately deployed product website live in a private repository.
+Internal package names and the repository URL still use `racepilot`.
 
-RacePilot is one product with one shared domain core and two explicit deployment
+NENNBOX is one product with one shared domain core and two explicit deployment
 modes:
 
 - **Community:** self-hosted, single tenant, exactly one organization per installation.
-- **Cloud:** managed by RacePilot, multi-tenant, with strictly isolated organizations.
+- **Cloud:** managed by NENNBOX, multi-tenant, with strictly isolated organizations.
 
 The following documents form the baseline:
 
@@ -72,9 +73,77 @@ pin and verify the full source commit before rebuilding this pack set. See the
 
 Local development PostgreSQL is available through `docker compose -f compose.dev.yaml up -d` (Docker is optional; tests can use any PostgreSQL 16 instance). Configure `DATABASE_URL`, `DEPLOYMENT_MODE=community`, `COMMUNITY_ORGANIZATION_SLUG`, `COMMUNITY_ORGANIZATION_NAME`, `COMMUNITY_ORGANIZATION_TIMEZONE`, and `COMMUNITY_ORGANIZATION_LOCALE`; `PORT` defaults to 3000. Mail delivery is disabled by default. Enable it with `MAIL_PROVIDER=smtp`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, optional paired `SMTP_USER`/`SMTP_PASSWORD`, and `CANONICAL_BASE_URL` (HTTPS outside localhost). Configure each organization’s validated `mail_from` and optional `mail_reply_to` before delivery. The worker uses a 30-second SMTP timeout and a configurable `MAIL_OUTBOX_LEASE_MS` (default 300000; must exceed 90000). Delivery is at-least-once: if a worker crashes after the SMTP server accepts a message but before the database records success, the expired lease can cause a duplicate send; providers should honor the stable idempotency key where supported. The development Compose stack exposes Mailpit SMTP on `127.0.0.1:1025` and its UI on `http://127.0.0.1:8025`. Run `npm run db:migrate` and `npm run db:seed`. Integration tests use `RACEPILOT_TEST_DATABASE_URL`.
 
-### Community Alpha local preview
+### NENNBOX jetzt lokal nutzen (Community Alpha)
 
-With Node.js 24 and Docker Compose installed, run `bash scripts/community-up.sh` from a fresh checkout. This starts local PostgreSQL, Keycloak, Mailpit, API, worker, and Vite app, creates the single Community organization, and prints a generated first-admin password. Open `http://127.0.0.1:5173/app` and sign in with the printed address and password. `COMMUNITY_ADMIN_EMAIL` may be set on the first run. State and credentials are kept in the ignored `.community-local/` directory and Docker volumes; stop with Ctrl+C. This is a **local development preview**, not a hardened public deployment or a completed Community release. The browser login smoke test runs against the real stack in CI; the end-to-end registration flow is still tracked by [the Community Alpha milestone](https://github.com/vinzenzgeisler/racepilot/issues/120).
+**Voraussetzungen:** Git, **Node.js 24**, **npm 11** (siehe `packageManager`),
+**Docker mit Compose v2** und eine Bash-Umgebung (Linux, macOS oder WSL2).
+Docker muss laufen und für deinen Benutzer erreichbar sein. Internetzugang wird
+beim ersten Start zum Laden der npm-Pakete und Container-Images benötigt.
+Ein Cloud-Konto, kostenpflichtiger Dienst oder externer Mailserver ist für diesen
+lokalen Test nicht erforderlich.
+
+```bash
+git clone https://github.com/vinzenzgeisler/racepilot.git
+cd racepilot
+git switch main
+git pull --ff-only
+bash scripts/community-up.sh
+```
+
+Der erste Start dauert einige Minuten. Das Skript installiert die Abhängigkeiten,
+baut die Pakete, startet PostgreSQL, Keycloak und Mailpit in Docker sowie API,
+Worker und Web-App auf dem Host. Es migriert die Datenbank und legt genau eine
+Community-Organisation an. Separate `npm ci`-, Migrations- oder Seed-Aufrufe sind
+für diesen Startweg **nicht nötig**. Insbesondere ist `db:seed` kein Seed für
+diesen Stack: Es verwendet einen anderen Organisations-Slug.
+
+| Oberfläche / Dienst     | Lokale Adresse / Port          |
+| ----------------------- | ------------------------------ |
+| Admin-App               | <http://127.0.0.1:5173/app>    |
+| Test-E-Mails in Mailpit | <http://127.0.0.1:8025>        |
+| API-Gesundheitsprüfung  | <http://127.0.0.1:3000/health> |
+| Keycloak / Anmeldung    | <http://127.0.0.1:8080>        |
+| PostgreSQL              | `127.0.0.1:5433`               |
+| Mailpit SMTP            | `127.0.0.1:1025`               |
+
+Diese Ports müssen frei sein. Verwende im Browser **`127.0.0.1` wie angegeben**,
+nicht `localhost` oder die LAN-IP; die OIDC-Weiterleitungen sind darauf eingestellt.
+
+1. Öffne die Admin-App und klicke **Anmelden**.
+2. Nutze die im Terminal ausgegebene E-Mail-Adresse (standardmäßig
+   `admin@nennbox.local`) und das automatisch generierte Passwort.
+3. Eine frische Installation enthält noch keine Veranstaltung. Veranstaltung,
+   Klassen, Teilnahmebedingungen und Öffnung der Nennung werden derzeit über
+   die authentifizierte Admin-API eingerichtet. Die Anleitung
+   [Erste lokale Testveranstaltung](docs/getting-started/community-local.md)
+   enthält ein vollständiges Beispiel.
+4. Teilnehmende öffnen anschließend
+   `http://127.0.0.1:5173/events/<veranstaltungs-slug>/register`.
+   Die Bestätigungs-E-Mail erscheint in **Mailpit**, nicht im echten Postfach.
+   Nach der Bestätigung lässt sich die Nennung in der Admin-App prüfen und zulassen.
+
+Optional kannst du **vor dem allerersten Start** deine Admin-E-Mail setzen:
+
+```bash
+COMMUNITY_ADMIN_EMAIL=du@example.org bash scripts/community-up.sh
+```
+
+**Stoppen und fortsetzen:** Ctrl+C im Startterminal beendet App/API/Worker und die
+Compose-Dienste. Erneut `bash scripts/community-up.sh` startet mit den vorhandenen
+Daten. Zugangsdaten, Realm-Konfiguration und Uploads liegen im ignorierten
+Verzeichnis `.community-local/`; Datenbank und Keycloak-Zustand in Docker-Volumes.
+Beides bleibt beim normalen Stoppen erhalten. Ein erneutes Setzen von
+`COMMUNITY_ADMIN_EMAIL` ändert einen bereits importierten Benutzer nicht.
+Das gespeicherte lokale Passwort kannst du bei Bedarf mit
+`node scripts/community-config.mjs --password` erneut anzeigen.
+
+**Stand der Alpha:** Der Stack ist eine lokale Entwicklungsvorschau, kein
+abgesichertes öffentliches Hosting. Nennung, E-Mail-Bestätigung, Bild-Upload und
+Admin-Bearbeitung sind vorhanden. Einrichtung von Veranstaltungen/Klassen,
+Zahlungserfassung und CSV-Export benötigen teilweise noch die API. PDF-Belege und
+Einzelprüfung hochgeladener Dokumente fehlen noch. Details und ausdrücklich noch
+nicht verfügbare UI-Aktionen stehen im [lokalen Leitfaden](docs/getting-started/community-local.md)
+und im [Community-Alpha-Issue](https://github.com/vinzenzgeisler/racepilot/issues/120).
 
 Public registration is rate-limited through PostgreSQL so multiple API processes
 share the same budgets. Defaults are 60 requests/minute per client and organization

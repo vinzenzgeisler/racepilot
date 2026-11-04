@@ -199,6 +199,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   );
   await shots('public-confirmation');
 
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/app');
   await page.getByLabel('Veranstaltung wechseln').selectOption(event.id);
   await expect(page.getByText(participant)).toBeVisible();
