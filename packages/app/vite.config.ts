@@ -3,7 +3,8 @@ import react from '@vitejs/plugin-react';
 
 // Local development only: the browser talks same-origin and Vite forwards API routes.
 const apiTarget = process.env.RACEPILOT_API_URL ?? 'http://127.0.0.1:3000';
-const apiRoutes = ['/runtime', '/auth', '/admin', '/public', '/health'];
+// The OIDC callback must be served by the SPA, not forwarded to the API.
+const apiRoutes = ['/runtime', '/auth/config', '/admin', '/public', '/health'];
 
 export default defineConfig({
   plugins: [react()],
