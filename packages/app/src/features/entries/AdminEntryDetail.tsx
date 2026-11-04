@@ -1,3 +1,4 @@
+import { AdminFileDownload } from './AdminFileDownload.js';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from './AdminEntriesModel.js';
 import { EntryStatusBadge } from './EntryStatusBadge.js';
@@ -62,7 +63,7 @@ export function AdminEntryDetail({
                 <li key={answer.key}>
                   <strong>{answer.label}</strong>:{' '}
                   {answer.fileDownloadUrl ? (
-                    <a href={answer.fileDownloadUrl}>Datei herunterladen</a>
+                    <AdminFileDownload url={answer.fileDownloadUrl} />
                   ) : answer.value === null ? (
                     '—'
                   ) : typeof answer.value === 'boolean' ? (
