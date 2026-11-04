@@ -794,7 +794,7 @@ function mapEntry(
   };
 }
 async function projectEntryRows(
-  db: Database,
+  db: Pick<Database, 'select' | 'execute'>,
   ctx: RequestContext,
   rows: readonly (typeof entries.$inferSelect)[],
 ): Promise<import('@racepilot/core').Entry[]> {
@@ -950,7 +950,7 @@ async function projectEntryRows(
   });
 }
 async function attachAdminEntryDetails(
-  db: Database,
+  db: Pick<Database, 'select'>,
   ctx: RequestContext,
   items: readonly import('@racepilot/core').Entry[],
 ): Promise<import('@racepilot/core').Entry[]> {
@@ -1817,7 +1817,9 @@ export function createEntryRepository(
             );
           }
         }
-        return mapEntry(row);
+        // Return the same read model as entry detail, including the audit just written.
+        const projected = await projectEntryRows(tx, ctx, [row]);
+        return (await attachAdminEntryDetails(tx, ctx, projected))[0] ?? null;
       }),
     softDelete: async (ctx, id, reason) => {
       const [row] = await db

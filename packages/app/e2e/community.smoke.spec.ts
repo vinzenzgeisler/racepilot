@@ -226,10 +226,15 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(download.suggestedFilename()).toMatch(/^registration-upload-/);
   expect(readFileSync(await download.path()!)).toEqual(uploadedPng);
   await shots('admin-entry-detail');
-  await page.getByLabel('Reason (required for audit)').fill('Alpha E2E review');
-  await page
+  const entryDetail = page.getByRole('region', {
+    name: 'Entry detail',
+    exact: true,
+  });
+  await entryDetail
+    .getByLabel('Reason (required for audit)')
+    .fill('Alpha E2E review');
+  await entryDetail
     .getByRole('button', { name: /Accepted|Angenommen|Zugelassen|Annehmen/i })
-    .first()
     .click();
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
     /accepted|zugelassen/i,
