@@ -1,0 +1,26 @@
+.app-preview-vehicle {
+  width: 100%;
+  height: 180px;
+  background: #e4eae3;
+  font-size: 48px;
+}
+@media (min-width: 1680px) {
+  .app-main-content .admin-detail {
+    max-width: none;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 24px;
+  }
+  .app-main-content .admin-detail > h3 {
+    grid-column: 1 / -1;
+  }
+  .app-main-content .admin-detail > dl {
+    grid-column: 1;
+  }
+  .app-main-content .admin-detail > .admin-documents,
+  .app-main-content .admin-detail > section[aria-label='Verlauf'],
+  .app-main-content .admin-detail > label,
+  .app-main-content .admin-detail > .admin-actions {
+    grid-column: 2;
+  }
+}

@@ -1,0 +1,33 @@
+.registration-admin {
+  display: grid;
+  gap: 1rem;
+  max-width: 64rem;
+  padding: 1.5rem;
+}
+.registration-admin label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+.registration-admin input:not([type='checkbox']),
+.registration-admin select,
+.registration-admin textarea {
+  font: inherit;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0.5rem;
+}
+.registration-admin input[type='checkbox'] {
+  width: 1.2rem;
+  height: 1.2rem;
+  min-height: 44px;
+}
+.registration-admin textarea {
+  min-height: 7rem;
+}
+.registration-admin-grid,
+.registration-admin-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+}

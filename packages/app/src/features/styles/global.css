@@ -1,0 +1,65 @@
+:root {
+  color-scheme: light;
+  font-family: var(--font-plex);
+  --status-success: var(--color-green);
+  --status-warning: var(--color-marshal-text);
+  --status-danger: var(--color-marshal-text);
+  --status-info: var(--color-graphite);
+}
+body {
+  background: var(--color-ivory);
+  color: var(--color-ink);
+}
+.shell {
+  --brand-primary: var(--color-green);
+  --brand-accent: var(--color-marshal);
+  max-width: 72rem;
+  margin: auto;
+  padding: clamp(1rem, 4vw, 3rem);
+  min-height: 100vh;
+}
+.masthead {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  border-bottom: 0.3rem solid var(--brand-accent);
+  padding-bottom: 1rem;
+}
+.logo {
+  width: auto;
+  max-width: 10rem;
+  max-height: 4rem;
+  object-fit: contain;
+}
+h1 {
+  margin: 0;
+  color: var(--brand-primary);
+}
+h2 {
+  margin-block: 2rem 0.5rem;
+}
+.eyebrow {
+  margin: 0 0 0.25rem;
+  font-size: 0.875rem;
+}
+a {
+  color: var(--brand-primary);
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.18em;
+}
+a:focus-visible {
+  outline: 3px solid var(--color-marshal);
+  outline-offset: 3px;
+}
+.event-image {
+  display: block;
+  width: 100%;
+  max-height: 30rem;
+  object-fit: cover;
+  border-radius: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  a {
+    transition: color var(--motion-reaction) var(--ease-brake);
+  }
+}
