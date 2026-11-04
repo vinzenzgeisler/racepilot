@@ -24,11 +24,11 @@ it('downloads protected bytes through the authenticated client, not navigation',
   const revoke = vi.fn();
   vi.stubGlobal('URL', { createObjectURL: create, revokeObjectURL: revoke });
   const saves: string[] = [];
-  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(
-    function () {
-      saves.push(this.download);
-    },
-  );
+  vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
+    this: HTMLAnchorElement,
+  ) {
+    saves.push(this.download);
+  });
   const element = document.createElement('div');
   const root = createRoot(element);
   try {
