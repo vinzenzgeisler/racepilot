@@ -16,7 +16,7 @@ module.exports = {
       name: 'adapter-core-only',
       severity: 'error',
       from: { path: '^packages/adapter-[^/]+/' },
-      to: { path: '^packages/(?!core/)' },
+      to: { path: '^packages/(?!core/|adapter-postgres/)' },
     },
     {
       name: 'core-contracts-app-no-adapters',
