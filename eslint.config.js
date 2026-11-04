@@ -5,11 +5,21 @@ import reactHooks from 'eslint-plugin-react-hooks';
 import { readFileSync } from 'node:fs';
 
 const maxLinesExceptions = JSON.parse(
-  readFileSync(new URL('./scripts/max-lines-exceptions.json', import.meta.url), 'utf8'),
+  readFileSync(
+    new URL('./scripts/max-lines-exceptions.json', import.meta.url),
+    'utf8',
+  ),
 );
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'package-lock.json', '**/*.css'] },
+  {
+    ignores: [
+      '**/dist/**',
+      '**/node_modules/**',
+      'package-lock.json',
+      '**/*.css',
+    ],
+  },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
