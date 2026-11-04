@@ -15,7 +15,21 @@ import type { CSSProperties } from 'react';
 
 type FormPayload = {
   form: StandardRegistrationForm;
-  event: { id: string; slug: string; name: string; startsOn: string };
+  event: {
+    id: string;
+    slug: string;
+    name: string;
+    startsOn: string;
+    registrationClosesAt: string | null;
+  };
+  currency: string;
+  pricing: Array<{
+    classId: string;
+    baseCents: number;
+    additionalEntryAdjustmentCents: number;
+    earlyBirdDeadline: string | null;
+    earlyBirdDiscountCents: number;
+  }>;
   classes: Array<{
     id: string;
     name: string;
@@ -42,6 +56,38 @@ type VehicleEntry = {
   registration: string;
   requestedStartNumber: string;
 };
+type PublicPriceRule = FormPayload['pricing'][number];
+export function estimateRegistrationTotal(
+  vehicles: Array<{ classId: string }>,
+  rules: PublicPriceRule[],
+  at = new Date(),
+): number | null {
+  if (!vehicles.length || vehicles.some((vehicle) => !vehicle.classId))
+    return null;
+  const byClass = new Map(rules.map((rule) => [rule.classId, rule]));
+  const counts = new Map<string, number>();
+  for (const vehicle of vehicles)
+    counts.set(vehicle.classId, (counts.get(vehicle.classId) ?? 0) + 1);
+  if ([...counts.keys()].some((classId) => !byClass.has(classId))) return null;
+  let total = 0;
+  for (const [classId, quantity] of counts) {
+    const rule = byClass.get(classId)!;
+    const early =
+      rule.earlyBirdDeadline &&
+      at.getTime() <= Date.parse(rule.earlyBirdDeadline)
+        ? rule.earlyBirdDiscountCents
+        : 0;
+    const lineTotal = Math.max(
+      0,
+      rule.baseCents * quantity +
+        rule.additionalEntryAdjustmentCents * (quantity - 1) -
+        early * quantity,
+    );
+    if (!Number.isSafeInteger(lineTotal)) return null;
+    total += lineTotal;
+  }
+  return Number.isSafeInteger(total) ? total : null;
+}
 const translations = {
   de: {
     loading: 'Anmeldeformular wird geladen …',
@@ -151,6 +197,12 @@ export function Registration({
   const [accepted, setAccepted] = useState<Record<string, boolean>>(
     initialDraft?.accepted ?? {},
   );
+  const [customAnswers, setCustomAnswers] = useState<
+    Record<string, string | boolean | { objectId: string; uploadToken: string }>
+  >(initialDraft?.customAnswers ?? {});
+  const [uploadedNames, setUploadedNames] = useState<Record<string, string>>(
+    {},
+  );
   const [submissionId] = useState(() => crypto.randomUUID());
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -212,6 +264,33 @@ export function Registration({
   const age = getAge(values.dateOfBirth, payload.event.startsOn);
   const guardianRequired =
     age < payload.registrationSettings.guardianRequiredBelowAge;
+  const estimatedTotal = estimateRegistrationTotal(vehicles, payload.pricing);
+  const registrationCloseDate = payload.event.registrationClosesAt
+    ? new Intl.DateTimeFormat(locale, {
+        dateStyle: 'medium',
+        timeStyle: 'short',
+      }).format(new Date(payload.event.registrationClosesAt))
+    : null;
+  const formattedTotal =
+    estimatedTotal === null
+      ? null
+      : new Intl.NumberFormat(locale, {
+          style: 'currency',
+          currency: payload.currency,
+        }).format(estimatedTotal / 100);
+  const estimateMessage =
+    formattedTotal ??
+    (vehicles.some((vehicle) => !vehicle.classId)
+      ? locale === 'de'
+        ? 'Klasse auswählen'
+        : 'Select a class'
+      : payload.pricing.length === 0
+        ? locale === 'de'
+          ? 'Kein Startgeld hinterlegt'
+          : 'No entry fee configured'
+        : locale === 'de'
+          ? 'Preis für Auswahl nicht verfügbar'
+          : 'Price unavailable for selection');
   const setVehicle = (index: number, patch: Partial<VehicleEntry>) =>
     setVehicles((old) =>
       old.map((item, i) => (i === index ? { ...item, ...patch } : item)),
@@ -266,6 +345,7 @@ export function Registration({
             }
           : {}),
       },
+      customAnswers,
       entries: vehicles.map((item) => ({
         classId: item.classId,
         requestedStartNumber: item.requestedStartNumber || null,
@@ -318,6 +398,7 @@ export function Registration({
       ...values,
       vehicles,
       accepted,
+      customAnswers,
     });
     if (!draft.success || !values.email) {
       setDraftMessage(t.emailError);
@@ -348,6 +429,30 @@ export function Registration({
       setDraftMessage(t.retry);
     } finally {
       setSavingDraft(false);
+    }
+  }
+
+  async function uploadCustomField(fieldKey: string, file: File) {
+    const form = new FormData();
+    form.set('file', file);
+    try {
+      const response = await fetch(
+        `/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration/custom-fields/${encodeURIComponent(fieldKey)}/upload`,
+        { method: 'POST', body: form },
+      );
+      if (!response.ok) throw new Error();
+      const uploaded = (await response.json()) as {
+        objectId: string;
+        uploadToken: string;
+      };
+      setCustomAnswers((old) => ({ ...old, [fieldKey]: uploaded }));
+      setUploadedNames((old) => ({ ...old, [fieldKey]: file.name }));
+    } catch {
+      setError(
+        locale === 'de'
+          ? 'Datei konnte nicht sicher hochgeladen werden.'
+          : 'The file could not be uploaded safely.',
+      );
     }
   }
 
@@ -686,6 +791,119 @@ export function Registration({
                 </label>
               );
             })}
+            {currentStep?.id === 'driver' &&
+              payload.registrationFormConfig.customFields.map((field) => (
+                <label key={field.key}>
+                  {field.label[locale]}
+                  {field.type === 'text' && (
+                    <input
+                      type="text"
+                      maxLength={2000}
+                      required={field.required}
+                      value={
+                        typeof customAnswers[field.key] === 'string'
+                          ? (customAnswers[field.key] as string)
+                          : ''
+                      }
+                      onChange={(event) =>
+                        setCustomAnswers((old) => ({
+                          ...old,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                    />
+                  )}
+                  {field.type === 'select' && (
+                    <select
+                      required={field.required}
+                      value={
+                        typeof customAnswers[field.key] === 'string'
+                          ? (customAnswers[field.key] as string)
+                          : ''
+                      }
+                      onChange={(event) =>
+                        setCustomAnswers((old) => ({
+                          ...old,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {locale === 'de'
+                          ? 'Bitte auswählen'
+                          : 'Select an option'}
+                      </option>
+                      {field.options?.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label[locale]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {field.type === 'yes_no' && (
+                    <select
+                      required={field.required}
+                      value={
+                        typeof customAnswers[field.key] === 'boolean'
+                          ? customAnswers[field.key]
+                            ? 'yes'
+                            : 'no'
+                          : ''
+                      }
+                      onChange={(event) =>
+                        setCustomAnswers((old) => ({
+                          ...old,
+                          [field.key]: event.target.value === 'yes',
+                        }))
+                      }
+                    >
+                      <option value="">
+                        {locale === 'de'
+                          ? 'Bitte auswählen'
+                          : 'Select an option'}
+                      </option>
+                      <option value="yes">
+                        {locale === 'de' ? 'Ja' : 'Yes'}
+                      </option>
+                      <option value="no">
+                        {locale === 'de' ? 'Nein' : 'No'}
+                      </option>
+                    </select>
+                  )}
+                  {field.type === 'file' && (
+                    <>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp"
+                        required={
+                          field.required &&
+                          typeof customAnswers[field.key] !== 'object'
+                        }
+                        onChange={(event) => {
+                          const file = event.currentTarget.files?.[0];
+                          if (file) void uploadCustomField(field.key, file);
+                        }}
+                      />
+                      {uploadedNames[field.key] && (
+                        <small role="status">
+                          {uploadedNames[field.key]} ·{' '}
+                          {locale === 'de'
+                            ? 'sicher hochgeladen'
+                            : 'uploaded securely'}
+                        </small>
+                      )}
+                      {typeof customAnswers[field.key] === 'object' &&
+                        !uploadedNames[field.key] && (
+                          <small role="status">
+                            {locale === 'de'
+                              ? 'Datei für Fortsetzung gespeichert'
+                              : 'File retained for continuation'}
+                          </small>
+                        )}
+                    </>
+                  )}
+                </label>
+              ))}
             {currentStep?.id === 'driver' && guardianRequired && (
               <div className="guardian-fields">
                 <label>
@@ -756,10 +974,15 @@ export function Registration({
             {locale === 'de' ? 'Startmeldung(en)' : 'entry/entries'}
           </p>
           <p>
-            {locale === 'de' ? 'Startgeld' : 'Entry fee'} · {vehicles.length} ×
-            —
+            {locale === 'de' ? 'Startgeld' : 'Entry fee'} · {estimateMessage}
           </p>
-          <p>{locale === 'de' ? 'Nennungsschluss' : 'Deadline'} · —</p>
+          <p>
+            {locale === 'de' ? 'Nennungsschluss' : 'Deadline'} ·{' '}
+            {registrationCloseDate ??
+              (locale === 'de'
+                ? 'Kein Nennungsschluss festgelegt'
+                : 'No registration deadline set')}
+          </p>
         </aside>
       </div>
       <footer className="registration-footer">

@@ -361,6 +361,10 @@ export const registrationGroups = pgTable(
     contactEmail: text('contact_email'),
     guardianName: text('guardian_name'),
     guardianEmail: text('guardian_email'),
+    customAnswers: jsonb('custom_answers')
+      .$type<Record<string, string | boolean | { objectId: string }>>()
+      .notNull()
+      .default({}),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -1030,6 +1034,51 @@ export const registrationFormDrafts = pgTable(
       name: 'registration_form_draft_event_fk',
     }).onDelete('cascade'),
     index('registration_form_draft_expiry_idx').on(t.expiresAt),
+  ],
+);
+export const registrationFormUploads = pgTable(
+  'registration_form_upload',
+  {
+    id: uuid('id').defaultRandom().primaryKey(),
+    organizationId: uuid('organization_id').notNull(),
+    eventId: uuid('event_id').notNull(),
+    registrationGroupId: uuid('registration_group_id'),
+    fieldKey: text('field_key').notNull(),
+    objectId: uuid('object_id').notNull(),
+    uploadTokenHash: text('upload_token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    unique('registration_form_upload_org_object_unique').on(
+      t.organizationId,
+      t.objectId,
+    ),
+    foreignKey({
+      columns: [t.organizationId, t.eventId],
+      foreignColumns: [events.organizationId, events.id],
+      name: 'registration_form_upload_event_fk',
+    }).onDelete('cascade'),
+    foreignKey({
+      columns: [t.organizationId, t.eventId, t.registrationGroupId],
+      foreignColumns: [
+        registrationGroups.organizationId,
+        registrationGroups.eventId,
+        registrationGroups.id,
+      ],
+      name: 'registration_form_upload_group_fk',
+    }).onDelete('cascade'),
+    check(
+      'registration_form_upload_field_key_check',
+      sql`${t.fieldKey} ~ '^[a-z][a-z0-9_-]{0,39}$'`,
+    ),
+    check(
+      'registration_form_upload_token_hash_check',
+      sql`${t.uploadTokenHash} ~ '^[a-f0-9]{64}$'`,
+    ),
   ],
 );
 export const consentEvidence = pgTable(
@@ -2692,6 +2741,129 @@ async function attachAdminEntryDetails(
 ): Promise<import('@racepilot/core').Entry[]> {
   if (!items.length) return [];
   const ids = items.map((item) => item.id);
+  const groupIds = [...new Set(items.map((item) => item.registrationGroupId))];
+  const groupRows = await db
+    .select({
+      id: registrationGroups.id,
+      eventId: registrationGroups.eventId,
+      customAnswers: registrationGroups.customAnswers,
+      eventConfig: events.registrationFormConfig,
+      organizationConfig: organizations.registrationFormConfig,
+      locale: organizations.locale,
+    })
+    .from(registrationGroups)
+    .innerJoin(
+      events,
+      and(
+        eq(events.id, registrationGroups.eventId),
+        eq(events.organizationId, ctx.organizationId),
+      ),
+    )
+    .innerJoin(
+      organizations,
+      eq(organizations.id, registrationGroups.organizationId),
+    )
+    .where(
+      and(
+        eq(registrationGroups.organizationId, ctx.organizationId),
+        inArray(registrationGroups.id, groupIds),
+      ),
+    );
+  const groupById = new Map(groupRows.map((row) => [row.id, row]));
+  const referencedUploads = groupRows.length
+    ? await db
+        .select({
+          registrationGroupId: registrationFormUploads.registrationGroupId,
+          eventId: registrationFormUploads.eventId,
+          objectId: registrationFormUploads.objectId,
+          fieldKey: registrationFormUploads.fieldKey,
+        })
+        .from(registrationFormUploads)
+        .where(
+          and(
+            eq(registrationFormUploads.organizationId, ctx.organizationId),
+            inArray(
+              registrationFormUploads.registrationGroupId,
+              groupRows.map((row) => row.id),
+            ),
+            inArray(registrationFormUploads.eventId, [
+              ...new Set(groupRows.map((row) => row.eventId)),
+            ]),
+            sql`${registrationFormUploads.consumedAt} is not null`,
+          ),
+        )
+    : [];
+  const uploadKeys = new Set(
+    referencedUploads.map(
+      (upload) =>
+        `${upload.registrationGroupId}:${upload.eventId}:${upload.fieldKey}:${upload.objectId}`,
+    ),
+  );
+  const customAnswersFor = (item: import('@racepilot/core').Entry) => {
+    const group = groupById.get(item.registrationGroupId);
+    if (!group || group.eventId !== item.eventId) return [];
+    const eventConfig = group.eventConfig as Record<string, unknown> | null;
+    const organizationConfig = group.organizationConfig as Record<
+      string,
+      unknown
+    > | null;
+    const fieldSource =
+      eventConfig?.customFields ?? organizationConfig?.customFields;
+    const fields = Array.isArray(fieldSource) ? fieldSource : [];
+    const fieldByKey = new Map(
+      fields.flatMap((field) => {
+        if (!field || typeof field !== 'object') return [];
+        const candidate = field as {
+          key?: unknown;
+          label?: { de?: unknown; en?: unknown };
+          type?: unknown;
+        };
+        if (typeof candidate.key !== 'string') return [];
+        return [[candidate.key, candidate] as const];
+      }),
+    );
+    const answers = group.customAnswers ?? {};
+    const locale = group.locale.toLowerCase().startsWith('en') ? 'en' : 'de';
+    return Object.entries(answers).map(([key, answer]) => {
+      const field = fieldByKey.get(key);
+      if (
+        answer &&
+        typeof answer === 'object' &&
+        !Array.isArray(answer) &&
+        typeof answer.objectId === 'string' &&
+        uploadKeys.has(`${group.id}:${group.eventId}:${key}:${answer.objectId}`)
+      ) {
+        return {
+          key,
+          label:
+            typeof field?.label?.[locale] === 'string'
+              ? field.label[locale]
+              : key,
+          value: null,
+          fileDownloadUrl: `/admin/events/${group.eventId}/registration-form-uploads/${answer.objectId}`,
+        };
+      }
+      if (typeof answer === 'string' || typeof answer === 'boolean')
+        return {
+          key,
+          label:
+            typeof field?.label?.[locale] === 'string'
+              ? field.label[locale]
+              : key,
+          value: answer,
+          fileDownloadUrl: null,
+        };
+      return {
+        key,
+        label:
+          typeof field?.label?.[locale] === 'string'
+            ? field.label[locale]
+            : key,
+        value: null,
+        fileDownloadUrl: null,
+      };
+    });
+  };
   const peopleRows = await db
     .select({
       entryId: entries.id,
@@ -2949,6 +3121,7 @@ async function attachAdminEntryDetails(
           name: eventClass?.name ?? '',
         },
         startNumber: item.requestedStartNumber,
+        customAnswers: customAnswersFor(item),
       },
     };
   });
@@ -4209,6 +4382,10 @@ export interface PublicRegistrationPayload {
     guardianName?: string | undefined;
     guardianEmail?: string | undefined;
   };
+  customAnswers?: Record<
+    string,
+    string | boolean | { objectId: string; uploadToken: string }
+  >;
   entries: Array<{
     classId: string;
     requestedStartNumber?: string | null | undefined;
@@ -4236,6 +4413,82 @@ export function createPublicRegistrationService(
   const hashToken = (token: string) =>
     createHash('sha256').update(token).digest('hex');
   return {
+    registerCustomFieldUpload: async (
+      ctx: RequestContext,
+      eventSlug: string,
+      fieldKey: string,
+      objectId: string,
+      uploadTokenHash: string,
+    ) => {
+      if (
+        !uuidPattern.test(objectId) ||
+        !/^[a-f0-9]{64}$/.test(uploadTokenHash)
+      )
+        return false;
+      const [event] = await db
+        .select()
+        .from(events)
+        .where(
+          and(
+            eq(events.organizationId, ctx.organizationId),
+            eq(events.slug, eventSlug),
+            eq(events.status, 'open'),
+          ),
+        )
+        .limit(1);
+      if (
+        !event ||
+        (event.registrationOpensAt && event.registrationOpensAt > new Date()) ||
+        (event.registrationClosesAt && event.registrationClosesAt < new Date())
+      )
+        return false;
+      const [org] = await db
+        .select({ config: organizations.registrationFormConfig })
+        .from(organizations)
+        .where(eq(organizations.id, ctx.organizationId))
+        .limit(1);
+      const orgConfig = org?.config as
+        Record<string, unknown> | null | undefined;
+      const eventConfig = event.registrationFormConfig as Record<
+        string,
+        unknown
+      > | null;
+      const fields = (eventConfig?.customFields ??
+        orgConfig?.customFields ??
+        []) as Array<{ key?: string; type?: string }>;
+      if (
+        !fields.some((field) => field.key === fieldKey && field.type === 'file')
+      )
+        return false;
+      await db.insert(registrationFormUploads).values({
+        organizationId: ctx.organizationId,
+        eventId: event.id,
+        fieldKey,
+        objectId,
+        uploadTokenHash,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      });
+      return true;
+    },
+    canDownloadCustomFieldUpload: async (
+      ctx: RequestContext,
+      eventId: string,
+      objectId: string,
+    ) => {
+      const [upload] = await db
+        .select({ id: registrationFormUploads.id })
+        .from(registrationFormUploads)
+        .where(
+          and(
+            eq(registrationFormUploads.organizationId, ctx.organizationId),
+            eq(registrationFormUploads.eventId, eventId),
+            eq(registrationFormUploads.objectId, objectId),
+            sql`${registrationFormUploads.registrationGroupId} is not null`,
+          ),
+        )
+        .limit(1);
+      return Boolean(upload);
+    },
     checkRequestedStartNumber: async (
       ctx: RequestContext,
       eventSlug: string,
@@ -4304,6 +4557,101 @@ export function createPublicRegistrationService(
           (event.registrationClosesAt && event.registrationClosesAt <= now)
         )
           throw new Error('Registration unavailable');
+        // Draft JSON is long-lived and must never retain an upload bearer token.
+        // Validate each file reference against the tenant/event/field-scoped
+        // upload row, then persist only its opaque object id. resumeDraft
+        // rotates the hash and returns a fresh token to the participant.
+        const safeDraftData = structuredClone(draftData);
+        const draftAnswers = safeDraftData.customAnswers;
+        if (
+          draftAnswers &&
+          typeof draftAnswers === 'object' &&
+          !Array.isArray(draftAnswers)
+        ) {
+          const [organization] = await tx
+            .select({ config: organizations.registrationFormConfig })
+            .from(organizations)
+            .where(eq(organizations.id, ctx.organizationId))
+            .limit(1);
+          const organizationConfig = organization?.config as
+            Record<string, unknown> | null | undefined;
+          const eventConfig = event.registrationFormConfig as Record<
+            string,
+            unknown
+          > | null;
+          const configuredFields = (eventConfig?.customFields ??
+            organizationConfig?.customFields ??
+            []) as Array<{
+            key: string;
+            type: 'text' | 'select' | 'yes_no' | 'file';
+            options?: Array<{ value: string }>;
+          }>;
+          const fieldsByKey = new Map(
+            configuredFields.map((field) => [field.key, field]),
+          );
+          for (const [fieldKey, answer] of Object.entries(
+            draftAnswers as Record<string, unknown>,
+          )) {
+            const field = fieldsByKey.get(fieldKey);
+            if (!field) throw new Error('Registration unavailable');
+            if (
+              answer &&
+              typeof answer === 'object' &&
+              !Array.isArray(answer)
+            ) {
+              if (field.type !== 'file')
+                throw new Error('Registration unavailable');
+              const fileAnswer = answer as {
+                objectId?: unknown;
+                uploadToken?: unknown;
+              };
+              if (
+                typeof fileAnswer.objectId !== 'string' ||
+                typeof fileAnswer.uploadToken !== 'string'
+              )
+                throw new Error('Registration unavailable');
+              const [upload] = await tx
+                .select({ id: registrationFormUploads.id })
+                .from(registrationFormUploads)
+                .where(
+                  and(
+                    eq(
+                      registrationFormUploads.organizationId,
+                      ctx.organizationId,
+                    ),
+                    eq(registrationFormUploads.eventId, event.id),
+                    eq(registrationFormUploads.fieldKey, fieldKey),
+                    eq(registrationFormUploads.objectId, fileAnswer.objectId),
+                    eq(
+                      registrationFormUploads.uploadTokenHash,
+                      hashToken(fileAnswer.uploadToken),
+                    ),
+                    sql`${registrationFormUploads.registrationGroupId} is null`,
+                    sql`${registrationFormUploads.consumedAt} is null`,
+                    sql`${registrationFormUploads.expiresAt} > ${now}`,
+                  ),
+                )
+                .for('update')
+                .limit(1);
+              if (!upload) throw new Error('Registration unavailable');
+              (draftAnswers as Record<string, unknown>)[fieldKey] = {
+                objectId: fileAnswer.objectId,
+              };
+            } else if (
+              answer !== undefined &&
+              answer !== '' &&
+              !(
+                (field.type === 'text' && typeof answer === 'string') ||
+                (field.type === 'select' &&
+                  typeof answer === 'string' &&
+                  field.options?.some((option) => option.value === answer)) ||
+                (field.type === 'yes_no' && typeof answer === 'boolean')
+              )
+            ) {
+              throw new Error('Registration unavailable');
+            }
+          }
+        }
         await tx
           .insert(registrationFormDrafts)
           .values({
@@ -4312,7 +4660,7 @@ export function createPublicRegistrationService(
             emailNormalized: normalized,
             recipientEmail: email.trim(),
             language,
-            draftData,
+            draftData: safeDraftData,
             resumeTokenHash: tokenHash,
             expiresAt: new Date(now.getTime() + ttl),
             consumedAt: null,
@@ -4327,7 +4675,7 @@ export function createPublicRegistrationService(
             set: {
               recipientEmail: email.trim(),
               language,
-              draftData,
+              draftData: safeDraftData,
               resumeTokenHash: tokenHash,
               expiresAt: new Date(now.getTime() + ttl),
               consumedAt: null,
@@ -4351,8 +4699,8 @@ export function createPublicRegistrationService(
             idempotencyKey: `registration-resume:${event.id}:${tokenHash}`,
             variables: {
               recipientName:
-                typeof draftData.firstName === 'string'
-                  ? draftData.firstName.slice(0, 100)
+                typeof safeDraftData.firstName === 'string'
+                  ? safeDraftData.firstName.slice(0, 100)
                   : '',
               resumeUrl,
             },
@@ -4393,25 +4741,65 @@ export function createPublicRegistrationService(
             ),
           )
           .returning({ id: registrationFormDrafts.id });
-        return consumed
-          ? {
-              eventSlug:
-                (
-                  await tx
-                    .select({ slug: events.slug })
-                    .from(events)
-                    .where(
-                      and(
-                        eq(events.organizationId, ctx.organizationId),
-                        eq(events.id, draft.eventId),
-                      ),
-                    )
-                    .limit(1)
-                )[0]?.slug ?? null,
-              language: draft.language,
-              draft: draft.draftData,
+        if (!consumed) return null;
+        const resumedDraft = structuredClone(draft.draftData);
+        const answers = resumedDraft.customAnswers;
+        if (answers && typeof answers === 'object' && !Array.isArray(answers)) {
+          for (const [fieldKey, answer] of Object.entries(
+            answers as Record<string, unknown>,
+          )) {
+            if (
+              answer &&
+              typeof answer === 'object' &&
+              !Array.isArray(answer)
+            ) {
+              const objectId = (answer as { objectId?: unknown }).objectId;
+              if (typeof objectId !== 'string')
+                throw new Error('Registration unavailable');
+              const token = randomBytes(32).toString('base64url');
+              const [rotated] = await tx
+                .update(registrationFormUploads)
+                .set({ uploadTokenHash: hashToken(token) })
+                .where(
+                  and(
+                    eq(
+                      registrationFormUploads.organizationId,
+                      ctx.organizationId,
+                    ),
+                    eq(registrationFormUploads.eventId, draft.eventId),
+                    eq(registrationFormUploads.fieldKey, fieldKey),
+                    eq(registrationFormUploads.objectId, objectId),
+                    sql`${registrationFormUploads.registrationGroupId} is null`,
+                    sql`${registrationFormUploads.consumedAt} is null`,
+                    sql`${registrationFormUploads.expiresAt} > ${now}`,
+                  ),
+                )
+                .returning({ id: registrationFormUploads.id });
+              if (!rotated) throw new Error('Registration unavailable');
+              (answers as Record<string, unknown>)[fieldKey] = {
+                objectId,
+                uploadToken: token,
+              };
             }
-          : null;
+          }
+        }
+        return {
+          eventSlug:
+            (
+              await tx
+                .select({ slug: events.slug })
+                .from(events)
+                .where(
+                  and(
+                    eq(events.organizationId, ctx.organizationId),
+                    eq(events.id, draft.eventId),
+                  ),
+                )
+                .limit(1)
+            )[0]?.slug ?? null,
+          language: draft.language,
+          draft: resumedDraft,
+        };
       }),
     getForm: async (ctx: RequestContext, eventSlug: string) => {
       const [event] = await db
@@ -4442,10 +4830,20 @@ export function createPublicRegistrationService(
           ),
         )
         .orderBy(eventClasses.sortOrder);
+      const pricingRows = await db
+        .select()
+        .from(eventClassPricingRules)
+        .where(
+          and(
+            eq(eventClassPricingRules.organizationId, ctx.organizationId),
+            eq(eventClassPricingRules.eventId, event.id),
+          ),
+        );
       const [organization] = await db
         .select({
           registrationSettings: organizations.registrationSettings,
           registrationFormConfig: organizations.registrationFormConfig,
+          currency: organizations.currency,
         })
         .from(organizations)
         .where(eq(organizations.id, ctx.organizationId))
@@ -4477,8 +4875,18 @@ export function createPublicRegistrationService(
           slug: event.slug,
           name: event.name,
           startsOn: event.startsOn,
+          registrationClosesAt:
+            event.registrationClosesAt?.toISOString() ?? null,
         },
         classes: classRows,
+        currency: organization?.currency ?? 'EUR',
+        pricing: pricingRows.map((rule) => ({
+          classId: rule.classId,
+          baseCents: rule.baseCents,
+          additionalEntryAdjustmentCents: rule.additionalEntryAdjustmentCents,
+          earlyBirdDeadline: rule.earlyBirdDeadline?.toISOString() ?? null,
+          earlyBirdDiscountCents: rule.earlyBirdDiscountCents,
+        })),
         consents: event.consentTerms,
         registrationSettings: organization?.registrationSettings ?? {
           sharedContactEmail: 'allowed',
@@ -4571,6 +4979,31 @@ export function createPublicRegistrationService(
           string,
           unknown
         >;
+        const customFields = (formConfig.customFields ??
+          orgFormConfig?.customFields ??
+          []) as Array<{
+          key: string;
+          type: 'text' | 'select' | 'yes_no' | 'file';
+          required: boolean;
+          options?: Array<{ value: string }>;
+        }>;
+        const customAnswers = payload.customAnswers ?? {};
+        const customFieldByKey = new Map(
+          customFields.map((field) => [field.key, field]),
+        );
+        if (
+          Object.keys(customAnswers).some((key) => !customFieldByKey.has(key))
+        )
+          throw unavailable();
+        const safeCustomAnswers: Record<
+          string,
+          string | boolean | { objectId: string }
+        > = {};
+        const customFileUploads: Array<{
+          fieldKey: string;
+          objectId: string;
+          tokenHash: string;
+        }> = [];
         if (
           payload.entries.length > 1 &&
           (formFeatures.multipleEntries ?? orgFormFeatures.multipleEntries) ===
@@ -4620,6 +5053,61 @@ export function createPublicRegistrationService(
             if (reservation.requestFingerprint !== requestFingerprint)
               throw submissionConflict();
             if (reservation.response) return reservation.response;
+            throw unavailable();
+          }
+        }
+        for (const field of customFields) {
+          const rawAnswer = customAnswers[field.key];
+          const answer =
+            field.type === 'text' && typeof rawAnswer === 'string'
+              ? rawAnswer.trim()
+              : rawAnswer;
+          if (answer === undefined || answer === '') {
+            if (field.required) throw unavailable();
+            continue;
+          }
+          if (field.type === 'text' && typeof answer === 'string') {
+            safeCustomAnswers[field.key] = answer;
+          } else if (
+            field.type === 'select' &&
+            typeof answer === 'string' &&
+            field.options?.some((option) => option.value === answer)
+          ) {
+            safeCustomAnswers[field.key] = answer;
+          } else if (field.type === 'yes_no' && typeof answer === 'boolean') {
+            safeCustomAnswers[field.key] = answer;
+          } else if (field.type === 'file' && typeof answer === 'object') {
+            const tokenHash = hashToken(answer.uploadToken);
+            const [upload] = await tx
+              .select({
+                id: registrationFormUploads.id,
+                objectId: registrationFormUploads.objectId,
+              })
+              .from(registrationFormUploads)
+              .where(
+                and(
+                  eq(
+                    registrationFormUploads.organizationId,
+                    ctx.organizationId,
+                  ),
+                  eq(registrationFormUploads.eventId, event.id),
+                  eq(registrationFormUploads.fieldKey, field.key),
+                  eq(registrationFormUploads.objectId, answer.objectId),
+                  eq(registrationFormUploads.uploadTokenHash, tokenHash),
+                  sql`${registrationFormUploads.consumedAt} is null`,
+                  sql`${registrationFormUploads.expiresAt} > ${receivedAt}`,
+                ),
+              )
+              .for('update')
+              .limit(1);
+            if (!upload) throw unavailable();
+            safeCustomAnswers[field.key] = { objectId: upload.objectId };
+            customFileUploads.push({
+              fieldKey: field.key,
+              objectId: upload.objectId,
+              tokenHash,
+            });
+          } else {
             throw unavailable();
           }
         }
@@ -4834,8 +5322,26 @@ export function createPublicRegistrationService(
             guardianEmail: needsGuardian
               ? payload.person.guardianEmail!.trim()
               : null,
+            customAnswers: safeCustomAnswers,
           })
           .returning({ id: registrationGroups.id });
+        for (const upload of customFileUploads) {
+          const [consumed] = await tx
+            .update(registrationFormUploads)
+            .set({ registrationGroupId: group!.id, consumedAt: receivedAt })
+            .where(
+              and(
+                eq(registrationFormUploads.organizationId, ctx.organizationId),
+                eq(registrationFormUploads.eventId, event.id),
+                eq(registrationFormUploads.fieldKey, upload.fieldKey),
+                eq(registrationFormUploads.objectId, upload.objectId),
+                eq(registrationFormUploads.uploadTokenHash, upload.tokenHash),
+                sql`${registrationFormUploads.consumedAt} is null`,
+              ),
+            )
+            .returning({ id: registrationFormUploads.id });
+          if (!consumed) throw unavailable();
+        }
         const [template] = await tx
           .select()
           .from(emailTemplateVersions)
