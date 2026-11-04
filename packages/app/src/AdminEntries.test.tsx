@@ -54,6 +54,20 @@ const entry = (id: string, eventId: string, classId: string) => ({
     vehicle: { make: 'Porsche', model: '911', year: 2020 },
     eventClass: { code: 'TOUR', name: 'Touring A' },
     startNumber: id === entryA ? '42' : null,
+    customAnswers: [
+      {
+        key: 'club_name',
+        label: 'Verein',
+        value: 'MSC Beispielstadt',
+        fileDownloadUrl: null,
+      },
+      {
+        key: 'vehicle_photo',
+        label: 'Fahrzeugbild',
+        value: null,
+        fileDownloadUrl: `/admin/events/${eventA}/registration-form-uploads/80000000-0000-4000-8000-000000000001`,
+      },
+    ],
   },
   statusProjection: {
     dimensions: [
@@ -512,6 +526,17 @@ describe('AdminEntries', () => {
     );
     await flush();
     expect(container.querySelector('.admin-detail')).not.toBeNull();
+    expect(container.querySelector('.admin-detail')?.textContent).toContain(
+      'Verein: MSC Beispielstadt',
+    );
+    const download = container.querySelector(
+      '.admin-detail a[href*="registration-form-uploads"]',
+    ) as HTMLAnchorElement | null;
+    expect(download?.textContent).toBe('Datei herunterladen');
+    expect(download?.getAttribute('href')).toContain(eventA);
+    expect(container.querySelector('.admin-detail')?.textContent).not.toContain(
+      'uploadToken',
+    );
     expect(
       container.querySelector('.admin-detail')?.getAttribute('aria-labelledby'),
     ).toBe('entry-detail-title');

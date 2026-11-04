@@ -7,6 +7,43 @@ import {
 } from './index.js';
 
 describe('registration brand contrast', () => {
+  it('validates localized custom-field schemas, unique keys and type-specific options', () => {
+    const customFields = [
+      {
+        key: 'club_name',
+        type: 'text',
+        required: false,
+        label: { de: 'Verein', en: 'Club' },
+      },
+      {
+        key: 'vehicle_kind',
+        type: 'select',
+        required: true,
+        label: { de: 'Typ', en: 'Type' },
+        options: [
+          { value: 'classic', label: { de: 'Klassisch', en: 'Classic' } },
+        ],
+      },
+    ];
+    expect(
+      RegistrationFormConfigSchema.safeParse({
+        ...defaultRegistrationFormConfig,
+        customFields,
+      }).success,
+    ).toBe(true);
+    expect(
+      RegistrationFormConfigSchema.safeParse({
+        ...defaultRegistrationFormConfig,
+        customFields: [...customFields, customFields[0]],
+      }).success,
+    ).toBe(false);
+    expect(
+      RegistrationFormConfigSchema.safeParse({
+        ...defaultRegistrationFormConfig,
+        customFields: [{ ...customFields[1], options: [] }],
+      }).success,
+    ).toBe(false);
+  });
   it('accepts source colors and derives readable foreground/link colors for two sample brands', () => {
     const luminance = (hex: string) => {
       const rgb = hex
@@ -142,6 +179,14 @@ describe('public registration contracts', () => {
         lastName: 'Driver',
         email: 'alex@example.test',
         dateOfBirth: '2000-01-01',
+      },
+      customAnswers: {
+        club_name: 'MSC',
+        invited: false,
+        photo: {
+          objectId: '20000000-0000-4000-8000-000000000002',
+          uploadToken: 'a'.repeat(43),
+        },
       },
       entries: [
         {

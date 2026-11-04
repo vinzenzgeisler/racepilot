@@ -1205,6 +1205,12 @@ export interface Entry {
     vehicle: { make: string; model: string; year: number | null };
     eventClass: { code: string; name: string };
     startNumber: string | null;
+    customAnswers: Array<{
+      key: string;
+      label: string;
+      value: string | boolean | null;
+      fileDownloadUrl: string | null;
+    }>;
   };
   statusProjection?: EntryStatusProjection;
 }
