@@ -24,8 +24,14 @@ services:
     ports:
       - '127.0.0.1:8080:8080'
     volumes:
-      - ./.community-local:/opt/keycloak/data/import:ro
       - community-keycloak:/opt/keycloak/data
+  keycloak-prepare:
+    image: busybox:1.37
+    profiles: [prepare]
+    command: sh -c 'mkdir -p /data/import && cp /source/nennbox-realm.json /data/import/nennbox-realm.json && chown -R 1000:0 /data'
+    volumes:
+      - community-keycloak:/data
+      - ./.community-local/nennbox-realm.json:/source/nennbox-realm.json:ro
   mailpit:
     image: axllent/mailpit:v1.27
     ports:
