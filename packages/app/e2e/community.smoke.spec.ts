@@ -198,7 +198,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await shots('public-confirmation');
 
   await page.goto('/app');
-  await page.getByLabel('Event').selectOption(event.id);
+  await page.getByLabel('Veranstaltung wechseln').selectOption(event.id);
   await expect(page.getByText(participant)).toBeVisible();
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: participant });
