@@ -13,9 +13,13 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-for attempt in {1..60}; do
+for attempt in {1..30}; do
   if node -e "fetch('http://127.0.0.1:8080/realms/nennbox/.well-known/openid-configuration').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"; then break; fi
-  if [[ "$attempt" == 60 ]]; then echo 'Keycloak wurde nicht bereit.' >&2; exit 1; fi
+  if [[ "$attempt" == 30 ]]; then
+    echo 'Keycloak-Realm wurde nicht bereit.' >&2
+    "${compose[@]}" logs --tail=80 keycloak >&2
+    exit 1
+  fi
   sleep 2
 done
 npm ci
