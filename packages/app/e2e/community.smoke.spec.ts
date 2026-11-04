@@ -152,12 +152,12 @@ test('Community registration and admin lifecycle with API setup', async ({
   });
   await expect(page.getByRole('status')).toContainText('vehicle.png');
   await shots('public-driver-step');
-  await page.getByRole('button', { name: 'Weiter' }).click();
+  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
   await page.getByLabel('Klasse').selectOption(cls.id);
   await page.getByLabel('Hersteller').fill('Lotus');
   await page.getByLabel('Modell').fill('Seven');
   await shots('public-vehicle-step');
-  await page.getByRole('button', { name: 'Weiter' }).click();
+  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
   await expect(page.getByText(consent)).toBeVisible();
   await page.getByRole('checkbox').check();
   await shots('public-consent-step');
