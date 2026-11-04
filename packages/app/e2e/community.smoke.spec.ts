@@ -48,12 +48,12 @@ test('first Community admin can log in and load the protected event list', async
   // CI keeps these reference captures with the run for design review.
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
-    path: 'test-results/alpha/admin-entries-1440.png',
+    path: 'packages/app/test-results/alpha/admin-entries-1440.png',
     fullPage: true,
   });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.screenshot({
-    path: 'test-results/alpha/admin-entries-390.png',
+    path: 'packages/app/test-results/alpha/admin-entries-390.png',
     fullPage: true,
   });
 });
