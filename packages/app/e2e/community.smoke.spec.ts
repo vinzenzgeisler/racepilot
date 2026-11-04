@@ -46,7 +46,10 @@ test('Community registration and admin lifecycle with API setup', async ({
     status = 200,
   ) => {
     const response = await api(path, method, data);
-    expect(response.status(), `test setup ${method} ${path}`).toBe(status);
+    expect(
+      response.status(),
+      `test setup ${method} ${path}: ${await response.text()}`,
+    ).toBe(status);
     return response.json();
   };
   const slug = `alpha-${randomUUID().slice(0, 8)}`;
