@@ -44,5 +44,5 @@ test('first Community admin can log in and load the protected event list', async
     );
   }
   await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByText('NENNBOX').first()).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Nennungen' })).toBeVisible();
 });
