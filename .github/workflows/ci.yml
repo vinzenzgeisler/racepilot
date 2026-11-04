@@ -196,6 +196,13 @@ jobs:
           exit 1
       - name: Browser login smoke test
         run: COMMUNITY_ADMIN_PASSWORD="$(node scripts/community-config.mjs --password)" npx playwright test --config packages/app/playwright.config.ts
+      - name: Upload alpha-flow browser screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: alpha-flow-screenshots
+          path: packages/app/test-results/
+          if-no-files-found: warn
       - name: Stop local Community stack
         if: always()
         run: |

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -188,6 +188,31 @@ describe('public registration UI', () => {
       );
       expect(container.textContent).toContain('ungültig oder abgelaufen');
       expect(container.textContent).not.toContain('secret-test-token');
+    } finally {
+      root.unmount();
+      window.history.replaceState({}, '', '/');
+    }
+  });
+
+  it('consumes a verification token once under StrictMode', async () => {
+    window.history.replaceState({}, '', '/registration/verify?token=one-time');
+    const verify = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ verified: true }),
+    });
+    vi.stubGlobal('fetch', verify);
+    const container = document.createElement('div');
+    const root = createRoot(container);
+    try {
+      await act(async () =>
+        root.render(
+          <StrictMode>
+            <RegistrationVerification locale="de" />
+          </StrictMode>,
+        ),
+      );
+      expect(verify).toHaveBeenCalledTimes(1);
+      expect(container.textContent).toContain('E-Mail bestätigt');
     } finally {
       root.unmount();
       window.history.replaceState({}, '', '/');

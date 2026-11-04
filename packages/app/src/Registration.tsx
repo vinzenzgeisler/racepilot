@@ -1061,6 +1061,7 @@ export function RegistrationVerification({
 }) {
   const locale = localeValue.toLowerCase().startsWith('de') ? 'de' : 'en';
   const token = new URLSearchParams(location.search).get('token');
+  const attemptedToken = useRef<string | null>(null);
   const [message, setMessage] = useState(() =>
     token
       ? locale === 'de'
@@ -1071,7 +1072,8 @@ export function RegistrationVerification({
         : 'This verification link is invalid or expired.',
   );
   useEffect(() => {
-    if (!token) return;
+    if (!token || attemptedToken.current === token) return;
+    attemptedToken.current = token;
     fetch('/public/registration/verify', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },

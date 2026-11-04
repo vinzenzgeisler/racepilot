@@ -1054,6 +1054,26 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         capabilities: new Set<string>(),
         correlationId: 'test',
       };
+      const projectedEvent = await repo.create!(ctx, {
+        slug: `projected-${crypto.randomUUID()}`,
+        name: 'Projected event',
+        startsOn: '2027-01-01',
+        endsOn: '2027-01-02',
+      });
+      expect(Object.keys(projectedEvent).sort()).toEqual([
+        'archivedAt',
+        'closedAt',
+        'endsOn',
+        'id',
+        'name',
+        'openedAt',
+        'organizationId',
+        'registrationClosesAt',
+        'registrationOpensAt',
+        'slug',
+        'startsOn',
+        'status',
+      ]);
       const [b] = await db
         .insert(organizations)
         .values({
@@ -1528,6 +1548,29 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(pageA.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       expect(pageA.total).toBe(1);
+      expect(Object.keys(pageA.items[0]!).sort()).toEqual(
+        [
+          'id',
+          'organizationId',
+          'eventId',
+          'classId',
+          'registrationGroupId',
+          'driverPersonId',
+          'vehicleId',
+          'verificationStatus',
+          'acceptanceStatus',
+          'requestedStartNumber',
+          'priceSnapshotVersion',
+          'formSnapshotVersion',
+          'priceSnapshot',
+          'createdAt',
+          'deletedAt',
+          'deletionReason',
+          'statusProjection',
+          'adminHistory',
+          'adminDetails',
+        ].sort(),
+      );
       const noInvoice = await adminEntries.listAdmin!(ctxA, {
         page: 1,
         pageSize: 100,
@@ -1754,6 +1797,23 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         { entries: createEntryRepository(db), workflows },
       );
       expect(transitionedCustom?.acceptanceStatus).toBe('documents_missing');
+      expect(transitionedCustom?.adminHistory).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'entry',
+            label: 'acceptance: pending → documents_missing',
+            detail: 'request documents',
+          }),
+        ]),
+      );
+      expect(transitionedCustom?.adminDetails?.driver.email).toBe(
+        `driver-${suffix}@example.test`,
+      );
+      expect(transitionedCustom?.statusProjection?.dimensions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: 'entry', value: 'documents_missing' }),
+        ]),
+      );
       const customAudit = await db
         .select()
         .from(entryAuditEvents)

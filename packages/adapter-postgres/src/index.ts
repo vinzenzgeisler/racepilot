@@ -498,8 +498,12 @@ export function createOrganizationRepository(
 }
 export function createEventRepository(db: Database): EventRepository {
   const mapEvent = (row: typeof events.$inferSelect): Event => ({
-    ...row,
+    id: row.id,
     organizationId: organizationId(row.organizationId),
+    slug: row.slug,
+    name: row.name,
+    startsOn: row.startsOn,
+    endsOn: row.endsOn,
     status: row.status as EventStatus,
     registrationOpensAt: row.registrationOpensAt?.toISOString() ?? null,
     registrationClosesAt: row.registrationClosesAt?.toISOString() ?? null,
@@ -769,7 +773,17 @@ function mapEntry(
   row: typeof entries.$inferSelect,
 ): import('@racepilot/core').Entry {
   return {
-    ...row,
+    id: row.id,
+    eventId: row.eventId,
+    classId: row.classId,
+    registrationGroupId: row.registrationGroupId,
+    driverPersonId: row.driverPersonId,
+    vehicleId: row.vehicleId,
+    requestedStartNumber: row.requestedStartNumber,
+    priceSnapshotVersion: row.priceSnapshotVersion,
+    formSnapshotVersion: row.formSnapshotVersion,
+    priceSnapshot: row.priceSnapshot,
+    deletionReason: row.deletionReason,
     organizationId: organizationId(row.organizationId),
     verificationStatus:
       row.verificationStatus as import('@racepilot/core').Entry['verificationStatus'],
@@ -780,7 +794,7 @@ function mapEntry(
   };
 }
 async function projectEntryRows(
-  db: Database,
+  db: Pick<Database, 'select' | 'execute'>,
   ctx: RequestContext,
   rows: readonly (typeof entries.$inferSelect)[],
 ): Promise<import('@racepilot/core').Entry[]> {
@@ -936,7 +950,7 @@ async function projectEntryRows(
   });
 }
 async function attachAdminEntryDetails(
-  db: Database,
+  db: Pick<Database, 'select'>,
   ctx: RequestContext,
   items: readonly import('@racepilot/core').Entry[],
 ): Promise<import('@racepilot/core').Entry[]> {
@@ -1803,7 +1817,9 @@ export function createEntryRepository(
             );
           }
         }
-        return mapEntry(row);
+        // Return the same read model as entry detail, including the audit just written.
+        const projected = await projectEntryRows(tx, ctx, [row]);
+        return (await attachAdminEntryDetails(tx, ctx, projected))[0] ?? null;
       }),
     softDelete: async (ctx, id, reason) => {
       const [row] = await db
