@@ -1,7 +1,5 @@
 [
   "packages/adapter-postgres/src/index.ts",
-  "packages/api/src/index.ts",
-  "packages/api/src/timing.ts",
   "packages/app/src/AdminEntries.tsx",
   "packages/app/src/AdminModules.tsx",
   "packages/app/src/AdminWorkflow.tsx",
