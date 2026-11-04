@@ -10,7 +10,7 @@
   },
   "packageManager": "npm@11.19.1",
   "scripts": {
-    "lint": "eslint .",
+    "lint": "eslint . && node scripts/check-max-lines.mjs && node scripts/check-public-exports.mjs",
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
     "test": "vitest run",
@@ -18,7 +18,9 @@
     "check:boundaries": "depcruise --config .dependency-cruiser.cjs packages && node scripts/check-boundaries.mjs",
     "db:migrate": "tsx scripts/db-migrate.ts",
     "db:seed": "tsx scripts/db-seed.ts",
-    "release:pack": "npm run build && node scripts/pack-product.mjs"
+    "release:pack": "npm run build && node scripts/pack-product.mjs",
+    "check:max-lines": "node scripts/check-max-lines.mjs",
+    "check:public-exports": "node scripts/check-public-exports.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
