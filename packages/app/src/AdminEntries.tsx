@@ -1,3 +1,4 @@
+import { AdminFileDownload } from './features/entries/AdminFileDownload.js';
 import { adminFetch } from './auth.js';
 import {
   useCallback,
@@ -990,7 +991,7 @@ export function AdminEntries({
                     <li key={answer.key}>
                       <strong>{answer.label}</strong>:{' '}
                       {answer.fileDownloadUrl ? (
-                        <a href={answer.fileDownloadUrl}>Datei herunterladen</a>
+                        <AdminFileDownload url={answer.fileDownloadUrl} />
                       ) : answer.value === null ? (
                         '—'
                       ) : typeof answer.value === 'boolean' ? (
