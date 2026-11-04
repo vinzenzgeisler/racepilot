@@ -1797,6 +1797,23 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         { entries: createEntryRepository(db), workflows },
       );
       expect(transitionedCustom?.acceptanceStatus).toBe('documents_missing');
+      expect(transitionedCustom?.adminHistory).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            kind: 'entry',
+            label: 'acceptance: pending → documents_missing',
+            detail: 'request documents',
+          }),
+        ]),
+      );
+      expect(transitionedCustom?.adminDetails?.driver.email).toBe(
+        `driver-${suffix}@example.test`,
+      );
+      expect(transitionedCustom?.statusProjection?.dimensions).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: 'entry', value: 'documents_missing' }),
+        ]),
+      );
       const customAudit = await db
         .select()
         .from(entryAuditEvents)
