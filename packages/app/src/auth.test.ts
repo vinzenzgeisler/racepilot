@@ -99,4 +99,36 @@ describe('Community OIDC browser session', () => {
     expect(window.location.pathname + window.location.search).toBe('/app');
     vi.unstubAllGlobals();
   });
+
+  it('consumes a concurrent OIDC callback only once', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          oidc: {
+            issuerUrl: 'https://login.example.test/realm',
+            clientId: 'nennbox-app',
+            redirectUri: 'https://app.example.test/auth/callback',
+          },
+        }),
+      }),
+    );
+    window.history.replaceState(
+      null,
+      '',
+      '/auth/callback?code=secret&state=opaque',
+    );
+    oidc.signinRedirectCallback.mockResolvedValue({
+      access_token: 'secret',
+      expired: false,
+    });
+    const { restoreAdminSession } = await import('./auth.js');
+    expect(
+      await Promise.all([restoreAdminSession(), restoreAdminSession()]),
+    ).toEqual(['ready', 'ready']);
+    expect(oidc.signinRedirectCallback).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname + window.location.search).toBe('/app');
+    vi.unstubAllGlobals();
+  });
 });

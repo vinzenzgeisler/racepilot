@@ -43,6 +43,8 @@ if (!existsSync(realmFile)) {
         users: [
           {
             username: 'community-admin',
+            firstName: 'Community',
+            lastName: 'Admin',
             email: config.email,
             emailVerified: true,
             enabled: true,

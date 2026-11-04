@@ -3,6 +3,8 @@ import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 type OidcConfig = { issuerUrl: string; clientId: string; redirectUri: string };
 let managerPromise: Promise<UserManager | null> | null = null;
 let accessToken: string | null = null;
+let callbackPromise: ReturnType<UserManager['signinRedirectCallback']> | null =
+  null;
 
 async function manager(): Promise<UserManager | null> {
   managerPromise ??= fetch('/auth/config', { cache: 'no-store' })
@@ -40,12 +42,13 @@ export async function restoreAdminSession(): Promise<
 > {
   const client = await manager();
   if (!client) return 'disabled';
-  const user =
-    window.location.pathname === '/auth/callback'
-      ? await client.signinRedirectCallback()
-      : await client.getUser();
-  if (window.location.pathname === '/auth/callback')
-    window.history.replaceState(null, '', '/app');
+  const isCallback = window.location.pathname === '/auth/callback';
+  // React StrictMode may mount twice while the callback is still pending.
+  // The authorization code and stored OIDC state can only be consumed once.
+  const user = isCallback
+    ? await (callbackPromise ??= client.signinRedirectCallback())
+    : await client.getUser();
+  if (isCallback) window.history.replaceState(null, '', '/app');
   accessToken = user && !user.expired ? user.access_token : null;
   return accessToken ? 'ready' : 'signed-out';
 }
