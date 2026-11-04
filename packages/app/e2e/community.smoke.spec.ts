@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { createHash, randomUUID } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { Client } from 'pg';
 
 test('Community registration and admin lifecycle with API setup', async ({
@@ -95,6 +95,14 @@ test('Community registration and admin lifecycle with API setup', async ({
   });
   await call(`/admin/events/${event.id}/registration-form-config`, 'PUT', {
     welcomeText: 'Alpha E2E registration',
+    customFields: [
+      {
+        key: 'vehicle_photo',
+        type: 'file',
+        required: true,
+        label: { de: 'Fahrzeugfoto', en: 'Vehicle photo' },
+      },
+    ],
   });
   const consent = 'I accept the Alpha E2E participation terms.';
   await call(`/admin/events/${event.id}/consents`, 'PUT', {
@@ -130,6 +138,16 @@ test('Community registration and admin lifecycle with API setup', async ({
   await page.getByLabel('Nachname').fill('Lovelace');
   await page.getByLabel('Kontakt-E-Mail').fill(participant);
   await page.getByLabel('Geburtsdatum').fill('1990-12-10');
+  const uploadedPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pVQAAAAASUVORK5CYII=',
+    'base64',
+  );
+  await page.getByLabel('Fahrzeugfoto').setInputFiles({
+    name: 'vehicle.png',
+    mimeType: 'image/png',
+    buffer: uploadedPng,
+  });
+  await expect(page.getByRole('status')).toContainText('vehicle.png');
   await shots('public-driver-step');
   await page.getByRole('button', { name: 'Weiter' }).click();
   await page.getByLabel('Klasse').selectOption(cls.id);
@@ -185,6 +203,14 @@ test('Community registration and admin lifecycle with API setup', async ({
   await expect(
     page.getByRole('heading', { name: 'Entry detail' }),
   ).toBeVisible();
+  const fileDownload = page.getByRole('link', { name: 'Datei herunterladen' });
+  await expect(fileDownload).toBeVisible();
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    fileDownload.click(),
+  ]);
+  expect(download.suggestedFilename()).toMatch(/^registration-upload-/);
+  expect(readFileSync(await download.path()!)).toEqual(uploadedPng);
   await shots('admin-entry-detail');
   await page.getByLabel('Reason (required for audit)').fill('Alpha E2E review');
   await page
@@ -275,8 +301,11 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(csv).toContain('Lotus Seven');
 });
 
-test.fixme('participant uploads a supporting document during registration', async () => {
-  /* UI and storage capability absent. */
+test.fixme('participant uploads a PDF supporting document during registration', async () => {
+  /* Image custom-field uploads (PNG/JPEG/WebP) work; PDF documents are not accepted. */
+});
+test.fixme('admin reviews each uploaded document from entry detail', async () => {
+  /* Uploaded images are downloadable from entry detail; per-document review status is absent. */
 });
 test.fixme('admin records payment from entry detail UI', async () => {
   /* Payment recording is API-only; UI control absent. */
