@@ -14,15 +14,24 @@ test('first Community admin can log in and load the protected event list', async
   await page.locator('#password').fill(password);
   const eventStatuses: number[] = [];
   const pageErrors: string[] = [];
+  const authStatuses: string[] = [];
   page.on('response', (response) => {
-    if (new URL(response.url()).pathname === '/admin/events')
-      eventStatuses.push(response.status());
+    const path = new URL(response.url()).pathname;
+    if (path === '/admin/events') eventStatuses.push(response.status());
+    if (path.startsWith('/auth/') || path.includes('/protocol/openid-connect/'))
+      authStatuses.push(`${path}:${response.status()}`);
   });
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('requestfailed', (request) =>
+    pageErrors.push(
+      `${new URL(request.url()).pathname}: ${request.failure()?.errorText}`,
+    ),
+  );
   const eventsResponse = page.waitForResponse(
     (response) =>
       new URL(response.url()).pathname === '/admin/events' &&
       response.status() === 200,
+    { timeout: 15_000 },
   );
   await page.locator('#kc-login').click();
   try {
@@ -31,7 +40,7 @@ test('first Community admin can log in and load the protected event list', async
     const location = new URL(page.url());
     const message = (await page.locator('body').innerText()).slice(0, 300);
     throw new Error(
-      `Admin API did not authorize after login: path=${location.pathname}, responses=${eventStatuses.join(',')}, pageErrors=${pageErrors.join('; ')}, page=${message}`,
+      `Admin API did not authorize after login: path=${location.pathname}, responses=${eventStatuses.join(',')}, auth=${authStatuses.join(',')}, pageErrors=${pageErrors.join('; ')}, page=${message}`,
     );
   }
   await expect(page).toHaveURL(/\/app$/);
