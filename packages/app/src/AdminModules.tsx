@@ -1,3 +1,4 @@
+import { adminFetch } from './auth.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModuleListResponse, EventSchema } from '@racepilot/contracts';
 import type { ModuleViewSchema } from '@racepilot/contracts';
@@ -87,7 +88,7 @@ export function AdminModules({
     setLoading(true);
     setError('');
     try {
-      const response = await fetch(base, {
+      const response = await adminFetch(base, {
         credentials: 'same-origin',
         cache: 'no-store',
       });
@@ -100,7 +101,7 @@ export function AdminModules({
     }
   }, [base, eventId, scope, t.error]);
   useEffect(() => {
-    void fetch('/admin/events', {
+    void adminFetch('/admin/events', {
       credentials: 'same-origin',
       cache: 'no-store',
     })
@@ -133,15 +134,18 @@ export function AdminModules({
   ) {
     setError('');
     try {
-      const response = await fetch(`${base}/${encodeURIComponent(module.id)}`, {
-        method: 'PATCH',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          ...payload,
-          expectedVersion: module.stateVersion ?? 0,
-        }),
-      });
+      const response = await adminFetch(
+        `${base}/${encodeURIComponent(module.id)}`,
+        {
+          method: 'PATCH',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            ...payload,
+            expectedVersion: module.stateVersion ?? 0,
+          }),
+        },
+      );
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as {
           issues?: Array<{ path: string; message: string }>;

@@ -1,3 +1,4 @@
+import { adminFetch } from './auth.js';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import {
   defaultRegistrationFormConfig,
@@ -41,7 +42,7 @@ export function RegistrationFormSettings({ eventId }: { eventId: string }) {
   const [loaded, setLoaded] = useState(false);
   useEffect(() => {
     let active = true;
-    void fetch('/admin/organization/registration-form-config', {
+    void adminFetch('/admin/organization/registration-form-config', {
       credentials: 'same-origin',
       cache: 'no-store',
     })
@@ -71,7 +72,7 @@ export function RegistrationFormSettings({ eventId }: { eventId: string }) {
   useEffect(() => {
     if (scope !== 'event' || !eventId) return;
     let active = true;
-    void fetch(
+    void adminFetch(
       `/admin/events/${encodeURIComponent(eventId)}/registration-form-config`,
       { credentials: 'same-origin', cache: 'no-store' },
     )
@@ -130,7 +131,7 @@ export function RegistrationFormSettings({ eventId }: { eventId: string }) {
         scope === 'organization'
           ? '/admin/organization/registration-form-config'
           : `/admin/events/${encodeURIComponent(eventId)}/registration-form-config`;
-      const response = await fetch(path, {
+      const response = await adminFetch(path, {
         method: 'PUT',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json' },
@@ -153,11 +154,14 @@ export function RegistrationFormSettings({ eventId }: { eventId: string }) {
     const form = new FormData();
     form.set('kind', kind);
     form.set('file', file);
-    const response = await fetch('/admin/organization/registration-assets', {
-      method: 'POST',
-      credentials: 'same-origin',
-      body: form,
-    });
+    const response = await adminFetch(
+      '/admin/organization/registration-assets',
+      {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: form,
+      },
+    );
     if (!response.ok) {
       setMessage('Datei konnte nicht sicher gespeichert werden.');
       return;
