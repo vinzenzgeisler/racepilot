@@ -15,7 +15,13 @@ module.exports = {
     {
       name: 'adapter-core-only',
       severity: 'error',
-      from: { path: '^packages/adapter-[^/]+/' },
+      from: { path: '^packages/adapter-(?!postgres/)[^/]+/' },
+      to: { path: '^packages/(?!core/)' },
+    },
+    {
+      name: 'adapter-postgres-core-only',
+      severity: 'error',
+      from: { path: '^packages/adapter-postgres/' },
       to: { path: '^packages/(?!core/|adapter-postgres/)' },
     },
     {
