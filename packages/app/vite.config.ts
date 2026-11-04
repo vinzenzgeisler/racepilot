@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 
 // Local development only: the browser talks same-origin and Vite forwards API routes.
@@ -15,5 +15,8 @@ export default defineConfig({
       ]),
     ),
   },
-  test: { environment: 'jsdom' },
+  test: {
+    environment: 'jsdom',
+    exclude: [...configDefaults.exclude, 'e2e/**'],
+  },
 });

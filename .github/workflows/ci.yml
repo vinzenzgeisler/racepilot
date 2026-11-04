@@ -167,3 +167,33 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test -- packages/core packages/api packages/worker
+
+  community-smoke:
+    needs: repo-identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start local Community stack
+        run: |
+          COMMUNITY_PRINT_PASSWORD=0 bash scripts/community-up.sh > /tmp/community-up.log 2>&1 &
+          echo $! > /tmp/community-up.pid
+          for attempt in {1..120}; do
+            if curl -fsS http://127.0.0.1:3000/health >/dev/null && curl -fsS http://127.0.0.1:5173/app >/dev/null; then exit 0; fi
+            sleep 2
+          done
+          cat /tmp/community-up.log
+          exit 1
+      - name: Browser login smoke test
+        run: COMMUNITY_ADMIN_PASSWORD="$(node scripts/community-config.mjs --password)" npx playwright test --config packages/app/playwright.config.ts
+      - name: Stop local Community stack
+        if: always()
+        run: |
+          kill "$(cat /tmp/community-up.pid)" 2>/dev/null || true
+          docker compose --env-file .community-local/compose.env -f compose.community.dev.yaml down 2>/dev/null || true
