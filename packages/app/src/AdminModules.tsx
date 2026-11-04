@@ -2,69 +2,17 @@ import { adminFetch } from './auth.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModuleListResponse, EventSchema } from '@racepilot/contracts';
 import type { ModuleViewSchema } from '@racepilot/contracts';
+import { SchemaFields, updatePath } from './ModuleSchemaFields.js';
+import { categories, words, type ModuleLocale } from './moduleWords.js';
 
 type Module = typeof ModuleViewSchema extends { parse: (v: unknown) => infer T }
   ? T
   : never;
-type Locale = 'de' | 'en';
-const words = {
-  de: {
-    title: 'Add-on-Galerie',
-    search: 'Module suchen',
-    all: 'Alle Kategorien',
-    organization: 'Organisation',
-    event: 'Event',
-    activate: 'Aktivieren',
-    disable: 'Deaktivieren',
-    configure: 'Konfiguration',
-    close: 'Schließen',
-    save: 'Speichern',
-    details: 'Details',
-    unavailable: 'Nicht verfügbar',
-    entitlement: 'Entitlement erforderlich',
-    dependency: 'Abhängigkeit nicht verfügbar',
-    edition: 'In dieser Edition nicht verfügbar',
-    confirm: 'Modul deaktivieren? Die Daten bleiben erhalten.',
-    error: 'Module konnten nicht geladen werden.',
-    loading: 'Module werden geladen…',
-    upgrade: 'Upgrade erforderlich',
-  },
-  en: {
-    title: 'Add-on gallery',
-    search: 'Search modules',
-    all: 'All categories',
-    organization: 'Organization',
-    event: 'Event',
-    activate: 'Activate',
-    disable: 'Disable',
-    configure: 'Configuration',
-    close: 'Close',
-    save: 'Save',
-    details: 'Details',
-    unavailable: 'Unavailable',
-    entitlement: 'Entitlement required',
-    dependency: 'A dependency is unavailable',
-    edition: 'Unavailable in this edition',
-    confirm: 'Disable this module? Its data will be retained.',
-    error: 'Modules could not be loaded.',
-    loading: 'Loading modules…',
-    upgrade: 'Upgrade required',
-  },
-} as const;
-const categories = [
-  'timing',
-  'scrutineering',
-  'communication',
-  'payments',
-  'operations',
-  'other',
-] as const;
-
 export function AdminModules({
   locale = 'en',
   onUpgrade,
 }: {
-  locale?: Locale;
+  locale?: ModuleLocale;
   onUpgrade?: (moduleId: string) => void;
 }) {
   const t = words[locale];
@@ -314,164 +262,5 @@ export function AdminModules({
       )}
       {error && !loading && <p role="alert">{error}</p>}
     </section>
-  );
-}
-
-type JsonSchema = {
-  type?: string;
-  title?: string;
-  description?: string;
-  enum?: unknown[];
-  properties?: Record<string, JsonSchema>;
-  required?: string[];
-  items?: JsonSchema;
-};
-
-function updatePath(root: unknown, path: string, value: unknown): unknown {
-  const keys = path.split('.').filter(Boolean);
-  if (keys.length === 0) return value;
-  const current =
-    root && typeof root === 'object' && !Array.isArray(root)
-      ? (root as Record<string, unknown>)
-      : {};
-  const [key, ...rest] = keys;
-  return {
-    ...current,
-    [key!]: rest.length
-      ? updatePath(current[key!], rest.join('.'), value)
-      : value,
-  };
-}
-
-function SchemaFields({
-  schema: rawSchema,
-  value,
-  path,
-  errors,
-  onChange,
-}: {
-  schema: unknown;
-  value: unknown;
-  path: string;
-  errors: Record<string, string>;
-  onChange: (path: string, value: unknown) => void;
-}) {
-  const schema =
-    rawSchema && typeof rawSchema === 'object' ? (rawSchema as JsonSchema) : {};
-  const objectValue =
-    value && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : {};
-  if (schema.type === 'object' && schema.properties) {
-    return (
-      <div>
-        {Object.entries(schema.properties).map(([key, child]) => {
-          const fieldPath = path ? `${path}.${key}` : key;
-          return (
-            <SchemaFields
-              key={fieldPath}
-              schema={child}
-              value={objectValue[key]}
-              path={fieldPath}
-              errors={errors}
-              onChange={onChange}
-            />
-          );
-        })}
-      </div>
-    );
-  }
-  const id = `module-config-${path || 'root'}`;
-  const label = schema.title ?? path.split('.').at(-1) ?? 'Configuration';
-  const error = errors[path];
-  const errorNode = error ? (
-    <span id={`${id}-error`} role="alert">
-      {error}
-    </span>
-  ) : null;
-  const common = {
-    id,
-    'aria-describedby': error ? `${id}-error` : undefined,
-    'aria-invalid': error ? true : undefined,
-  };
-  if (schema.enum)
-    return (
-      <label>
-        {label}
-        <select
-          {...common}
-          value={String(value ?? '')}
-          onChange={(e) => onChange(path, e.target.value)}
-        >
-          <option value="" />
-          {schema.enum.map((option) => (
-            <option key={String(option)} value={String(option)}>
-              {String(option)}
-            </option>
-          ))}
-        </select>
-        {errorNode}
-      </label>
-    );
-  if (schema.type === 'boolean')
-    return (
-      <label>
-        {label}
-        <input
-          {...common}
-          type="checkbox"
-          checked={Boolean(value)}
-          onChange={(e) => onChange(path, e.target.checked)}
-        />
-        {errorNode}
-      </label>
-    );
-  if (schema.type === 'string')
-    return (
-      <label>
-        {label}
-        <input
-          {...common}
-          type="text"
-          value={String(value ?? '')}
-          onChange={(e) => onChange(path, e.target.value)}
-        />
-        {errorNode}
-      </label>
-    );
-  if (schema.type === 'number' || schema.type === 'integer')
-    return (
-      <label>
-        {label}
-        <input
-          {...common}
-          type="number"
-          value={typeof value === 'number' ? value : ''}
-          onChange={(e) =>
-            onChange(
-              path,
-              e.target.value === '' ? undefined : Number(e.target.value),
-            )
-          }
-        />
-        {errorNode}
-      </label>
-    );
-  return (
-    <label>
-      {label}
-      <textarea
-        {...common}
-        value={JSON.stringify(value ?? {}, null, 2)}
-        onChange={(e) => {
-          try {
-            onChange(path, JSON.parse(e.target.value));
-          } catch {
-            /* Keep server-side validation authoritative. */
-          }
-        }}
-      />
-      {errorNode}
-    </label>
   );
 }

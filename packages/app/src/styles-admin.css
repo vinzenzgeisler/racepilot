@@ -1,0 +1,300 @@
+.admin-entries {
+  margin-top: 1.5rem;
+}
+
+.registration-admin {
+  display: grid;
+  gap: 1rem;
+  max-width: 64rem;
+  padding: 1.5rem;
+}
+
+.registration-admin label {
+  display: grid;
+  gap: 0.4rem;
+  font-weight: 600;
+}
+
+.registration-admin input:not([type='checkbox']),
+.registration-admin select,
+.registration-admin textarea {
+  font: inherit;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 0.5rem;
+}
+
+.registration-admin input[type='checkbox'] {
+  width: 1.2rem;
+  height: 1.2rem;
+  min-height: 44px;
+}
+
+.registration-admin textarea {
+  min-height: 7rem;
+}
+
+.registration-admin-grid,
+.registration-admin-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+}
+
+.admin-entries label,
+.admin-detail label {
+  display: grid;
+  gap: 0.35rem;
+  font-weight: 600;
+}
+
+.admin-entries select,
+.admin-entries input,
+.admin-entries button,
+.admin-detail textarea,
+.admin-detail button {
+  font: inherit;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.65rem;
+}
+
+.admin-filters,
+.admin-actions,
+.admin-pagination {
+  display: flex;
+  align-items: end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-block: 1rem;
+}
+
+.admin-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-line);
+  background: white;
+}
+
+.admin-table-wrap table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.admin-table-wrap th,
+.admin-table-wrap td {
+  padding: 0.7rem;
+  border-bottom: 1px solid var(--color-line);
+  white-space: nowrap;
+}
+
+.link-button {
+  border: 0;
+  background: none;
+  color: var(--color-green);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.admin-pagination {
+  justify-content: center;
+  align-items: center;
+}
+
+.admin-detail,
+.admin-state {
+  margin-block: 2rem;
+  padding: 1rem;
+  background: white;
+  border: 1px solid var(--color-line);
+  border-radius: 0;
+}
+
+.admin-detail dl {
+  display: grid;
+  grid-template-columns: minmax(10rem, 1fr) 2fr;
+  gap: 0.5rem 1rem;
+  overflow-wrap: anywhere;
+}
+
+.admin-detail dt {
+  font-weight: 700;
+}
+
+.admin-detail textarea {
+  min-height: 5rem;
+}
+
+.admin-dependency {
+  color: var(--color-graphite);
+  font-size: 0.9rem;
+}
+
+.module-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+  margin-block: 1rem;
+}
+
+.module-card,
+[role='dialog'] {
+  padding: 1rem;
+  background: white;
+  border: 1px solid var(--color-line);
+  border-radius: 0;
+}
+
+.module-card button,
+[role='dialog'] button,
+[role='dialog'] textarea,
+section[aria-labelledby='modules-title'] input,
+section[aria-labelledby='modules-title'] select {
+  font: inherit;
+  min-height: 2.5rem;
+  padding: 0.4rem 0.65rem;
+  margin: 0.35rem;
+}
+
+[role='dialog'] textarea {
+  display: block;
+  width: 100%;
+  min-height: 10rem;
+}
+
+[role='dialog'] img {
+  max-width: min(100%, 36rem);
+}
+
+.module-card :focus-visible,
+[role='dialog'] :focus-visible {
+  outline: 0.2rem solid var(--color-marshal);
+  outline-offset: 3px;
+}
+
+.entry-status {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 0;
+  padding: 0.15rem 0.55rem;
+  font-weight: 600;
+}
+
+.admin-workflow {
+  margin-block: 1rem;
+  padding: 1rem;
+  border: 1px solid var(--border, var(--color-line));
+  border-radius: 0;
+}
+
+.admin-workflow summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.admin-workflow textarea {
+  width: 100%;
+  font-family: ui-monospace, monospace;
+}
+
+.nb-gallery {
+  max-width: 1120px;
+}
+
+.nb-gallery section {
+  padding: 24px 0;
+  border-top: 2px solid var(--color-ink);
+}
+
+.nb-gallery section h2 {
+  font-family: var(--font-archivo);
+  font-size: 22px;
+}
+
+.nb-gallery-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.nb-gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.nb-icon-sample {
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  min-width: 64px;
+}
+
+.nb-gallery .nb-table {
+  margin-top: 12px;
+}
+
+.nb-gallery-grid {
+  align-items: start;
+}
+
+.nb-gallery-grid .nb-field {
+  width: 100%;
+}
+
+.nb-gallery-grid > div {
+  align-self: start;
+}
+
+.nb-gallery-dark {
+  display: inline-flex;
+  align-items: center;
+  min-height: 72px;
+  padding: 12px;
+  background: var(--color-green);
+}
+
+.nb-state-hover::before {
+  transform: scaleX(1);
+  background: var(--color-night);
+}
+
+.nb-state-hover .nb-button-signal {
+  background: var(--color-signal);
+}
+
+.nb-state-pressed {
+  box-shadow: inset 0 3px 0 rgb(0 0 0 / 35%);
+}
+
+.nb-state-focus {
+  outline: 3px solid var(--color-marshal) !important;
+  outline-offset: 3px !important;
+}
+
+.nb-state-hover.nb-primary-dark::before {
+  background: var(--color-ivory);
+}
+
+.nb-state-hover.nb-secondary::before {
+  background: var(--color-sage);
+}
+
+.nb-state-hover.nb-primary-dark {
+  color: var(--color-night);
+}
+
+.nb-state-pressed.nb-primary-dark {
+  background: #ddefe5;
+}
+
+.nb-state-pressed.nb-secondary {
+  background: #d3dcd3;
+}
+
+/* NENNBOX authenticated work shell — A1/A6 */
+body:has(.app-shell) {
+  margin: 0;
+  background: #fff;
+}

@@ -1,0 +1,35 @@
+@media (max-width: 1279px) {
+  .app-shell {
+    --sidebar-width: 64px;
+  }
+  .app-event-picker {
+    padding: 12px 8px;
+  }
+  .app-event-picker label,
+  .app-event-picker select,
+  .app-nav-group h2,
+  .app-nav-label,
+  .app-nav-count {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .app-sidebar-nav {
+    padding: 8px 4px;
+  }
+  .app-nav-item,
+  .app-account {
+    justify-content: center;
+    padding-inline: 4px;
+  }
+  .app-header,
+  .app-filter-bar {
+    padding-inline: 24px;
+  }
+  .app-main {
+    padding: 24px;
+  }
+}

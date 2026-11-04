@@ -1,5 +1,18 @@
 import { adminFetch } from './auth.js';
 import {
+  begin,
+  invalidate,
+  isCurrent,
+  messageFor,
+  request,
+  initialQuery,
+  type ApiState,
+  type EntryQuery,
+  type Event,
+  type Gate,
+  type WorkflowView,
+} from './AdminEntriesModel.js';
+import {
   useCallback,
   useEffect,
   useRef,
@@ -7,84 +20,14 @@ import {
   type FormEvent,
 } from 'react';
 import { AdminWorkflow, defaultWorkflow } from './AdminWorkflow.js';
+import { AdminEntryDetail } from './AdminEntryDetail.js';
+import { EntryStatusBadge } from './EntryStatusBadge.js';
 import {
   AdminEntryListResponse,
   EntryResponse,
   EventSchema,
   type EntryResponse as Entry,
 } from '@racepilot/contracts';
-
-type Event = ReturnType<typeof EventSchema.parse>;
-type ApiState =
-  'loading' | 'ready' | 'unauthorized' | 'forbidden' | 'unavailable';
-type EntryQuery = {
-  classId: string;
-  acceptanceStatus: string;
-  verificationStatus: string;
-  paymentStatus: string;
-  search: string;
-  sort: string;
-  direction: string;
-};
-const initialQuery: EntryQuery = {
-  classId: '',
-  acceptanceStatus: '',
-  verificationStatus: '',
-  paymentStatus: '',
-  search: '',
-  sort: 'createdAt',
-  direction: 'desc',
-};
-type Gate = { generation: number; controller: AbortController | null };
-type WorkflowStatus = {
-  key: string;
-  labels: { de: string; en: string };
-  color: string;
-  category: string;
-};
-type WorkflowView = {
-  statuses: WorkflowStatus[];
-  transitions: Array<{
-    from: string;
-    to: string;
-    reasonRequired: boolean;
-    permission?: string;
-    roles?: Array<'admin' | 'member'> | undefined;
-    notify?: boolean;
-  }>;
-};
-
-async function request(path: string, init?: RequestInit): Promise<Response> {
-  return adminFetch(path, {
-    ...init,
-    credentials: 'same-origin',
-    cache: 'no-store',
-    headers: { 'content-type': 'application/json', ...init?.headers },
-  });
-}
-function messageFor(status: number): ApiState {
-  if (status === 401) return 'unauthorized';
-  if (status === 403) return 'forbidden';
-  return 'unavailable';
-}
-function invalidate(gate: Gate) {
-  gate.generation += 1;
-  gate.controller?.abort();
-  gate.controller = null;
-}
-function begin(gate: Gate) {
-  invalidate(gate);
-  const controller = new AbortController();
-  gate.controller = controller;
-  return { generation: gate.generation, controller };
-}
-function isCurrent(
-  gate: Gate,
-  generation: number,
-  controller: AbortController,
-) {
-  return gate.generation === generation && !controller.signal.aborted;
-}
 
 export function AdminEntries({
   onSelectionChange,
@@ -787,7 +730,7 @@ export function AdminEntries({
                         </strong>
                       </td>
                       <td data-priority="1">
-                        <StatusBadge
+                        <EntryStatusBadge
                           status={workflow?.statuses.find(
                             (item) => item.key === entry.acceptanceStatus,
                           )}
@@ -949,182 +892,17 @@ export function AdminEntries({
         </>
       )}
       {selected && (
-        <section className="admin-detail" aria-labelledby="entry-detail-title">
-          <h3 id="entry-detail-title">Entry detail</h3>
-          <dl>
-            <dt>Entry ID</dt>
-            <dd>{selected.id}</dd>
-            <dt>Class</dt>
-            <dd>
-              {classes.find((item) => item.id === selected.classId)?.name ??
-                selected.classId}
-            </dd>
-            <dt>Registration group</dt>
-            <dd>{selected.registrationGroupId}</dd>
-            <dt>Fahrer</dt>
-            <dd>
-              {selected.adminDetails?.driver.name ?? selected.driverPersonId}
-            </dd>
-            <dt>Geburtsdatum</dt>
-            <dd>{selected.adminDetails?.driver.dateOfBirth ?? '—'}</dd>
-            <dt>Land</dt>
-            <dd>{selected.adminDetails?.driver.country ?? '—'}</dd>
-            <dt>E-Mail</dt>
-            <dd>
-              {selected.adminDetails?.driver.email ?? '—'}{' '}
-              {selected.adminDetails?.driver.emailVerified ? '✓' : ''}
-            </dd>
-            <dt>Fahrzeug</dt>
-            <dd>
-              {selected.adminDetails
-                ? `${selected.adminDetails.vehicle.make} ${selected.adminDetails.vehicle.model}${selected.adminDetails.vehicle.year ? ` · ${selected.adminDetails.vehicle.year}` : ''}`
-                : selected.vehicleId}
-            </dd>
-            <dt>Startnummer</dt>
-            <dd>{selected.adminDetails?.startNumber ?? '—'}</dd>
-            <dt>Eigene Angaben</dt>
-            <dd>
-              {selected.adminDetails?.customAnswers.length ? (
-                <ul className="admin-custom-answers">
-                  {selected.adminDetails.customAnswers.map((answer) => (
-                    <li key={answer.key}>
-                      <strong>{answer.label}</strong>:{' '}
-                      {answer.fileDownloadUrl ? (
-                        <a href={answer.fileDownloadUrl}>Datei herunterladen</a>
-                      ) : answer.value === null ? (
-                        '—'
-                      ) : typeof answer.value === 'boolean' ? (
-                        answer.value ? (
-                          'Ja'
-                        ) : (
-                          'Nein'
-                        )
-                      ) : (
-                        answer.value
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                'Keine eigenen Angaben'
-              )}
-            </dd>
-            <dt>Acceptance</dt>
-            <dd>
-              <StatusBadge
-                status={workflow?.statuses.find(
-                  (item) => item.key === selected.acceptanceStatus,
-                )}
-                fallback={selected.acceptanceStatus}
-              />
-            </dd>
-            <dt>Verification</dt>
-            <dd>{selected.verificationStatus}</dd>
-            <dt>Price snapshot total</dt>
-            <dd>
-              {selected.priceSnapshot
-                ? new Intl.NumberFormat(undefined, {
-                    style: 'currency',
-                    currency: selected.priceSnapshot.currency,
-                  }).format(selected.priceSnapshot.totalCents / 100)
-                : 'Not available'}
-            </dd>
-          </dl>
-          <label>
-            Reason (required for audit)
-            <textarea
-              value={reason}
-              maxLength={1000}
-              onChange={(e) => setReason(e.target.value)}
-            />
-          </label>
-          <div className="admin-actions">
-            {(workflow?.transitions ?? [])
-              .filter((edge) => edge.from === selected.acceptanceStatus)
-              .map((edge) => {
-                const status = workflow?.statuses.find(
-                  (item) => item.key === edge.to,
-                );
-                return (
-                  <button
-                    key={edge.to}
-                    type="button"
-                    disabled={busy || !reason.trim()}
-                    onClick={() => void transition('acceptance', edge.to)}
-                  >
-                    <StatusBadge status={status} fallback={edge.to} />
-                  </button>
-                );
-              })}
-            {selected.verificationStatus !== 'verified' && (
-              <button
-                type="button"
-                disabled={busy || !reason.trim()}
-                onClick={() => void transition('verification', 'verified')}
-              >
-                Mark verified
-              </button>
-            )}
-          </div>
-          <section className="admin-documents" aria-label="Prüfstatus">
-            <h4>Prüfstatus</h4>
-            <p>
-              Echte Nennungsunterlagen und Upload-Zähler sind noch nicht
-              verfügbar.
-            </p>
-            <ul>
-              {selected.statusProjection?.dimensions
-                .filter((item) =>
-                  ['technical_inspection', 'waiver'].includes(item.key),
-                )
-                .map((item) => (
-                  <li key={item.key}>
-                    <span>{item.label.de}</span>
-                    <strong>{item.value}</strong>
-                  </li>
-                ))}
-            </ul>
-          </section>
-          <section aria-label="Verlauf">
-            <h4>Verlauf</h4>
-            <ol>
-              {(selected.adminHistory ?? []).map((event) => (
-                <li key={`${event.kind}-${event.id}`}>
-                  <time dateTime={event.occurredAt}>
-                    {new Date(event.occurredAt).toLocaleString()}
-                  </time>{' '}
-                  · {event.label} · {event.actor}
-                  {event.detail ? ` — ${event.detail}` : ''}
-                </li>
-              ))}
-            </ol>
-          </section>
-        </section>
+        <AdminEntryDetail
+          selected={selected}
+          classes={classes}
+          workflow={workflow}
+          reason={reason}
+          setReason={setReason}
+          busy={busy}
+          transition={transition}
+        />
       )}
       {actionError && <p role="alert">{actionError}</p>}
     </section>
-  );
-}
-
-function StatusBadge({
-  status,
-  fallback,
-}: {
-  status: WorkflowStatus | undefined;
-  fallback: string;
-}) {
-  const locale = navigator.language.toLowerCase().startsWith('de')
-    ? 'de'
-    : 'en';
-  return (
-    <span
-      className="entry-status"
-      style={
-        status ? { color: status.color, borderColor: status.color } : undefined
-      }
-      title={fallback}
-    >
-      {status ? `${status.labels[locale]} · ${status.key}` : fallback}
-    </span>
   );
 }
