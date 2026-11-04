@@ -12,5 +12,7 @@
   "packages/core/src/index.ts",
   "packages/core/src/modules.ts",
   "packages/ui/src/components.tsx",
-  "packages/worker/src/mail.ts"
+  "packages/worker/src/mail.ts",
+  "packages/app/src/styles.css",
+  "packages/ui/src/components.css"
 ]

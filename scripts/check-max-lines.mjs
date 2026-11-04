@@ -22,7 +22,7 @@ const paths = execFileSync('git', ['ls-files', 'packages', 'scripts'], {
   .split('\n');
 const sourceFiles = paths.filter(
   (file) =>
-    /\.(?:[cm]?[jt]sx?)$/.test(file) &&
+    /\.(?:[cm]?[jt]sx?|css)$/.test(file) &&
     !/(?:\.test|\.spec)\.[^.]+$/.test(file) &&
     !file.includes('/e2e/'),
 );

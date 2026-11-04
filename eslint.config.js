@@ -2,9 +2,14 @@ import eslint from '@eslint/js';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import { readFileSync } from 'node:fs';
+
+const maxLinesExceptions = JSON.parse(
+  readFileSync(new URL('./scripts/max-lines-exceptions.json', import.meta.url), 'utf8'),
+);
 
 export default tseslint.config(
-  { ignores: ['**/dist/**', '**/node_modules/**', 'package-lock.json'] },
+  { ignores: ['**/dist/**', '**/node_modules/**', 'package-lock.json', '**/*.css'] },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,
   {
@@ -16,6 +21,7 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
   },
   {
+    files: ['**/*.{js,mjs,cjs,ts,tsx}'],
     rules: {
       'max-lines': [
         'error',
@@ -30,22 +36,7 @@ export default tseslint.config(
   {
     // Temporary, explicit legacy exceptions. Remove entries as files are refactored;
     // additions are rejected by scripts/check-max-lines.mjs.
-    files: [
-      'packages/adapter-postgres/src/index.ts',
-      'packages/api/src/index.ts',
-      'packages/api/src/timing.ts',
-      'packages/app/src/AdminEntries.tsx',
-      'packages/app/src/AdminModules.tsx',
-      'packages/app/src/AdminWorkflow.tsx',
-      'packages/app/src/App.tsx',
-      'packages/app/src/Registration.tsx',
-      'packages/app/src/RegistrationFormSettings.tsx',
-      'packages/contracts/src/index.ts',
-      'packages/core/src/index.ts',
-      'packages/core/src/modules.ts',
-      'packages/ui/src/components.tsx',
-      'packages/worker/src/mail.ts',
-    ],
+    files: maxLinesExceptions,
     rules: { 'max-lines': 'off' },
   },
   {

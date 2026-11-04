@@ -1,5 +1,7 @@
 {
-  "packages/adapter-local-storage/src/index.ts": ["createLocalObjectStorage"],
+  "packages/adapter-local-storage/src/index.ts": [
+    "createLocalObjectStorage"
+  ],
   "packages/adapter-oidc/src/index.ts": [
     "OIDCConfig",
     "createOIDCIdentityProvider"
@@ -79,6 +81,7 @@
     "publicRegistrationRateLimits",
     "registrationFormConfigAudit",
     "registrationFormDrafts",
+    "registrationFormUploads",
     "registrationGroups",
     "registrationSettingsAudit",
     "saveMailTemplateVersion",
@@ -142,6 +145,9 @@
     "PublicRegistrationRequestSchema",
     "RegistrationBranding",
     "RegistrationBrandingSchema",
+    "RegistrationCustomField",
+    "RegistrationCustomFieldAnswersSchema",
+    "RegistrationCustomFieldSchema",
     "RegistrationDraft",
     "RegistrationDraftSchema",
     "RegistrationFieldConfigSchema",
