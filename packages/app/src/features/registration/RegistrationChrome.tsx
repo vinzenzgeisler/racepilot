@@ -1,5 +1,15 @@
 import { Button, Steps } from '@racepilot/ui';
 import type { RegistrationModel } from './RegistrationModel.js';
+
+function formatEventStartDate(startsOn: string, locale: 'de' | 'en') {
+  // Event dates are calendar dates, not instants; UTC prevents time-zone shifts.
+  return new Intl.DateTimeFormat(locale, {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${startsOn}T00:00:00.000Z`));
+}
 export function RegistrationHeader({
   model,
   organizationId,
@@ -49,7 +59,9 @@ export function RegistrationHeader({
             alt=""
           />
         )}
-        <p className="registration-event-date">{payload.event.startsOn}</p>
+        <p className="registration-event-date">
+          {formatEventStartDate(payload.event.startsOn, locale)}
+        </p>
         <h2 id="registration-title">{payload.event.name}</h2>
         {payload.registrationFormConfig.welcomeText && (
           <p>{payload.registrationFormConfig.welcomeText}</p>
