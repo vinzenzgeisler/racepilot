@@ -1,4 +1,11 @@
 :root {
+  --surface-page: var(--color-ivory);
+  --surface-panel: var(--color-white);
+  --brand-action: var(--color-green);
+  --overlay-sidebar-hover: rgb(245 244 238 / 10%);
+  --overlay-sidebar-border: rgb(245 244 238 / 28%);
+  --weight-semibold: 600;
+  --weight-bold: 700;
   --color-green: #193b30;
   --color-ivory: #f5f4ee;
   --color-white: #fff;

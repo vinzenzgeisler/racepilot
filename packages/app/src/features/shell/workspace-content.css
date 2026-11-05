@@ -1,136 +1,163 @@
 .app-main-content .admin-entries > label {
   max-width: 720px;
 }
+
 .app-main-content .admin-detail {
   max-width: 720px;
 }
+
 .app-empty-view {
   max-width: 720px;
 }
+
 .app-event-picker {
   position: relative;
 }
-@media (max-width: 1279px) {
+
+@media (width <= 1279px) {
   .app-event-picker::after {
     content: '▾';
     position: absolute;
-    top: 25px;
-    left: 23px;
+    top: var(--space-6);
+    left: var(--space-6);
     pointer-events: none;
-    color: var(--color-ivory);
+    color: var(--surface-page);
   }
+
   .app-event-picker select {
     width: 44px;
     height: 44px;
     padding: 0;
     color: transparent;
-    font-size: 0;
+    font-size: var(--type-label-size-app);
     appearance: none;
     cursor: pointer;
   }
+
   .app-event-picker select option {
     color: var(--color-ink);
-    font-size: 14px;
+    font-size: var(--type-body-size-app);
   }
 }
+
 .app-preview {
   position: relative;
 }
+
 .app-preview-close {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: var(--space-4);
+  right: var(--space-4);
   width: 44px;
   height: 44px;
   border: 1px solid var(--color-line);
-  background: #fff;
-  font-size: 22px;
+  background: var(--surface-panel);
+  font-size: var(--space-6);
   cursor: pointer;
 }
+
 .app-preview-status {
-  margin: 24px 0;
+  margin: var(--space-6) 0;
   padding: 0;
   list-style: none;
 }
+
 .app-preview-status li {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 6px 16px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--color-line);
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: var(--space-1) solid var(--color-line);
 }
+
 .app-preview-status small {
   grid-column: 1 / -1;
   color: var(--color-graphite);
 }
+
 .app-preview-extra {
   display: none;
-  margin-top: 32px;
-  padding-top: 16px;
-  border-top: 2px solid var(--color-ink);
+  margin-top: var(--space-8);
+  padding-top: var(--space-4);
+  border-top: var(--space-1) solid var(--color-ink);
 }
+
 .app-preview-extra h3 {
   margin: 0;
-  font: 700 18px var(--font-archivo);
+  font: var(--weight-bold) 18px var(--font-archivo);
 }
+
 .app-start-number {
   display: inline-block;
-  margin-right: 8px;
-  font: 900 20px/0.9 var(--font-archivo);
+  margin-right: var(--space-2);
+  font: var(--text-app-h1);
   font-stretch: condensed;
 }
-@media (max-width: 1679px) {
+
+@media (width <= 1679px) {
   .app-main-content [data-priority='3'],
   .app-main-content [data-priority='4'] {
     display: none;
   }
 }
-@media (min-width: 1280px) and (max-width: 1679px) {
+
+@media (width >= 1280px) and (width <= 1679px) {
   .app-main-content [data-priority='3'] {
     display: none;
   }
 }
-@media (min-width: 1680px) and (max-width: 2199px) {
+
+@media (width >= 1680px) and (width <= 2199px) {
   .app-main-content [data-priority='4'] {
     display: none;
   }
 }
-@media (min-width: 2200px) {
+
+@media (width >= 2200px) {
   .app-preview-extra {
     display: block;
   }
 }
-@media (max-width: 767px) {
+
+@media (width <= 767px) {
   .app-preview-close {
     display: none;
   }
+
   .app-main-content [data-priority] {
     display: block;
   }
 }
-@media (max-width: 767px) {
+
+@media (width <= 767px) {
   .app-header {
-    gap: 8px;
-    padding-inline: 12px;
+    gap: var(--space-2);
+    padding-inline: var(--space-3);
   }
+
   .app-header h1 {
-    font-size: 20px;
+    font-size: var(--space-6);
   }
+
   .app-view-switch {
     gap: 0;
   }
+
   .app-view-switch button {
-    padding-inline: 4px;
-    font-size: 11px;
+    padding-inline: var(--space-1);
+    font-size: var(--type-label-size-app);
   }
 }
+
 .app-event-switch-icon {
   display: none;
 }
-@media (max-width: 1279px) {
+
+@media (width <= 1279px) {
   .app-event-picker::after {
     content: none;
   }
+
   .app-event-switch-icon {
     position: absolute;
     z-index: 1;
@@ -138,14 +165,16 @@
     inset-inline-start: 18px;
     display: block;
     pointer-events: none;
-    color: var(--color-ivory);
+    color: var(--surface-page);
   }
+
   .app-event-picker select {
     position: relative;
     z-index: 0;
   }
 }
-@media (max-width: 767px) {
+
+@media (width <= 767px) {
   .app-bottom-nav {
     grid-template-columns: repeat(4, 1fr);
   }

@@ -1,23 +1,28 @@
-@media (min-width: 1680px) {
+@media (width >= 1680px) {
   .app-main {
     grid-template-columns: minmax(0, 1fr) 480px;
   }
+
   .app-preview {
     display: block;
   }
 }
-@media (min-width: 2200px) {
+
+@media (width >= 2200px) {
   .app-main {
     grid-template-columns: minmax(0, 1fr) minmax(480px, min(40vw, 880px));
   }
 }
-@media (max-width: 1279px) {
+
+@media (width <= 1279px) {
   .app-shell {
     --sidebar-width: 64px;
   }
+
   .app-event-picker {
-    padding: 12px 8px;
+    padding: var(--space-3) var(--space-2);
   }
+
   .app-event-picker label,
   .app-event-picker select,
   .app-nav-group h2,
@@ -30,51 +35,64 @@
     clip-path: inset(50%);
     white-space: nowrap;
   }
+
   .app-sidebar-nav {
-    padding: 8px 4px;
+    padding: var(--space-2) var(--space-1);
   }
+
   .app-nav-item,
   .app-account {
     justify-content: center;
-    padding-inline: 4px;
+    padding-inline: var(--space-1);
   }
+
   .app-header {
-    padding-inline: 24px;
+    padding-inline: var(--space-6);
   }
+
   .app-main {
-    padding: 24px;
+    padding: var(--space-6);
   }
 }
-@media (max-width: 767px) {
+
+@media (width <= 767px) {
   .app-shell {
     display: block;
     padding-bottom: 64px;
   }
+
   .app-sidebar {
     display: none;
   }
+
   .app-header {
     height: 64px;
-    padding-inline: 16px;
+    padding-inline: var(--space-4);
   }
+
   .app-header h1 {
-    font-size: 22px;
+    font-size: var(--type-h2-size-app);
   }
+
   .app-header .nb-button {
     display: none;
   }
+
   .app-view-switch button {
     min-height: 44px;
-    padding-inline: 8px;
-    font-size: 12px;
+    padding-inline: var(--space-2);
+    font-size: var(--type-body-size-app);
   }
+
   .app-main {
-    padding: 16px;
+    padding: var(--space-4);
   }
+
   .app-main-content .admin-table-wrap {
     overflow: visible;
     border: 0;
   }
+
   .app-main-content table,
   .app-main-content thead,
   .app-main-content tbody,
@@ -83,20 +101,24 @@
     display: block;
     width: 100%;
   }
+
   .app-main-content thead {
     position: absolute;
     clip-path: inset(50%);
   }
+
   .app-main-content tbody tr {
-    margin-bottom: 8px;
-    padding: 8px 12px;
-    border-bottom: 1px solid var(--color-line);
+    margin-bottom: var(--space-2);
+    padding: var(--space-2) var(--space-3);
+    border-bottom: var(--space-1) solid var(--color-line);
   }
+
   .app-main-content tbody td {
     min-height: 56px;
-    padding: 12px 4px;
+    padding: var(--space-3) var(--space-1);
     white-space: normal;
   }
+
   .app-bottom-nav {
     position: fixed;
     inset: auto 0 0;
@@ -105,25 +127,28 @@
     grid-template-columns: repeat(4, 1fr);
     min-height: 64px;
     padding-bottom: env(safe-area-inset-bottom);
-    background: var(--color-green);
-    color: var(--color-ivory);
+    background: var(--brand-action);
+    color: var(--surface-page);
   }
+
   .app-bottom-nav .app-nav-item {
     min-height: 56px;
     flex-direction: column;
     justify-content: center;
-    gap: 2px;
-    font-size: 10px;
+    gap: var(--space-1);
+    font-size: var(--type-body-size-app);
   }
+
   .app-bottom-nav .app-nav-label {
     position: static;
     width: auto;
     height: auto;
     overflow: visible;
     clip-path: none;
-    font-size: 10px;
+    font-size: var(--type-body-size-app);
   }
 }
+
 @media (prefers-reduced-motion: reduce) {
   .app-shell *,
   .app-shell *::before,
