@@ -1,0 +1,14 @@
+.nb-start-line {
+  height: 2px;
+  background: var(--color-ink);
+  position: relative;
+  margin: 24px 0;
+}
+.nb-start-line span {
+  position: absolute;
+  left: 0;
+  top: -5px;
+  width: 12px;
+  height: 12px;
+  background: var(--color-signal);
+}

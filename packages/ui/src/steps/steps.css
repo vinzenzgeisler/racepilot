@@ -1,0 +1,54 @@
+.nb-steps {
+  list-style: none;
+  display: flex;
+  gap: 16px;
+  padding: 0;
+}
+.nb-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nb-step-mark {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--color-graphite);
+  color: var(--color-graphite);
+  font-size: 12px;
+}
+.nb-step-mark > span {
+  width: 8px;
+  height: 8px;
+  background: currentColor;
+}
+.nb-steps .is-done .nb-step-mark,
+.nb-steps [aria-current='step'] .nb-step-mark {
+  background: var(--color-mint);
+  border-color: var(--color-green);
+  color: var(--color-green);
+}
+.nb-step-mark {
+  position: relative;
+}
+.nb-step-signet {
+  width: 14px;
+  height: 14px;
+  color: var(--color-graphite);
+}
+.nb-steps [aria-current='step'] .nb-step-signet {
+  color: var(--color-green);
+}
+.nb-step-check {
+  position: absolute;
+  right: -4px;
+  top: -5px;
+  display: grid;
+  place-items: center;
+  width: 12px;
+  height: 12px;
+  background: var(--color-green);
+  color: var(--color-ivory);
+  font: 10px/1 var(--font-mono);
+}

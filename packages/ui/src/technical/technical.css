@@ -1,0 +1,6 @@
+.nb-technical {
+  font: 500 10px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--color-graphite);
+  text-transform: uppercase;
+}

@@ -61,3 +61,57 @@ All font files are served from the application bundle via Fontsource; OFL notice
 ### Browser verification
 
 Rendered the package base styles and `Wordmark` in Chromium on 2026-10-30 at exact 320 px and 1440 px CSS viewports using the local app bundle. `document.fonts.check()` returned true for Archivo Variable, IBM Plex Sans, and IBM Plex Mono at both widths; the computed display face was Archivo Variable at 125% width, and the page had no horizontal overflow. The four logo variants computed to Green/Ivory, Mint signet + Ivory wordmark on Green, White on Ink, and Ink on Ivory respectively. This review used local assets only.
+
+## Component library (A2 / F1)
+
+`@racepilot/ui` is the single source for reusable app and registration controls.
+Use the named exports from the package root and import
+`@racepilot/ui/components.css` once in the application. Each primitive lives in
+its own `packages/ui/src/<component>/` folder with implementation, token-based
+styles, and a focused test. `components.tsx` and `components.css` are small
+compatibility entrypoints only; they are not implementation files.
+
+| Need | Component | Notes |
+| --- | --- | --- |
+| Actions and state | `Button`, `StatusLabel`, `HintLabel`, `Banner`, `Toast` | Status requires caller-provided human text; copy remains localizable. |
+| Form controls | `TextInput`, `Textarea`, `DateInput`, `FileUpload`, `SelectField`, `Checkbox`, `Radio`, `Switch` | Labels, hints and errors are supplied by the application. |
+| Form composition | `FormSection`, `Steps` | Fieldset sections and accessible progress labels. |
+| Page composition | `PageHeader`, `FilterBar`, `Stack`, `Inline`, `EmptyState` | Layout only; no product-specific page behavior. |
+| Navigation and details | `Tabs`, `Pagination`, `Disclosure`, `Menu` | Pass localized labels; tabs support arrow-key navigation. |
+| Confirmation | `Dialog`, `Button` confirmation copy | Modal contents and all accessible names are caller-supplied. |
+| Data | `DataField`, `DataTable`, `SelectionBar`, `Nameplate` | Prefer for repeated app data presentation. |
+
+### Interaction primitive choice
+
+The alternatives reviewed were Radix UI and React Aria. Neither is a current
+runtime dependency, and adopting either would add a framework for behavior that
+the required surfaces can express with browser primitives. The modal uses the
+native `<dialog>.showModal()` modality (including focus containment, inert
+background, and Escape cancellation); disclosures and the action menu use native
+`<details>/<summary>` keyboard behavior. The tabs implement the small APG tab
+pattern with roving tab index and Left/Right arrows; tests exercise the linked
+tab-panel semantics. Styling remains in these components. If a future surface
+needs nested composite widgets or more complex focus restoration, reevaluate
+React Aria/Radix there rather than introducing a partial homegrown framework.
+
+### Choosing a component
+
+Start with the `/components` gallery for available variants and states, then use
+these rules:
+
+- Use `PageHeader` for a screen heading and contextual actions; don't recreate
+  heading hierarchy or button groups in a feature.
+- Use `FilterBar` around search/filter controls. Use `Tabs` only for sibling
+  content views, not for a multi-step form; use `Steps` for progress.
+- Use `TextInput`, `Textarea`, `DateInput`, or `FileUpload` instead of native
+  controls. Supply every visible label, hint, error and announcement in the
+  active locale.
+- Use `Dialog` for confirmation or focused modal tasks and `Disclosure` for
+  optional inline detail. `Banner` announces persistent feedback; `Toast` is for
+  short-lived completion feedback.
+- Use `EmptyState` when a collection is empty, `Pagination` for bounded result
+  sets, and `Stack`/`Inline` for token-spaced composition.
+
+A2 and F1 govern proportions, hierarchy, responsive control sizing and square
+geometry. Tokens remain defined here rather than repeated in app styles; only
+page-level layout belongs to `packages/app`.

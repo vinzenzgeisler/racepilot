@@ -1,0 +1,18 @@
+.nb-banner {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-inline-start: 4px solid var(--color-green);
+  background: var(--color-sage);
+  color: var(--color-ink);
+}
+.nb-banner-success {
+  border-color: var(--color-signal);
+}
+.nb-banner-warning,
+.nb-banner-error {
+  border-color: var(--color-marshal-text);
+}
+.nb-banner > strong {
+  font-weight: 600;
+}

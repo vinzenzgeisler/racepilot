@@ -1,0 +1,6 @@
+.nb-toast {
+  bottom: calc(24px + var(--nb-selection-height, 0px));
+  right: max(24px, env(safe-area-inset-right));
+  max-width: calc(100vw - 32px);
+  box-sizing: border-box;
+}

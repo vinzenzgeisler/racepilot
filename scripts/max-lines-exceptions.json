@@ -1,5 +1,1 @@
-[
-  "packages/ui/src/components.tsx",
-  "packages/worker/src/mail.ts",
-  "packages/ui/src/components.css"
-]
+["packages/worker/src/mail.ts"]

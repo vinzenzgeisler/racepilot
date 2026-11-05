@@ -1,0 +1,20 @@
+.nb-form-section {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+}
+.nb-form-section legend {
+  padding-inline: var(--space-2);
+  font: var(--text-heading-4);
+}
+.nb-form-section > p {
+  margin: 0;
+  color: var(--color-graphite);
+}
+.nb-form-section > div {
+  display: grid;
+  gap: var(--space-3);
+}

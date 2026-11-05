@@ -27,6 +27,7 @@
     "src/tokens.css",
     "src/base.css",
     "src/components.css",
+    "src/**/*.css",
     "src/brand/signet.svg",
     "src/brand/app-icon.svg",
     "TRADEMARKS.md"

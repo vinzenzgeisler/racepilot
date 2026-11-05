@@ -48,7 +48,22 @@ describe('accessible NENNBOX components', () => {
             'not_relevant',
           ] as const
         ).map((status) => (
-          <StatusLabel key={status} status={status} />
+          <StatusLabel
+            key={status}
+            status={status}
+            label={
+              (
+                {
+                  new: 'Neu',
+                  in_progress: 'In Arbeit',
+                  missing: 'Fehlt',
+                  done: 'Erledigt',
+                  rejected: 'Abgelehnt',
+                  not_relevant: 'Nicht relevant',
+                } as const
+              )[status]
+            }
+          />
         ))}
       </>,
     );
@@ -82,16 +97,25 @@ describe('accessible NENNBOX components', () => {
   it('requires a visible reason and explicit confirmation before dangerous actions', () => {
     const action = vi.fn();
     mount(
-      <Button variant="danger" onDangerConfirm={action}>
+      <Button
+        variant="danger"
+        confirmation={{
+          title: 'Löschen',
+          message: 'Aktion bestätigen',
+          reasonLabel: 'Grund',
+          cancelLabel: 'Abbrechen',
+          confirmLabel: 'Bestätigen',
+          closeLabel: 'Schließen',
+        }}
+        onDangerConfirm={action}
+      >
         Löschen
       </Button>,
     );
     const trigger = container.querySelector<HTMLButtonElement>('button')!;
     act(() => trigger.click());
     expect(action).not.toHaveBeenCalled();
-    expect(container.querySelector('[role="dialog"]')?.textContent).toContain(
-      'Grund (erforderlich)',
-    );
+    expect(container.querySelector('dialog')?.textContent).toContain('Grund');
     const confirm = Array.from(container.querySelectorAll('button')).find(
       (button) => button.textContent === 'Bestätigen',
     )!;
@@ -117,7 +141,12 @@ describe('accessible NENNBOX components', () => {
     const onDismiss = vi.fn();
     const onAction = vi.fn();
     mount(
-      <Toast action="Rückgängig" onAction={onAction} onDismiss={onDismiss}>
+      <Toast
+        dismissLabel="Meldung schließen"
+        action="Rückgängig"
+        onAction={onAction}
+        onDismiss={onDismiss}
+      >
         Gespeichert
       </Toast>,
     );
@@ -133,7 +162,13 @@ describe('accessible NENNBOX components', () => {
   it('renders selection actions as an accessible region and clears selection on request', () => {
     const clear = vi.fn();
     mount(
-      <SelectionBar count={2} total={3} action="Zulassen" onClear={clear} />,
+      <SelectionBar
+        label="Auswahlaktionen"
+        summary="2 ausgewählt"
+        actionLabel="2 von 3 zulassen"
+        clearLabel="Auswahl aufheben"
+        onClear={clear}
+      />,
     );
     expect(
       container.querySelector('[role="region"]')?.getAttribute('aria-label'),
@@ -162,9 +197,9 @@ describe('accessible NENNBOX components', () => {
   it('renders status shapes as non-rounded marks and preserves the rejected text-only treatment', () => {
     mount(
       <>
-        <StatusLabel status="new" />
-        <StatusLabel status="done" />
-        <StatusLabel status="rejected" />
+        <StatusLabel status="new" label="Neu" />
+        <StatusLabel status="done" label="Erledigt" />
+        <StatusLabel status="rejected" label="Abgelehnt" />
       </>,
     );
     expect(container.querySelectorAll('.nb-status-mark')).toHaveLength(2);

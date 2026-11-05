@@ -1,0 +1,9 @@
+.nb-data-field {
+  display: grid;
+  gap: 5px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-line);
+}
+.nb-data-field > div {
+  font-size: 14px;
+}

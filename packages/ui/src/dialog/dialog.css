@@ -1,0 +1,53 @@
+.nb-dialog {
+  width: min(38rem, calc(100vw - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: var(--space-4);
+  border: 1px solid var(--color-ink);
+  background: var(--color-ivory);
+  color: var(--color-ink);
+}
+.nb-dialog::backdrop {
+  background: color-mix(in srgb, var(--color-night) 72%, transparent);
+}
+.nb-dialog header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  border-bottom: 2px solid var(--color-ink);
+}
+.nb-dialog h2 {
+  margin: 0 0 var(--space-3);
+  font: var(--text-app-h2);
+}
+.nb-dialog header button {
+  min-width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--color-green);
+  background: transparent;
+  color: var(--color-green);
+  font: inherit;
+}
+.nb-dialog > div {
+  padding-block: var(--space-4);
+}
+.nb-dialog footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: var(--space-2);
+}
+
+.nb-dialog footer button {
+  min-height: var(--target-min);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-green);
+  background: transparent;
+  color: var(--color-green);
+  font: var(--text-body);
+  cursor: pointer;
+}
+.nb-dialog footer button:focus-visible {
+  outline: 3px solid var(--color-marshal);
+  outline-offset: 3px;
+}

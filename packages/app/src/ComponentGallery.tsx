@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { GalleryAdvancedComponents } from './features/gallery/GalleryAdvancedComponents.js';
+import './features/gallery/gallery-advanced.css';
 import {
   Button,
   Checkbox,
@@ -53,7 +55,15 @@ export function ComponentGallery() {
           <Button variant="text">Details →</Button>
           <Button
             variant="danger"
-            confirmText="Nennung Nr. 42 ablehnen? Tom Probe erhält eine E-Mail mit dem Grund."
+            confirmation={{
+              title: 'Nennung ablehnen',
+              message:
+                'Nennung Nr. 42 ablehnen? Tom Probe erhält eine E-Mail mit dem Grund.',
+              reasonLabel: 'Grund',
+              cancelLabel: 'Abbrechen',
+              confirmLabel: 'Bestätigen',
+              closeLabel: 'Dialog schließen',
+            }}
             onDangerConfirm={() => setToast(true)}
           >
             Ablehnen …
@@ -139,7 +149,22 @@ export function ComponentGallery() {
               'not_relevant',
             ] as const
           ).map((status) => (
-            <StatusLabel key={status} status={status} />
+            <StatusLabel
+              key={status}
+              status={status}
+              label={
+                (
+                  {
+                    new: 'Neu',
+                    in_progress: 'In Arbeit',
+                    missing: 'Fehlt',
+                    done: 'Erledigt',
+                    rejected: 'Abgelehnt',
+                    not_relevant: 'Nicht relevant',
+                  } as const
+                )[status]
+              }
+            />
           ))}
           <HintLabel>Doppelstarter</HintLabel>
         </div>
@@ -171,9 +196,14 @@ export function ComponentGallery() {
       <section>
         <h2>App-Bausteine</h2>
         <div className="nb-gallery-row">
-          <Steps steps={['Eingang', 'Prüfung', 'Abschluss']} current={1} />
-          <StartLight state="loading" />
-          <StartLight state="go" />
+          <Steps
+            steps={['Eingang', 'Prüfung', 'Abschluss']}
+            current={1}
+            label="Fortschritt"
+            completedLabel="Abgeschlossen"
+          />
+          <StartLight state="loading" label="Lädt" />
+          <StartLight state="go" label="Bereit" />
           <Nameplate name="Tom Probe" detail="M4 · Startnummer 42" />
         </div>
         <StartLine />
@@ -196,11 +226,11 @@ export function ComponentGallery() {
             </td>
             <td>Tom Probe · M4 · Nr. 42</td>
             <td>
-              <StatusLabel status="in_progress" />
+              <StatusLabel status="in_progress" label="In Arbeit" />
             </td>
             <td>
               <Button size={32}>Zulassen</Button>{' '}
-              <Menu>
+              <Menu label="Weitere Aktionen">
                 <MenuItem>Details</MenuItem>
                 <MenuItem>Ablehnen …</MenuItem>
               </Menu>
@@ -213,6 +243,7 @@ export function ComponentGallery() {
         <Button onClick={() => setToast(true)}>Bestätigung zeigen</Button>
         {toast && (
           <Toast
+            dismissLabel="Meldung schließen"
             action="Rückgängig"
             onAction={() => setToast(false)}
             onDismiss={() => setToast(false)}
@@ -221,11 +252,13 @@ export function ComponentGallery() {
           </Toast>
         )}
       </section>
+      <GalleryAdvancedComponents />
       {selected && (
         <SelectionBar
-          count={1}
-          total={3}
-          action="Zulassen"
+          label="Auswahlaktionen"
+          summary="1 ausgewählt"
+          actionLabel="1 von 3 zulassen"
+          clearLabel="Auswahl aufheben"
           onClear={() => setSelected(false)}
         />
       )}

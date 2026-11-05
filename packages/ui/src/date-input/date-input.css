@@ -1,0 +1,3 @@
+.nb-text-input input[type='date'] {
+  font-variant-numeric: tabular-nums;
+}
