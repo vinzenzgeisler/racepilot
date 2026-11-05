@@ -1,6 +1,5 @@
 [
   "packages/app/src/features/registration/RegistrationAppearance.tsx",
-  "packages/app/src/features/registration/RegistrationChrome.tsx",
   "packages/app/src/features/registration/RegistrationCustomFields.tsx",
   "packages/app/src/features/registration/RegistrationFormSettings.tsx"
 ]
