@@ -7,6 +7,5 @@
   "packages/app/src/features/registration/RegistrationCustomFields.tsx",
   "packages/app/src/features/registration/RegistrationFormSettings.tsx",
   "packages/app/src/features/registration/RegistrationVehicleFields.tsx",
-  "packages/app/src/features/registration/RegistrationView.tsx",
-  "packages/app/src/features/workflow/WorkflowEditor.tsx"
+  "packages/app/src/features/registration/RegistrationView.tsx"
 ]
