@@ -2,6 +2,7 @@
   display: grid;
   gap: var(--space-4);
 }
+
 .nb-gallery-advanced > h2 {
   margin: var(--space-6) 0 0;
 }

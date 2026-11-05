@@ -1,0 +1,18 @@
+[
+  "packages/app/src/features/entries/admin.css",
+  "packages/app/src/features/entries/hints.css",
+  "packages/app/src/features/entries/overview.css",
+  "packages/app/src/features/entries/rows.css",
+  "packages/app/src/features/entries/status.css",
+  "packages/app/src/features/gallery/styles.css",
+  "packages/app/src/features/modules/styles.css",
+  "packages/app/src/features/registration/admin.css",
+  "packages/app/src/features/registration/styles.css",
+  "packages/app/src/features/shell/layout.css",
+  "packages/app/src/features/shell/preview.css",
+  "packages/app/src/features/shell/responsive.css",
+  "packages/app/src/features/shell/workspace-content.css",
+  "packages/app/src/features/styles/global.css",
+  "packages/app/src/features/workflow/styles.css",
+  "packages/app/src/styles.css"
+]

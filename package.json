@@ -10,7 +10,7 @@
   },
   "packageManager": "npm@11.19.1",
   "scripts": {
-    "lint": "eslint . && node scripts/check-max-lines.mjs && node scripts/check-public-exports.mjs",
+    "lint": "eslint . && node scripts/check-max-lines.mjs && node scripts/check-public-exports.mjs && npm run lint:styles && node scripts/check-native-control-exceptions.mjs && node scripts/check-stylelint-exceptions.mjs",
     "format:check": "prettier --check .",
     "typecheck": "tsc -b",
     "test": "vitest run",
@@ -20,7 +20,8 @@
     "db:seed": "tsx scripts/db-seed.ts",
     "release:pack": "npm run build && node scripts/pack-product.mjs",
     "check:max-lines": "node scripts/check-max-lines.mjs",
-    "check:public-exports": "node scripts/check-public-exports.mjs"
+    "check:public-exports": "node scripts/check-public-exports.mjs",
+    "lint:styles": "stylelint 'packages/app/src/**/*.css' --config stylelint.config.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
@@ -34,6 +35,8 @@
     "globals": "^16.5.0",
     "graphile-worker": "^0.16.6",
     "prettier": "^3.6.2",
+    "stylelint": "^18.0.0",
+    "stylelint-config-standard": "^41.0.0",
     "tsx": "4.20.6",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.46.2",
