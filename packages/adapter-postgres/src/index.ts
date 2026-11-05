@@ -1,11 +1,9 @@
+import { emailOutbox, emailTemplateVersions } from './mail-schema.js';
+import { enqueueMailOutbox } from './mail-outbox.js';
+import type { PublicRegistrationPayload } from './registration-settings.js';
+import { createInvoiceRepository } from './billing-invoices.js';
 import { drizzle } from 'drizzle-orm/node-postgres';
-import {
-  organizations,
-  events,
-  eventClasses,
-  userIdentities,
-  organizationMemberships,
-} from './schema/organization.js';
+import { organizations, events, eventClasses } from './schema/organization.js';
 import {
   people,
   vehicles,
@@ -17,13 +15,9 @@ import {
   eventEntryStatusDimensionConfigs,
   entryStatusDimensionValues,
   entryStatusDimensionAudit,
-  eventEntryStatusDimensionConfigAudit,
-  entryStatusHintsAudit,
 } from './schema/status.js';
 import {
   eventClassPricingRules,
-  organizationPaymentRecipients,
-  invoiceReferenceCounters,
   invoices,
   invoicePayments,
   invoicePaymentAuditEvents,
@@ -37,10 +31,42 @@ import {
   registrationFormUploads,
   consentEvidence,
   eventConsentTermsAudit,
-  registrationSettingsAudit,
-  registrationFormConfigAudit,
 } from './schema/forms.js';
 
+export { createEntryConfirmationRepository } from './entry-confirmation.js';
+export { ensureCommunityOrganization } from './organization.js';
+export { emailTemplateVersions } from './mail-schema.js';
+export { emailOutbox } from './mail-schema.js';
+export { emailDeliveries } from './mail-schema.js';
+export { createOrganizationRepository } from './organization.js';
+export { createEventRepository } from './events.js';
+export { createEventClassRepository } from './events.js';
+export { createMembershipRepository } from './memberships.js';
+export { createPersonRepository } from './people.js';
+export { createVehicleRepository } from './people.js';
+export { createEntryExportRepository } from './entry-repositories.js';
+export { createInvoicePaymentRepository } from './billing-payments.js';
+export { createPaymentRecipientRepository } from './billing-payments.js';
+export { createEventClassPricingRepository } from './billing-invoices.js';
+export { createInvoiceRepository } from './billing-invoices.js';
+export type { MailOutboxExecutor } from './mail-outbox.js';
+export type { NewMailOutboxMessage } from './mail-outbox.js';
+export { enqueueMailOutbox } from './mail-outbox.js';
+export { setOrganizationMailConfiguration } from './mail-templates.js';
+export { getOrganizationMailConfiguration } from './mail-templates.js';
+export { saveMailTemplateVersion } from './mail-templates.js';
+export { createMailOutboxRepository } from './mail-outbox.js';
+export type { RegistrationSettings } from './registration-settings.js';
+export { createRegistrationSettingsRepository } from './registration-settings.js';
+export { createRegistrationFormConfigRepository } from './registration-settings.js';
+export type { PublicRegistrationPayload } from './registration-settings.js';
+export { createEntryWorkflowRepository } from './entry-workflow.js';
+export { createEntryStatusDimensionRepository } from './entry-status-dimensions.js';
+export type { TimingMeasurementInput } from './timing-types.js';
+export type { TimingMeasurementRecord } from './timing-types.js';
+export type { TimingRepository } from './timing-types.js';
+export type { TimingResultVersion } from './timing-types.js';
+export { createTimingRepository } from './timing-repository.js';
 export * from './schema/organization.js';
 export * from './schema/entries.js';
 export * from './schema/status.js';
@@ -51,184 +77,26 @@ export * from './schema/modules.js';
 
 import { createHash, randomBytes } from 'node:crypto';
 import { migrate as drizzleMigrate } from 'drizzle-orm/node-postgres/migrator';
-import {
-  eq,
-  and,
-  inArray,
-  asc,
-  desc,
-  ilike,
-  or,
-  count,
-  lt,
-  lte,
-} from 'drizzle-orm';
-import {
-  pgTable,
-  uuid,
-  text,
-  timestamp,
-  unique,
-  check,
-  index,
-  integer,
-  foreignKey,
-  jsonb,
-} from 'drizzle-orm/pg-core';
+import { eq, and, inArray, desc, asc, ilike, or, count } from 'drizzle-orm';
+
 import { sql } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
-import type {
-  RequestContext,
-  OrganizationRepository,
-  OrganizationPatch,
-  Organization,
-  EventRepository,
-  EventClassRepository,
-  Event,
-  EventClass,
-  EventStatus,
-  EventInput,
-  EventPatch,
-  EventClassInput,
-  MembershipRepository,
-  InvoicePaymentRepository,
-  PaymentRecipientRepository,
-  PaymentRecipient,
-  EventClassPricingRepository,
-  InvoiceRepository,
-  InvoiceRecord,
-  MembershipBootstrap,
-  ExternalIdentity,
-  EntryConfirmationRepository,
-  EntryStatusHintKey,
-} from '@racepilot/core';
+import type { RequestContext } from '@racepilot/core';
 import {
   organizationId,
-  permissionsForRole,
   calculatePrice,
   assertEntryTransition,
   normalizeEmail,
   normalizeRequestedStartNumber,
-  deriveInvoiceStatus,
-  createPaymentReference,
   defaultEntryWorkflow,
-  normalizeEntryWorkflow,
   projectEntryStatuses,
   defaultEntryStatusDimensionConfig,
-  validateEntryStatusDimensionConfig,
-  EntryStatusInUseError,
   ProviderError,
 } from '@racepilot/core';
 import type { Pool } from 'pg';
 
 export { createModuleActivationRepository } from './module-activation.js';
 
-export function createEntryConfirmationRepository(
-  db: Database,
-): EntryConfirmationRepository {
-  return {
-    getByGroup: async (ctx, eventId, groupId) => {
-      const rows = await db
-        .select({
-          eventName: events.name,
-          eventStartsOn: events.startsOn,
-          groupId: registrationGroups.id,
-          driverFirst: people.firstName,
-          driverLast: people.lastName,
-          vehicleMake: vehicles.make,
-          vehicleModel: vehicles.model,
-          className: eventClasses.name,
-          snapshot: entries.priceSnapshot,
-          paymentReference: invoices.paymentReference,
-        })
-        .from(registrationGroups)
-        .innerJoin(
-          events,
-          and(
-            eq(events.organizationId, registrationGroups.organizationId),
-            eq(events.id, registrationGroups.eventId),
-          ),
-        )
-        .innerJoin(
-          entries,
-          and(
-            eq(entries.organizationId, registrationGroups.organizationId),
-            eq(entries.eventId, registrationGroups.eventId),
-            eq(entries.registrationGroupId, registrationGroups.id),
-            sql`${entries.deletedAt} is null`,
-          ),
-        )
-        .innerJoin(
-          people,
-          and(
-            eq(people.organizationId, entries.organizationId),
-            eq(people.id, entries.driverPersonId),
-            sql`${people.deletedAt} is null`,
-          ),
-        )
-        .innerJoin(
-          vehicles,
-          and(
-            eq(vehicles.organizationId, entries.organizationId),
-            eq(vehicles.id, entries.vehicleId),
-            sql`${vehicles.deletedAt} is null`,
-          ),
-        )
-        .innerJoin(
-          eventClasses,
-          and(
-            eq(eventClasses.organizationId, entries.organizationId),
-            eq(eventClasses.eventId, entries.eventId),
-            eq(eventClasses.id, entries.classId),
-          ),
-        )
-        .leftJoin(
-          invoices,
-          and(
-            eq(invoices.organizationId, registrationGroups.organizationId),
-            eq(invoices.eventId, registrationGroups.eventId),
-            eq(invoices.registrationGroupId, registrationGroups.id),
-          ),
-        )
-        .where(
-          and(
-            eq(registrationGroups.organizationId, ctx.organizationId),
-            eq(registrationGroups.eventId, eventId),
-            eq(registrationGroups.id, groupId),
-          ),
-        );
-      if (!rows.length || !rows[0]!.snapshot) return null;
-      const snapshot = rows[0]!.snapshot;
-      if (
-        rows.some(
-          (row) =>
-            !row.snapshot ||
-            row.snapshot.version !== snapshot.version ||
-            row.snapshot.calculatedAt !== snapshot.calculatedAt ||
-            row.snapshot.currency !== snapshot.currency ||
-            row.snapshot.totalCents !== snapshot.totalCents,
-        )
-      )
-        throw new Error('Registration group price snapshot mismatch');
-      const reference = rows[0]!.paymentReference ?? '';
-      return {
-        eventId,
-        eventName: rows[0]!.eventName,
-        eventStartsOn: String(rows[0]!.eventStartsOn),
-        registrationGroupId: rows[0]!.groupId,
-        driverName: `${rows[0]!.driverFirst} ${rows[0]!.driverLast}`,
-        vehicles: [
-          ...new Set(
-            rows.map((row) => `${row.vehicleMake} ${row.vehicleModel}`),
-          ),
-        ],
-        classes: [...new Set(rows.map((row) => row.className))],
-        priceSnapshot: snapshot,
-        paymentReference: reference,
-      };
-    },
-  };
-}
 export { artifactJobs, createArtifactJobRepository } from './artifact-jobs.js';
 
 import { uuidPattern } from './database.js';
@@ -260,515 +128,13 @@ export async function withOrganizationTransaction<T>(
     return fn(tx as unknown as Database);
   });
 }
-export async function ensureCommunityOrganization(
-  db: Database,
-  config: { slug: string; name: string; timezone: string; locale: string },
-): Promise<Organization> {
-  return db.transaction(async (tx) => {
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtext('racepilot.community.bootstrap'))`,
-    );
-    const rows = await tx.select().from(organizations);
-    if (rows.length > 1)
-      throw new Error('Community deployment requires exactly one organization');
-    if (rows.length === 1) {
-      if (rows[0]!.slug !== config.slug)
-        throw new Error(
-          'Community organization slug does not match configuration',
-        );
-      return mapOrg(rows[0]!);
-    }
-    const [row] = await tx
-      .insert(organizations)
-      .values({ ...config })
-      .returning();
-    return mapOrg(row!);
-  });
-}
-function mapOrg(r: typeof organizations.$inferSelect): Organization {
-  return {
-    id: organizationId(r.id),
-    slug: r.slug,
-    name: r.name,
-    status: r.status as 'active' | 'disabled',
-    contactEmail: r.contactEmail,
-    websiteUrl: r.websiteUrl,
-    timezone: r.timezone,
-    locale: r.locale,
-    currency: r.currency,
-  };
-}
-export const emailTemplateVersions = pgTable(
-  'email_template_version',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id').notNull(),
-    templateKey: text('template_key').notNull(),
-    version: integer('version').notNull(),
-    locale: text('locale').notNull(),
-    subject: text('subject').notNull(),
-    textBody: text('text_body').notNull(),
-    htmlBody: text('html_body').notNull(),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    unique('email_template_version_org_id_unique').on(t.organizationId, t.id),
-    unique('email_template_version_org_full_unique').on(
-      t.organizationId,
-      t.id,
-      t.templateKey,
-      t.version,
-      t.locale,
-    ),
-    unique('email_template_version_org_key_version_locale_unique').on(
-      t.organizationId,
-      t.templateKey,
-      t.version,
-      t.locale,
-    ),
-    foreignKey({
-      columns: [t.organizationId],
-      foreignColumns: [organizations.id],
-      name: 'email_template_version_org_fk',
-    }).onDelete('cascade'),
-    check(
-      'email_template_version_key_check',
-      sql`${t.templateKey} in ('verification','registration-resume','entry-received','accepted','rejected','status-change')`,
-    ),
-    check('email_template_version_version_check', sql`${t.version} > 0`),
-    check(
-      'email_template_version_locale_check',
-      sql`${t.locale} in ('de','en')`,
-    ),
-  ],
-);
-export const emailOutbox = pgTable(
-  'email_outbox',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id').notNull(),
-    eventId: uuid('event_id'),
-    registrationGroupId: uuid('registration_group_id'),
-    templateKey: text('template_key').notNull(),
-    templateVersion: integer('template_version').notNull(),
-    templateVersionId: uuid('template_version_id'),
-    locale: text('locale').notNull(),
-    recipient: text('recipient').notNull(),
-    idempotencyKey: text('idempotency_key').notNull(),
-    variables: jsonb('variables')
-      .$type<Record<string, string>>()
-      .notNull()
-      .default({}),
-    status: text('status').notNull().default('pending'),
-    attempts: integer('attempts').notNull().default(0),
-    availableAt: timestamp('available_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-    claimedAt: timestamp('claimed_at', { withTimezone: true }),
-    sentAt: timestamp('sent_at', { withTimezone: true }),
-    lastError: text('last_error'),
-    createdAt: timestamp('created_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    unique('email_outbox_org_id_unique').on(t.organizationId, t.id),
-    unique('email_outbox_org_idempotency_unique').on(
-      t.organizationId,
-      t.idempotencyKey,
-    ),
-    foreignKey({
-      columns: [t.organizationId],
-      foreignColumns: [organizations.id],
-      name: 'email_outbox_org_fk',
-    }).onDelete('cascade'),
-    foreignKey({
-      columns: [t.organizationId, t.eventId],
-      foreignColumns: [events.organizationId, events.id],
-      name: 'email_outbox_org_event_fk',
-    }),
-    foreignKey({
-      columns: [t.organizationId, t.eventId, t.registrationGroupId],
-      foreignColumns: [
-        registrationGroups.organizationId,
-        registrationGroups.eventId,
-        registrationGroups.id,
-      ],
-      name: 'email_outbox_org_event_group_fk',
-    }),
-    foreignKey({
-      columns: [
-        t.organizationId,
-        t.templateVersionId,
-        t.templateKey,
-        t.templateVersion,
-        t.locale,
-      ],
-      foreignColumns: [
-        emailTemplateVersions.organizationId,
-        emailTemplateVersions.id,
-        emailTemplateVersions.templateKey,
-        emailTemplateVersions.version,
-        emailTemplateVersions.locale,
-      ],
-      name: 'email_outbox_org_template_fk',
-    }),
-    check('email_outbox_version_check', sql`${t.templateVersion} > 0`),
-    check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
-    check(
-      'email_outbox_template_key_check',
-      sql`${t.templateKey} in ('verification','registration-resume','entry-received','accepted','rejected','status-change')`,
-    ),
-    check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
-    check(
-      'email_outbox_status_check',
-      sql`${t.status} in ('pending','sending','sent','failed')`,
-    ),
-    index('email_outbox_due_idx')
-      .on(t.availableAt)
-      .where(sql`${t.status} in ('pending','sending')`),
-    index('email_outbox_registration_group_idx')
-      .on(t.organizationId, t.eventId, t.registrationGroupId)
-      .where(sql`${t.registrationGroupId} is not null`),
-  ],
-);
-export const emailDeliveries = pgTable(
-  'email_delivery',
-  {
-    id: uuid('id').defaultRandom().primaryKey(),
-    organizationId: uuid('organization_id').notNull(),
-    outboxId: uuid('outbox_id').notNull(),
-    attempt: integer('attempt').notNull(),
-    outcome: text('outcome').notNull(),
-    error: text('error'),
-    occurredAt: timestamp('occurred_at', { withTimezone: true })
-      .notNull()
-      .defaultNow(),
-  },
-  (t) => [
-    foreignKey({
-      columns: [t.organizationId, t.outboxId],
-      foreignColumns: [emailOutbox.organizationId, emailOutbox.id],
-      name: 'email_delivery_org_outbox_fk',
-    }).onDelete('cascade'),
-    unique('email_delivery_org_attempt_unique').on(
-      t.organizationId,
-      t.outboxId,
-      t.attempt,
-    ),
-    check(
-      'email_delivery_outcome_check',
-      sql`${t.outcome} in ('sent','retry','failed')`,
-    ),
-  ],
-);
 
-export function createOrganizationRepository(
-  db: Database,
-): OrganizationRepository {
-  return {
-    getById: async (ctx) => {
-      const [r] = await db
-        .select()
-        .from(organizations)
-        .where(eq(organizations.id, ctx.organizationId));
-      return r ? mapOrg(r) : null;
-    },
-    update: async (ctx, patch: OrganizationPatch) => {
-      const [r] = await db
-        .update(organizations)
-        .set({
-          ...('contactEmail' in patch
-            ? { contactEmail: patch.contactEmail }
-            : {}),
-          ...('websiteUrl' in patch ? { websiteUrl: patch.websiteUrl } : {}),
-          ...('name' in patch ? { name: patch.name } : {}),
-          ...('timezone' in patch ? { timezone: patch.timezone } : {}),
-          ...('locale' in patch ? { locale: patch.locale } : {}),
-          ...('currency' in patch ? { currency: patch.currency } : {}),
-          updatedAt: new Date(),
-        })
-        .where(eq(organizations.id, ctx.organizationId))
-        .returning();
-      return r ? mapOrg(r) : null;
-    },
-  };
-}
-export function createEventRepository(db: Database): EventRepository {
-  const mapEvent = (row: typeof events.$inferSelect): Event => ({
-    id: row.id,
-    organizationId: organizationId(row.organizationId),
-    slug: row.slug,
-    name: row.name,
-    startsOn: row.startsOn,
-    endsOn: row.endsOn,
-    status: row.status as EventStatus,
-    registrationOpensAt: row.registrationOpensAt?.toISOString() ?? null,
-    registrationClosesAt: row.registrationClosesAt?.toISOString() ?? null,
-    openedAt: row.openedAt?.toISOString() ?? null,
-    closedAt: row.closedAt?.toISOString() ?? null,
-    archivedAt: row.archivedAt?.toISOString() ?? null,
-  });
-  return {
-    listByOrganization: async (ctx) =>
-      (
-        await db
-          .select()
-          .from(events)
-          .where(eq(events.organizationId, ctx.organizationId))
-      ).map(mapEvent),
-    getById: async (ctx, eventId) => {
-      const [row] = await db
-        .select()
-        .from(events)
-        .where(
-          and(
-            eq(events.id, eventId),
-            eq(events.organizationId, ctx.organizationId),
-          ),
-        );
-      return row ? mapEvent(row) : null;
-    },
-    getPublicBySlug: async (ctx, slug, now) => {
-      const [row] = await db
-        .select()
-        .from(events)
-        .where(
-          and(
-            eq(events.organizationId, ctx.organizationId),
-            eq(events.slug, slug),
-            eq(events.status, 'open'),
-            sql`(${events.registrationOpensAt} is null or ${events.registrationOpensAt} <= ${now})`,
-            sql`(${events.registrationClosesAt} is null or ${events.registrationClosesAt} >= ${now})`,
-          ),
-        );
-      if (!row) return null;
-      const event = mapEvent(row);
-      const [classes] = await Promise.all([
-        createEventClassRepository(db).listByEvent(ctx, event.id),
-      ]);
-      return { ...event, classes };
-    },
-    create: async (ctx, input: EventInput) => {
-      const [row] = await db
-        .insert(events)
-        .values({
-          organizationId: ctx.organizationId,
-          ...input,
-          registrationOpensAt: input.registrationOpensAt
-            ? new Date(input.registrationOpensAt)
-            : null,
-          registrationClosesAt: input.registrationClosesAt
-            ? new Date(input.registrationClosesAt)
-            : null,
-        })
-        .returning();
-      return mapEvent(row!);
-    },
-    update: async (ctx, eventId, patch: EventPatch) => {
-      const [row] = await db
-        .update(events)
-        .set({
-          ...(patch.slug !== undefined ? { slug: patch.slug } : {}),
-          ...(patch.name !== undefined ? { name: patch.name } : {}),
-          ...(patch.startsOn !== undefined ? { startsOn: patch.startsOn } : {}),
-          ...(patch.endsOn !== undefined ? { endsOn: patch.endsOn } : {}),
-          ...('registrationOpensAt' in patch
-            ? {
-                registrationOpensAt: patch.registrationOpensAt
-                  ? new Date(patch.registrationOpensAt)
-                  : null,
-              }
-            : {}),
-          ...('registrationClosesAt' in patch
-            ? {
-                registrationClosesAt: patch.registrationClosesAt
-                  ? new Date(patch.registrationClosesAt)
-                  : null,
-              }
-            : {}),
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(events.organizationId, ctx.organizationId),
-            eq(events.id, eventId),
-          ),
-        )
-        .returning();
-      return row ? mapEvent(row) : null;
-    },
-    transition: async (ctx, eventId, from, status, now) => {
-      const timeField =
-        status === 'open'
-          ? { openedAt: now, closedAt: null }
-          : status === 'closed'
-            ? { closedAt: now }
-            : { archivedAt: now };
-      const [row] = await db
-        .update(events)
-        .set({ status, ...timeField, updatedAt: now })
-        .where(
-          and(
-            eq(events.organizationId, ctx.organizationId),
-            eq(events.id, eventId),
-            eq(events.status, from),
-          ),
-        )
-        .returning();
-      return row ? mapEvent(row) : null;
-    },
-  };
-}
-function mapEventClass(row: typeof eventClasses.$inferSelect): EventClass {
-  return {
-    ...row,
-    organizationId: organizationId(row.organizationId),
-    vehicleType: row.vehicleType as EventClass['vehicleType'],
-  };
-}
-export function createEventClassRepository(db: Database): EventClassRepository {
-  return {
-    listByEvent: async (ctx, eventId) =>
-      (
-        await db
-          .select()
-          .from(eventClasses)
-          .where(
-            and(
-              eq(eventClasses.organizationId, ctx.organizationId),
-              eq(eventClasses.eventId, eventId),
-            ),
-          )
-          .orderBy(eventClasses.sortOrder, eventClasses.name)
-      ).map(mapEventClass),
-    create: async (ctx, eventId, input: EventClassInput) => {
-      const [row] = await db
-        .insert(eventClasses)
-        .values({ ...input, organizationId: ctx.organizationId, eventId })
-        .returning();
-      return mapEventClass(row!);
-    },
-    update: async (ctx, eventId, classId, patch: Partial<EventClassInput>) => {
-      const [row] = await db
-        .update(eventClasses)
-        .set({ ...patch, updatedAt: new Date() })
-        .where(
-          and(
-            eq(eventClasses.organizationId, ctx.organizationId),
-            eq(eventClasses.eventId, eventId),
-            eq(eventClasses.id, classId),
-          ),
-        )
-        .returning();
-      return row ? mapEventClass(row) : null;
-    },
-  };
-}
-export function createMembershipRepository(db: Database): MembershipRepository {
-  return {
-    resolvePermissions: async (
-      identity: ExternalIdentity,
-      orgId,
-      bootstrap?: MembershipBootstrap,
-    ) =>
-      db.transaction(async (tx) => {
-        const isBootstrapCandidate =
-          bootstrap?.issuer === identity.issuer &&
-          (bootstrap.subject === identity.subject ||
-            (bootstrap.email?.toLowerCase() === identity.email?.toLowerCase() &&
-              identity.emailVerified === true));
-        if (isBootstrapCandidate) {
-          // Serialize first-admin attempts per organization. Disabled memberships
-          // still count as history and must permanently close bootstrap.
-          await tx.execute(
-            sql`select pg_advisory_xact_lock(hashtextextended(${`racepilot.membership.bootstrap:${orgId}`}, 0))`,
-          );
-        }
-        const [stored] = await tx
-          .insert(userIdentities)
-          .values({
-            issuer: identity.issuer,
-            subject: identity.subject,
-            email: identity.email ?? null,
-            emailVerified: identity.emailVerified ?? false,
-            displayName: identity.displayName ?? null,
-          })
-          .onConflictDoUpdate({
-            target: [userIdentities.issuer, userIdentities.subject],
-            set: {
-              email: identity.email ?? null,
-              emailVerified: identity.emailVerified ?? false,
-              displayName: identity.displayName ?? null,
-              updatedAt: new Date(),
-            },
-          })
-          .returning();
-        if (!stored) return new Set<string>();
-        if (isBootstrapCandidate) {
-          const [existingMembership] = await tx
-            .select({ userIdentityId: organizationMemberships.userIdentityId })
-            .from(organizationMemberships)
-            .where(eq(organizationMemberships.organizationId, orgId))
-            .limit(1);
-          if (!existingMembership) {
-            await tx
-              .insert(organizationMemberships)
-              .values({
-                organizationId: orgId,
-                userIdentityId: stored.id,
-                role: 'admin',
-                status: 'active',
-              })
-              .onConflictDoNothing();
-          }
-        }
-        const [membership] = await tx
-          .select({ role: organizationMemberships.role })
-          .from(organizationMemberships)
-          .where(
-            and(
-              eq(organizationMemberships.organizationId, orgId),
-              eq(organizationMemberships.userIdentityId, stored.id),
-              eq(organizationMemberships.status, 'active'),
-            ),
-          );
-        if (!membership) return new Set<string>();
-        if (membership.role !== 'admin' && membership.role !== 'member')
-          return new Set<string>();
-        return permissionsForRole(membership.role);
-      }),
-  };
-}
 export async function createDatabase(databaseUrl: string) {
   const { Pool } = await import('pg');
   const pool = new Pool({ connectionString: databaseUrl });
   return { db: drizzle(pool), pool: pool as Pool };
 }
 
-function mapPerson(
-  row: typeof people.$inferSelect,
-): import('@racepilot/core').Person {
-  return {
-    ...row,
-    organizationId: organizationId(row.organizationId),
-    dateOfBirth: row.dateOfBirth ?? null,
-    createdAt: row.createdAt.toISOString(),
-    deletedAt: row.deletedAt?.toISOString() ?? null,
-  };
-}
-function mapVehicle(
-  row: typeof vehicles.$inferSelect,
-): import('@racepilot/core').Vehicle {
-  return {
-    ...row,
-    organizationId: organizationId(row.organizationId),
-    createdAt: row.createdAt.toISOString(),
-    deletedAt: row.deletedAt?.toISOString() ?? null,
-  };
-}
 function mapEntry(
   row: typeof entries.$inferSelect,
 ): import('@racepilot/core').Entry {
@@ -1342,1284 +708,10 @@ async function attachAdminEntryDetails(
   });
 }
 
-export function createPersonRepository(
-  db: Database,
-): import('@racepilot/core').PersonRepository {
-  return {
-    create: async (ctx, input) => {
-      const firstName = input.firstName.trim();
-      const lastName = input.lastName.trim();
-      if (!firstName || !lastName) throw new Error('Person name is required');
-      const normalized =
-        input.email == null ? null : normalizeEmail(input.email);
-      const [row] = await db
-        .insert(people)
-        .values({
-          organizationId: ctx.organizationId,
-          firstName,
-          lastName,
-          email: input.email?.trim() ?? null,
-          emailNormalized: normalized,
-          dateOfBirth: input.dateOfBirth,
-          country: input.country ?? null,
-        })
-        .returning();
-      return mapPerson(row!);
-    },
-    getById: async (ctx, id) => {
-      const [row] = await db
-        .select()
-        .from(people)
-        .where(
-          and(
-            eq(people.organizationId, ctx.organizationId),
-            eq(people.id, id),
-            sql`${people.deletedAt} is null`,
-          ),
-        );
-      return row ? mapPerson(row) : null;
-    },
-    softDelete: async (ctx, id, reason) => {
-      if (!reason.trim()) throw new Error('Deletion reason is required');
-      const [row] = await db
-        .update(people)
-        .set({ deletedAt: new Date(), deletionReason: reason.trim() })
-        .where(
-          and(
-            eq(people.organizationId, ctx.organizationId),
-            eq(people.id, id),
-            sql`${people.deletedAt} is null`,
-          ),
-        )
-        .returning();
-      return row ? mapPerson(row) : null;
-    },
-    findDuplicate: async (ctx, email, firstName, lastName, dateOfBirth) => {
-      const normalizedEmail = email == null ? null : normalizeEmail(email);
-      const [emailRow] = normalizedEmail
-        ? await db
-            .select()
-            .from(people)
-            .where(
-              and(
-                eq(people.organizationId, ctx.organizationId),
-                eq(people.emailNormalized, normalizedEmail),
-                sql`${people.deletedAt} is null`,
-              ),
-            )
-            .limit(1)
-        : [];
-      const [nameRow] = dateOfBirth
-        ? await db
-            .select()
-            .from(people)
-            .where(
-              and(
-                eq(people.organizationId, ctx.organizationId),
-                sql`lower(${people.firstName}) = lower(${firstName.trim()})`,
-                sql`lower(${people.lastName}) = lower(${lastName.trim()})`,
-                eq(people.dateOfBirth, dateOfBirth),
-                sql`${people.deletedAt} is null`,
-              ),
-            )
-            .limit(1)
-        : [];
-      return {
-        person: emailRow ? mapPerson(emailRow) : null,
-        nameAndBirthdateMatch: Boolean(nameRow),
-      };
-    },
-  };
-}
-export function createVehicleRepository(
-  db: Database,
-): import('@racepilot/core').VehicleRepository {
-  return {
-    create: async (ctx, input) => {
-      const [row] = await db
-        .insert(vehicles)
-        .values({
-          organizationId: ctx.organizationId,
-          make: input.make.trim(),
-          model: input.model.trim(),
-          year: input.year ?? null,
-          registration: input.registration?.trim() ?? null,
-        })
-        .returning();
-      return mapVehicle(row!);
-    },
-    getById: async (ctx, id) => {
-      const [row] = await db
-        .select()
-        .from(vehicles)
-        .where(
-          and(
-            eq(vehicles.organizationId, ctx.organizationId),
-            eq(vehicles.id, id),
-            sql`${vehicles.deletedAt} is null`,
-          ),
-        );
-      return row ? mapVehicle(row) : null;
-    },
-    softDelete: async (ctx, id, reason) => {
-      if (!reason.trim()) throw new Error('Deletion reason is required');
-      const [row] = await db
-        .update(vehicles)
-        .set({ deletedAt: new Date(), deletionReason: reason.trim() })
-        .where(
-          and(
-            eq(vehicles.organizationId, ctx.organizationId),
-            eq(vehicles.id, id),
-            sql`${vehicles.deletedAt} is null`,
-          ),
-        )
-        .returning();
-      return row ? mapVehicle(row) : null;
-    },
-  };
-}
-export function createEntryExportRepository(
-  db: Database,
-): import('@racepilot/core').EntryExportRepository {
-  return {
-    listByEvent: async (ctx, eventId) => {
-      const rows = await db
-        .select({
-          driverFirst: people.firstName,
-          driverLast: people.lastName,
-          make: vehicles.make,
-          model: vehicles.model,
-          className: eventClasses.name,
-          startNumber: entries.requestedStartNumber,
-          status: entries.acceptanceStatus,
-          priceSnapshot: entries.priceSnapshot,
-        })
-        .from(entries)
-        .innerJoin(
-          people,
-          and(
-            eq(people.organizationId, entries.organizationId),
-            eq(people.id, entries.driverPersonId),
-          ),
-        )
-        .innerJoin(
-          vehicles,
-          and(
-            eq(vehicles.organizationId, entries.organizationId),
-            eq(vehicles.id, entries.vehicleId),
-          ),
-        )
-        .innerJoin(
-          eventClasses,
-          and(
-            eq(eventClasses.organizationId, entries.organizationId),
-            eq(eventClasses.eventId, entries.eventId),
-            eq(eventClasses.id, entries.classId),
-          ),
-        )
-        .where(
-          and(
-            eq(entries.organizationId, ctx.organizationId),
-            eq(entries.eventId, eventId),
-            sql`${entries.deletedAt} is null`,
-          ),
-        );
-      return rows.map((row) => ({
-        driver: `${row.driverFirst} ${row.driverLast}`,
-        vehicle: `${row.make} ${row.model}`,
-        class: row.className,
-        startNumber: row.startNumber,
-        status: row.status as import('@racepilot/core').EntryAcceptanceStatus,
-        priceCents: row.priceSnapshot?.totalCents ?? null,
-      }));
-    },
-  };
-}
-
-export function createEntryRepository(
-  db: Database,
-): import('@racepilot/core').EntryRepository {
-  return {
-    create: async (ctx, input, executor) => {
-      const executorDb = (executor as Database | undefined) ?? db;
-      const [row] = await executorDb
-        .insert(entries)
-        .values({
-          organizationId: ctx.organizationId,
-          eventId: input.eventId,
-          classId: input.classId,
-          registrationGroupId: input.registrationGroupId,
-          driverPersonId: input.driverPersonId,
-          vehicleId: input.vehicleId,
-          acceptanceStatus: 'pending',
-          requestedStartNumber: normalizeRequestedStartNumber(
-            input.requestedStartNumber,
-          ),
-          priceSnapshotVersion: input.priceSnapshotVersion,
-          formSnapshotVersion: input.formSnapshotVersion,
-          priceSnapshot: input.priceSnapshot ?? null,
-        })
-        .returning();
-      return mapEntry(row!);
-    },
-    getById: async (ctx, id) => {
-      const [row] = await db
-        .select()
-        .from(entries)
-        .where(
-          and(
-            eq(entries.organizationId, ctx.organizationId),
-            eq(entries.id, id),
-            sql`${entries.deletedAt} is null`,
-          ),
-        );
-      return row
-        ? (
-            await attachAdminEntryDetails(
-              db,
-              ctx,
-              await projectEntryRows(db, ctx, [row]),
-            )
-          )[0]!
-        : null;
-    },
-    listAdmin: async (ctx, query) => {
-      const predicates = [
-        eq(entries.organizationId, ctx.organizationId),
-        sql`${entries.deletedAt} is null`,
-      ];
-      if (query.eventId) predicates.push(eq(entries.eventId, query.eventId));
-      if (query.classId) predicates.push(eq(entries.classId, query.classId));
-      if (query.acceptanceStatus)
-        predicates.push(eq(entries.acceptanceStatus, query.acceptanceStatus));
-      if (query.verificationStatus)
-        predicates.push(
-          eq(entries.verificationStatus, query.verificationStatus),
-        );
-      if (query.paymentStatus === 'not_required')
-        predicates.push(
-          sql`not exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId})`,
-        );
-      else if (query.paymentStatus === 'not_relevant')
-        predicates.push(
-          sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = 'cancelled')`,
-        );
-      else if (query.paymentStatus)
-        predicates.push(
-          sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = ${query.paymentStatus})`,
-        );
-      const search = query.search?.trim();
-      if (search) {
-        const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
-        predicates.push(
-          or(
-            ilike(entries.requestedStartNumber, pattern),
-            sql`${entries.id}::text ilike ${pattern}`,
-            ilike(people.firstName, pattern),
-            ilike(people.lastName, pattern),
-            ilike(vehicles.make, pattern),
-            ilike(vehicles.model, pattern),
-            ilike(vehicles.registration, pattern),
-            ilike(eventClasses.name, pattern),
-          )!,
-        );
-      }
-      const where = and(...predicates);
-      const sortColumns = {
-        createdAt: entries.createdAt,
-        requestedStartNumber: entries.requestedStartNumber,
-        acceptanceStatus: entries.acceptanceStatus,
-        verificationStatus: entries.verificationStatus,
-      } as const;
-      const sortColumn = sortColumns[query.sort];
-      const [rows, totals] = await Promise.all([
-        db
-          .select({ entry: entries })
-          .from(entries)
-          .innerJoin(
-            people,
-            and(
-              eq(people.id, entries.driverPersonId),
-              eq(people.organizationId, entries.organizationId),
-            ),
-          )
-          .innerJoin(
-            vehicles,
-            and(
-              eq(vehicles.id, entries.vehicleId),
-              eq(vehicles.organizationId, entries.organizationId),
-            ),
-          )
-          .innerJoin(
-            eventClasses,
-            and(
-              eq(eventClasses.id, entries.classId),
-              eq(eventClasses.eventId, entries.eventId),
-              eq(eventClasses.organizationId, entries.organizationId),
-            ),
-          )
-          .where(where)
-          .orderBy(
-            query.direction === 'asc' ? asc(sortColumn) : desc(sortColumn),
-            asc(entries.id),
-          )
-          .limit(query.pageSize)
-          .offset((query.page - 1) * query.pageSize),
-        db
-          .select({ total: count() })
-          .from(entries)
-          .innerJoin(
-            people,
-            and(
-              eq(people.id, entries.driverPersonId),
-              eq(people.organizationId, entries.organizationId),
-            ),
-          )
-          .innerJoin(
-            vehicles,
-            and(
-              eq(vehicles.id, entries.vehicleId),
-              eq(vehicles.organizationId, entries.organizationId),
-            ),
-          )
-          .innerJoin(
-            eventClasses,
-            and(
-              eq(eventClasses.id, entries.classId),
-              eq(eventClasses.eventId, entries.eventId),
-              eq(eventClasses.organizationId, entries.organizationId),
-            ),
-          )
-          .where(where),
-      ]);
-      return {
-        items: await attachAdminEntryDetails(
-          db,
-          ctx,
-          await projectEntryRows(
-            db,
-            ctx,
-            rows.map((row) => row.entry),
-          ),
-        ),
-        total: totals[0]?.total ?? 0,
-      };
-    },
-    transition: async (
-      ctx,
-      id,
-      transition,
-      fromStatus,
-      toStatus,
-      actor,
-      reason,
-      workflow,
-    ) =>
-      db.transaction(async (tx) => {
-        const statusColumn =
-          transition === 'verification'
-            ? entries.verificationStatus
-            : entries.acceptanceStatus;
-        const [row] = await tx
-          .update(entries)
-          .set({
-            [transition === 'verification'
-              ? 'verificationStatus'
-              : 'acceptanceStatus']: toStatus,
-          })
-          .where(
-            and(
-              eq(entries.organizationId, ctx.organizationId),
-              eq(entries.id, id),
-              eq(statusColumn, fromStatus),
-              sql`${entries.deletedAt} is null`,
-            ),
-          )
-          .returning();
-        if (!row) return null;
-        await tx.insert(entryAuditEvents).values({
-          organizationId: ctx.organizationId,
-          entryId: id,
-          transition,
-          fromStatus,
-          toStatus,
-          actor,
-          reason,
-          workflowRevisionId:
-            workflow?.workflowRevisionId ?? row.workflowRevisionId!,
-          ...(workflow ? { statusCategory: workflow.statusCategory } : {}),
-        });
-        if (transition === 'acceptance' && workflow?.notification) {
-          const [recipient] = await tx
-            .select({
-              email: sql<
-                string | null
-              >`coalesce(${registrationGroups.contactEmail}, ${people.email})`,
-              recipientName: sql<string>`concat_ws(' ', ${people.firstName}, ${people.lastName})`,
-              eventName: events.name,
-              locale: organizations.locale,
-            })
-            .from(entries)
-            .innerJoin(
-              events,
-              and(
-                eq(events.id, entries.eventId),
-                eq(events.organizationId, entries.organizationId),
-              ),
-            )
-            .innerJoin(
-              organizations,
-              eq(organizations.id, entries.organizationId),
-            )
-            .innerJoin(
-              people,
-              and(
-                eq(people.id, entries.driverPersonId),
-                eq(people.organizationId, entries.organizationId),
-              ),
-            )
-            .innerJoin(
-              registrationGroups,
-              and(
-                eq(registrationGroups.id, entries.registrationGroupId),
-                eq(registrationGroups.organizationId, entries.organizationId),
-              ),
-            )
-            .where(
-              and(
-                eq(entries.organizationId, ctx.organizationId),
-                eq(entries.id, id),
-              ),
-            )
-            .limit(1);
-          if (recipient?.email) {
-            await enqueueMailOutbox(
-              db,
-              ctx.organizationId,
-              {
-                eventId: row.eventId,
-                registrationGroupId: row.registrationGroupId,
-                templateKey: 'status-change',
-                templateVersion: 1,
-                locale: recipient.locale === 'en' ? 'en' : 'de',
-                recipient: recipient.email,
-                idempotencyKey: `entry-status:${id}:${workflow.workflowRevisionId}:${fromStatus}:${toStatus}`,
-                correlationId: ctx.correlationId,
-                variables: {
-                  recipientName: recipient.recipientName,
-                  eventName: recipient.eventName,
-                  statusKey: workflow.notification.statusKey,
-                  statusLabelDe: workflow.notification.statusLabelDe,
-                  statusLabelEn: workflow.notification.statusLabelEn,
-                },
-              },
-              tx,
-            );
-          }
-        }
-        // Return the same read model as entry detail, including the audit just written.
-        const projected = await projectEntryRows(tx, ctx, [row]);
-        return (await attachAdminEntryDetails(tx, ctx, projected))[0] ?? null;
-      }),
-    softDelete: async (ctx, id, reason) => {
-      const [row] = await db
-        .update(entries)
-        .set({ deletedAt: new Date(), deletionReason: reason })
-        .where(
-          and(
-            eq(entries.organizationId, ctx.organizationId),
-            eq(entries.id, id),
-            sql`${entries.deletedAt} is null`,
-          ),
-        )
-        .returning();
-      return row ? mapEntry(row) : null;
-    },
-  };
-}
-
-export function createInvoicePaymentRepository(
-  db: Database,
-): InvoicePaymentRepository {
-  return {
-    record: async (ctx, invoiceId, amountCents, actor, reason) =>
-      db.transaction(async (tx) => {
-        const [invoice] = await tx
-          .select()
-          .from(invoices)
-          .where(
-            and(
-              eq(invoices.organizationId, ctx.organizationId),
-              eq(invoices.id, invoiceId),
-            ),
-          )
-          .for('update');
-        if (!invoice || invoice.status === 'cancelled') return null;
-        const [payment] = await tx
-          .insert(invoicePayments)
-          .values({
-            organizationId: ctx.organizationId,
-            invoiceId,
-            amountCents,
-            actor,
-            reason,
-          })
-          .returning();
-        await tx.insert(invoicePaymentAuditEvents).values({
-          organizationId: ctx.organizationId,
-          paymentId: payment!.id,
-          action: 'recorded',
-          actor,
-          reason,
-        });
-        const sums = await tx
-          .select({
-            total: sql<number>`coalesce(sum(${invoicePayments.amountCents}),0)`,
-          })
-          .from(invoicePayments)
-          .where(
-            and(
-              eq(invoicePayments.organizationId, ctx.organizationId),
-              eq(invoicePayments.invoiceId, invoiceId),
-            ),
-          );
-        const status = deriveInvoiceStatus(
-          invoice.totalCents,
-          Number(sums[0]?.total ?? 0),
-        );
-        await tx
-          .update(invoices)
-          .set({ status })
-          .where(
-            and(
-              eq(invoices.organizationId, ctx.organizationId),
-              eq(invoices.id, invoiceId),
-            ),
-          );
-        return payment;
-      }),
-    correct: async (ctx, paymentId, actor, reason) =>
-      db.transaction(async (tx) => {
-        const [original] = await tx
-          .select()
-          .from(invoicePayments)
-          .where(
-            and(
-              eq(invoicePayments.organizationId, ctx.organizationId),
-              eq(invoicePayments.id, paymentId),
-            ),
-          )
-          .for('update');
-        if (!original || original.reversesPaymentId !== null) return null;
-        const [alreadyReversed] = await tx
-          .select({ id: invoicePayments.id })
-          .from(invoicePayments)
-          .where(
-            and(
-              eq(invoicePayments.organizationId, ctx.organizationId),
-              eq(invoicePayments.reversesPaymentId, paymentId),
-            ),
-          )
-          .limit(1);
-        if (alreadyReversed) return null;
-        const [reversal] = await tx
-          .insert(invoicePayments)
-          .values({
-            organizationId: ctx.organizationId,
-            invoiceId: original.invoiceId,
-            amountCents: -original.amountCents,
-            reversesPaymentId: original.id,
-            actor,
-            reason,
-          })
-          .returning();
-        await tx.insert(invoicePaymentAuditEvents).values({
-          organizationId: ctx.organizationId,
-          paymentId: reversal!.id,
-          action: 'reversal',
-          actor,
-          reason,
-        });
-        const [invoice] = await tx
-          .select()
-          .from(invoices)
-          .where(
-            and(
-              eq(invoices.organizationId, ctx.organizationId),
-              eq(invoices.id, original.invoiceId),
-            ),
-          );
-        const sums = await tx
-          .select({
-            total: sql<number>`coalesce(sum(${invoicePayments.amountCents}),0)`,
-          })
-          .from(invoicePayments)
-          .where(
-            and(
-              eq(invoicePayments.organizationId, ctx.organizationId),
-              eq(invoicePayments.invoiceId, original.invoiceId),
-            ),
-          );
-        if (invoice)
-          await tx
-            .update(invoices)
-            .set({
-              status: deriveInvoiceStatus(
-                invoice.totalCents,
-                Number(sums[0]?.total ?? 0),
-              ),
-            })
-            .where(
-              and(
-                eq(invoices.organizationId, ctx.organizationId),
-                eq(invoices.id, original.invoiceId),
-              ),
-            );
-        return reversal;
-      }),
-  };
-}
-
-export function createPaymentRecipientRepository(
-  db: Database,
-): PaymentRecipientRepository {
-  return {
-    get: async (ctx) => {
-      const [row] = await db
-        .select()
-        .from(organizationPaymentRecipients)
-        .where(
-          eq(organizationPaymentRecipients.organizationId, ctx.organizationId),
-        );
-      return row
-        ? { accountName: row.accountName, iban: row.iban, bic: row.bic }
-        : null;
-    },
-    set: async (ctx, recipient: PaymentRecipient) => {
-      const [row] = await db
-        .insert(organizationPaymentRecipients)
-        .values({
-          organizationId: ctx.organizationId,
-          accountName: recipient.accountName,
-          iban: recipient.iban,
-          bic: recipient.bic ?? null,
-        })
-        .onConflictDoUpdate({
-          target: organizationPaymentRecipients.organizationId,
-          set: {
-            accountName: recipient.accountName,
-            iban: recipient.iban,
-            bic: recipient.bic ?? null,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      return { accountName: row!.accountName, iban: row!.iban, bic: row!.bic };
-    },
-  };
-}
-
-export function createEventClassPricingRepository(
-  db: Database,
-): EventClassPricingRepository {
-  return {
-    listByEvent: async (ctx, eventId) =>
-      (
-        await db
-          .select()
-          .from(eventClassPricingRules)
-          .where(
-            and(
-              eq(eventClassPricingRules.organizationId, ctx.organizationId),
-              eq(eventClassPricingRules.eventId, eventId),
-            ),
-          )
-      ).map((r) => ({
-        classId: r.classId,
-        baseCents: r.baseCents,
-        additionalEntryAdjustmentCents: r.additionalEntryAdjustmentCents,
-        earlyBirdDeadline: r.earlyBirdDeadline?.toISOString() ?? null,
-        earlyBirdDiscountCents: r.earlyBirdDiscountCents,
-      })),
-    upsert: async (ctx, eventId, rule) => {
-      const [r] = await db
-        .insert(eventClassPricingRules)
-        .values({
-          organizationId: ctx.organizationId,
-          eventId,
-          classId: rule.classId,
-          baseCents: rule.baseCents,
-          additionalEntryAdjustmentCents: rule.additionalEntryAdjustmentCents,
-          earlyBirdDeadline: rule.earlyBirdDeadline
-            ? new Date(rule.earlyBirdDeadline)
-            : null,
-          earlyBirdDiscountCents: rule.earlyBirdDiscountCents,
-        })
-        .onConflictDoUpdate({
-          target: [
-            eventClassPricingRules.organizationId,
-            eventClassPricingRules.eventId,
-            eventClassPricingRules.classId,
-          ],
-          set: {
-            baseCents: rule.baseCents,
-            additionalEntryAdjustmentCents: rule.additionalEntryAdjustmentCents,
-            earlyBirdDeadline: rule.earlyBirdDeadline
-              ? new Date(rule.earlyBirdDeadline)
-              : null,
-            earlyBirdDiscountCents: rule.earlyBirdDiscountCents,
-            updatedAt: new Date(),
-          },
-        })
-        .returning();
-      return {
-        classId: r!.classId,
-        baseCents: r!.baseCents,
-        additionalEntryAdjustmentCents: r!.additionalEntryAdjustmentCents,
-        earlyBirdDeadline: r!.earlyBirdDeadline?.toISOString() ?? null,
-        earlyBirdDiscountCents: r!.earlyBirdDiscountCents,
-      };
-    },
-  };
-}
-export function createInvoiceRepository(db: Database): InvoiceRepository {
-  return {
-    issue: async (ctx, eventId, registrationGroupId, snapshot, executor) => {
-      const executorDb = (executor as Database | undefined) ?? db;
-      const [counter] = await executorDb
-        .insert(invoiceReferenceCounters)
-        .values({ organizationId: ctx.organizationId, nextValue: 1 })
-        .onConflictDoUpdate({
-          target: invoiceReferenceCounters.organizationId,
-          set: { nextValue: sql`${invoiceReferenceCounters.nextValue} + 1` },
-        })
-        .returning({ nextValue: invoiceReferenceCounters.nextValue });
-      const paymentReference = createPaymentReference(
-        String(counter!.nextValue).padStart(8, '0'),
-      );
-      const [row] = await executorDb
-        .insert(invoices)
-        .values({
-          organizationId: ctx.organizationId,
-          eventId,
-          registrationGroupId,
-          totalCents: snapshot.totalCents,
-          currency: snapshot.currency,
-          paymentReference,
-        })
-        .onConflictDoNothing({
-          target: [invoices.organizationId, invoices.registrationGroupId],
-        })
-        .returning();
-      const invoice =
-        row ??
-        (
-          await executorDb
-            .select()
-            .from(invoices)
-            .where(
-              and(
-                eq(invoices.organizationId, ctx.organizationId),
-                eq(invoices.registrationGroupId, registrationGroupId),
-              ),
-            )
-        )[0];
-      if (!invoice) throw new Error('Invoice creation failed');
-      if (
-        invoice.totalCents !== snapshot.totalCents ||
-        invoice.currency !== snapshot.currency
-      )
-        throw new Error('Existing invoice does not match price snapshot');
-      return {
-        ...invoice,
-        organizationId: organizationId(invoice.organizationId),
-        status: invoice.status as InvoiceRecord['status'],
-      };
-    },
-  };
-}
-
 /** Drizzle's database and transaction objects both satisfy this executor. */
-export type MailOutboxExecutor = Pick<
-  Database,
-  'execute' | 'insert' | 'select'
->;
-export interface NewMailOutboxMessage {
-  eventId?: string | null;
-  registrationGroupId?: string | null;
-  templateKey: string;
-  templateVersion: number;
-  templateVersionId?: string | null;
-  locale: 'de' | 'en';
-  recipient: string;
-  idempotencyKey: string;
-  variables: Record<string, string>;
-  correlationId?: string;
-}
+
 /** Call with the caller's Drizzle transaction to atomically enqueue with domain writes. */
-export async function enqueueMailOutbox(
-  db: Database,
-  organization: string,
-  input: NewMailOutboxMessage,
-  executor: MailOutboxExecutor = db,
-): Promise<string> {
-  const [inserted] = await executor
-    .insert(emailOutbox)
-    .values({
-      organizationId: organization,
-      eventId: input.eventId ?? null,
-      registrationGroupId: input.registrationGroupId ?? null,
-      templateKey: input.templateKey,
-      templateVersion: input.templateVersion,
-      templateVersionId: input.templateVersionId ?? null,
-      locale: input.locale,
-      recipient: input.recipient,
-      idempotencyKey: input.idempotencyKey,
-      variables: input.variables,
-    })
-    .onConflictDoNothing({
-      target: [emailOutbox.organizationId, emailOutbox.idempotencyKey],
-    })
-    .returning({ id: emailOutbox.id });
-  if (inserted) {
-    const envelope = {
-      type: 'mail.outbox',
-      schemaVersion: 1,
-      organizationId: organization,
-      correlationId: input.correlationId ?? input.idempotencyKey,
-      payload: { outboxId: inserted.id },
-    };
-    await executor.execute(
-      sql`select graphile_worker.add_job('mail_outbox', ${JSON.stringify(envelope)}::json, null, now(), 25, ${`mail-outbox:${inserted.id}`})`,
-    );
-    return inserted.id;
-  }
-  const [existing] = await executor
-    .select({ id: emailOutbox.id })
-    .from(emailOutbox)
-    .where(
-      and(
-        eq(emailOutbox.organizationId, organization),
-        eq(emailOutbox.idempotencyKey, input.idempotencyKey),
-      ),
-    )
-    .limit(1);
-  if (!existing) throw new Error('Mail outbox enqueue failed');
-  return existing.id;
-}
 
-export async function setOrganizationMailConfiguration(
-  db: Database,
-  organization: string,
-  config: { from: string; replyTo?: string },
-): Promise<void> {
-  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (
-    !email.test(config.from) ||
-    (config.replyTo && !email.test(config.replyTo))
-  )
-    throw new Error('Invalid organization mail configuration');
-  await db
-    .update(organizations)
-    .set({ mailFrom: config.from, mailReplyTo: config.replyTo ?? null })
-    .where(eq(organizations.id, organization));
-}
-
-export async function getOrganizationMailConfiguration(
-  db: Database,
-  organization: string,
-) {
-  const [row] = await db
-    .select({
-      from: organizations.mailFrom,
-      replyTo: organizations.mailReplyTo,
-    })
-    .from(organizations)
-    .where(
-      and(
-        eq(organizations.id, organization),
-        eq(organizations.status, 'active'),
-      ),
-    )
-    .limit(1);
-  const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return row?.from &&
-    email.test(row.from) &&
-    (row.replyTo === null || email.test(row.replyTo))
-    ? { from: row.from, replyTo: row.replyTo }
-    : null;
-}
-
-export async function saveMailTemplateVersion(
-  db: Database,
-  organization: string,
-  input: {
-    templateKey: string;
-    version: number;
-    locale: 'de' | 'en';
-    subject: string;
-    text: string;
-    html: string;
-  },
-): Promise<string> {
-  const [row] = await db
-    .insert(emailTemplateVersions)
-    .values({
-      organizationId: organization,
-      templateKey: input.templateKey,
-      version: input.version,
-      locale: input.locale,
-      subject: input.subject,
-      textBody: input.text,
-      htmlBody: input.html,
-    })
-    .returning({ id: emailTemplateVersions.id });
-  if (!row) throw new Error('Mail template version could not be stored');
-  return row.id;
-}
-
-export function createMailOutboxRepository(
-  db: Database,
-  options: { leaseMs?: number } = {},
-) {
-  const leaseMs = options.leaseMs ?? 5 * 60_000;
-  const mapOutbox = (row: typeof emailOutbox.$inferSelect) => ({
-    id: row.id,
-    organizationId: row.organizationId,
-    eventId: row.eventId,
-    templateKey: row.templateKey as
-      | 'verification'
-      | 'registration-resume'
-      | 'entry-received'
-      | 'accepted'
-      | 'rejected'
-      | 'status-change',
-    templateVersion: row.templateVersion,
-    locale: row.locale as 'de' | 'en',
-    recipient: row.recipient,
-    idempotencyKey: row.idempotencyKey,
-    variables: row.variables,
-    status: row.status as 'pending' | 'sending' | 'sent' | 'failed',
-    attempts: row.attempts,
-  });
-  return {
-    get: async (ctx: { organizationId: string }, id: string) => {
-      const [row] = await db
-        .select()
-        .from(emailOutbox)
-        .where(
-          and(
-            eq(emailOutbox.organizationId, ctx.organizationId),
-            eq(emailOutbox.id, id),
-          ),
-        )
-        .limit(1);
-      return row ? mapOutbox(row) : null;
-    },
-    claim: async (ctx: { organizationId: string }, id: string) => {
-      const [row] = await db
-        .update(emailOutbox)
-        .set({ status: 'sending', claimedAt: new Date() })
-        .where(
-          and(
-            eq(emailOutbox.organizationId, ctx.organizationId),
-            eq(emailOutbox.id, id),
-            or(
-              and(
-                eq(emailOutbox.status, 'pending'),
-                lte(emailOutbox.availableAt, sql`now()`),
-              ),
-              and(
-                eq(emailOutbox.status, 'sending'),
-                lt(
-                  emailOutbox.claimedAt,
-                  sql`now() - (${leaseMs} * interval '1 millisecond')`,
-                ),
-              ),
-            ),
-          ),
-        )
-        .returning();
-      return row ? mapOutbox(row) : null;
-    },
-    template: async (
-      ctx: { organizationId: string },
-      key: string,
-      version: number,
-      locale: string,
-    ) => {
-      const [row] = await db
-        .select({
-          subject: emailTemplateVersions.subject,
-          text: emailTemplateVersions.textBody,
-          html: emailTemplateVersions.htmlBody,
-        })
-        .from(emailTemplateVersions)
-        .where(
-          and(
-            eq(emailTemplateVersions.organizationId, ctx.organizationId),
-            eq(emailTemplateVersions.templateKey, key),
-            eq(emailTemplateVersions.version, version),
-            eq(emailTemplateVersions.locale, locale),
-          ),
-        )
-        .limit(1);
-      return row
-        ? { subject: row.subject, text: row.text, html: row.html }
-        : null;
-    },
-    organizationMailConfig: async (ctx: { organizationId: string }) => {
-      const [row] = await db
-        .select({
-          from: organizations.mailFrom,
-          replyTo: organizations.mailReplyTo,
-        })
-        .from(organizations)
-        .where(
-          and(
-            eq(organizations.id, ctx.organizationId),
-            eq(organizations.status, 'active'),
-          ),
-        )
-        .limit(1);
-      const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-      return row?.from &&
-        email.test(row.from) &&
-        (row.replyTo === null ||
-          (row.replyTo !== null && email.test(row.replyTo)))
-        ? { from: row.from, replyTo: row.replyTo }
-        : null;
-    },
-    finish: async (
-      ctx: { organizationId: string },
-      id: string,
-      outcome: {
-        outcome: 'sent' | 'retry' | 'failed';
-        attempts: number;
-        availableAt?: Date;
-        error?: string;
-      },
-    ) => {
-      await db.transaction(async (tx) => {
-        await tx
-          .update(emailOutbox)
-          .set({
-            status: outcome.outcome === 'retry' ? 'pending' : outcome.outcome,
-            attempts: outcome.attempts,
-            availableAt: outcome.availableAt ?? new Date(),
-            sentAt: outcome.outcome === 'sent' ? new Date() : null,
-            claimedAt: null,
-            lastError: outcome.error ?? null,
-          })
-          .where(
-            and(
-              eq(emailOutbox.organizationId, ctx.organizationId),
-              eq(emailOutbox.id, id),
-              eq(emailOutbox.status, 'sending'),
-            ),
-          );
-        await tx
-          .insert(emailDeliveries)
-          .values({
-            organizationId: ctx.organizationId,
-            outboxId: id,
-            attempt: outcome.attempts,
-            outcome: outcome.outcome,
-            error: outcome.error ?? null,
-          })
-          .onConflictDoNothing();
-        if (outcome.outcome === 'retry' && outcome.availableAt) {
-          const envelope = {
-            type: 'mail.outbox',
-            schemaVersion: 1,
-            organizationId: ctx.organizationId,
-            correlationId: id,
-            payload: { outboxId: id },
-          };
-          await tx.execute(sql`select graphile_worker.add_job(
-            identifier := 'mail_outbox',
-            payload := ${JSON.stringify(envelope)}::json,
-            run_at := ${outcome.availableAt},
-            job_key := ${`mail-outbox:${id}`},
-            job_key_mode := 'replace'
-          )`);
-        }
-      });
-    },
-  };
-}
-
-export type RegistrationSettings = {
-  sharedContactEmail: 'allowed' | 'disallowed';
-  minimumAge: number | null;
-  guardianRequiredBelowAge: number;
-  maximumClassesPerGroup: number;
-};
-export function createRegistrationSettingsRepository(db: Database) {
-  return {
-    get: async (ctx: RequestContext): Promise<RegistrationSettings> => {
-      const [row] = await db
-        .select({ settings: organizations.registrationSettings })
-        .from(organizations)
-        .where(eq(organizations.id, ctx.organizationId));
-      return (
-        row?.settings ?? {
-          sharedContactEmail: 'allowed',
-          minimumAge: null,
-          guardianRequiredBelowAge: 18,
-          maximumClassesPerGroup: 8,
-        }
-      );
-    },
-    update: async (
-      ctx: RequestContext,
-      settings: RegistrationSettings,
-      actor: string,
-    ): Promise<RegistrationSettings> =>
-      db.transaction(async (tx) => {
-        const [before] = await tx
-          .select({ settings: organizations.registrationSettings })
-          .from(organizations)
-          .where(eq(organizations.id, ctx.organizationId))
-          .for('update');
-        if (!before) throw new Error('Organization not found');
-        const [updated] = await tx
-          .update(organizations)
-          .set({ registrationSettings: settings, updatedAt: new Date() })
-          .where(eq(organizations.id, ctx.organizationId))
-          .returning({ settings: organizations.registrationSettings });
-        await tx.insert(registrationSettingsAudit).values({
-          organizationId: ctx.organizationId,
-          actor,
-          beforeSettings: before.settings,
-          afterSettings: settings,
-        });
-        return updated!.settings;
-      }),
-  };
-}
-
-export function createRegistrationFormConfigRepository(db: Database) {
-  return {
-    getOrganization: async (ctx: RequestContext) => {
-      const [row] = await db
-        .select({ config: organizations.registrationFormConfig })
-        .from(organizations)
-        .where(eq(organizations.id, ctx.organizationId));
-      return row?.config ?? null;
-    },
-    updateOrganization: async (
-      ctx: RequestContext,
-      config: Record<string, unknown>,
-      actor: string,
-    ) =>
-      db.transaction(async (tx) => {
-        const [before] = await tx
-          .select({ config: organizations.registrationFormConfig })
-          .from(organizations)
-          .where(eq(organizations.id, ctx.organizationId))
-          .for('update');
-        if (!before) return null;
-        const [after] = await tx
-          .update(organizations)
-          .set({ registrationFormConfig: config, updatedAt: new Date() })
-          .where(eq(organizations.id, ctx.organizationId))
-          .returning({ config: organizations.registrationFormConfig });
-        await tx.insert(registrationFormConfigAudit).values({
-          organizationId: ctx.organizationId,
-          actor,
-          beforeConfig: before.config,
-          afterConfig: config,
-        });
-        return after?.config ?? null;
-      }),
-    getEvent: async (ctx: RequestContext, eventId: string) => {
-      const [row] = await db
-        .select({ config: events.registrationFormConfig })
-        .from(events)
-        .where(
-          and(
-            eq(events.organizationId, ctx.organizationId),
-            eq(events.id, eventId),
-          ),
-        );
-      return row?.config ?? null;
-    },
-    updateEvent: async (
-      ctx: RequestContext,
-      eventId: string,
-      config: Record<string, unknown>,
-      actor: string,
-    ) =>
-      db.transaction(async (tx) => {
-        const [before] = await tx
-          .select({ config: events.registrationFormConfig })
-          .from(events)
-          .where(
-            and(
-              eq(events.organizationId, ctx.organizationId),
-              eq(events.id, eventId),
-            ),
-          )
-          .for('update');
-        if (!before) return null;
-        const [after] = await tx
-          .update(events)
-          .set({ registrationFormConfig: config, updatedAt: new Date() })
-          .where(
-            and(
-              eq(events.organizationId, ctx.organizationId),
-              eq(events.id, eventId),
-            ),
-          )
-          .returning({ config: events.registrationFormConfig });
-        await tx.insert(registrationFormConfigAudit).values({
-          organizationId: ctx.organizationId,
-          eventId,
-          actor,
-          beforeConfig: before.config,
-          afterConfig: config,
-        });
-        return after?.config ?? null;
-      }),
-  };
-}
-
-export interface PublicRegistrationPayload {
-  submissionId: string;
-  formVersion: '1.0';
-  eventSlug: string;
-  language: 'de' | 'en';
-  person: {
-    firstName: string;
-    lastName: string;
-    email: string;
-    dateOfBirth: string;
-    country?: string | undefined;
-    guardianName?: string | undefined;
-    guardianEmail?: string | undefined;
-  };
-  customAnswers?: Record<
-    string,
-    string | boolean | { objectId: string; uploadToken: string }
-  >;
-  entries: Array<{
-    classId: string;
-    requestedStartNumber?: string | null | undefined;
-    vehicle: {
-      make: string;
-      model: string;
-      year: number | null;
-      registration: string | null;
-    };
-  }>;
-  consents: Array<{
-    key: string;
-    version: string;
-    hash: string;
-    accepted: true;
-  }>;
-}
 export function createPublicRegistrationService(
   db: Database,
   options: { canonicalBaseUrl: string; tokenTtlMs?: number },
@@ -3853,750 +1945,307 @@ export function createEventConsentRepository(db: Database) {
 }
 
 /** Tenant-scoped immutable workflow revisions with organization defaults and event overrides. */
-export function createEntryWorkflowRepository(
-  db: Database,
-): import('@racepilot/core').EntryWorkflowRepository {
-  const map = (row: {
-    id: string;
-    organization_id: string;
-    event_id: string | null;
-    version: number;
-    workflow: import('@racepilot/core').EntryWorkflow;
-  }) => ({
-    id: row.id,
-    organizationId: organizationId(row.organization_id),
-    eventId: row.event_id,
-    version: row.version,
-    workflow: normalizeEntryWorkflow(row.workflow),
-  });
-  return {
-    getOrganization: async (ctx) => {
-      const result = await db.execute(
-        sql`SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry_workflow_current c JOIN entry_workflow_revision r ON r.organization_id=c.organization_id AND r.id=c.workflow_revision_id WHERE c.organization_id=${ctx.organizationId} AND c.event_id IS NULL`,
-      );
-      const row = (result as unknown as { rows: Parameters<typeof map>[0][] })
-        .rows[0];
-      return row ? map(row) : null;
-    },
-    getEffective: async (ctx, eventId) => {
-      const result = await db.execute(
-        sql`SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry_workflow_current c JOIN entry_workflow_revision r ON r.organization_id=c.organization_id AND r.id=c.workflow_revision_id JOIN event e ON e.organization_id=c.organization_id AND e.id=c.event_id WHERE c.organization_id=${ctx.organizationId} AND c.event_id=${eventId} UNION ALL SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry_workflow_current c JOIN entry_workflow_revision r ON r.organization_id=c.organization_id AND r.id=c.workflow_revision_id JOIN event e ON e.organization_id=c.organization_id AND e.id=${eventId} WHERE c.organization_id=${ctx.organizationId} AND c.event_id IS NULL AND NOT EXISTS (SELECT 1 FROM entry_workflow_current x WHERE x.organization_id=c.organization_id AND x.event_id=e.id) LIMIT 1`,
-      );
-      const row = (result as unknown as { rows: Parameters<typeof map>[0][] })
-        .rows[0];
-      return row ? map(row) : null;
-    },
-    getPinnedForEntry: async (ctx, entryId) => {
-      const result = await db.execute(
-        sql`SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry e JOIN entry_workflow_revision r ON r.organization_id=e.organization_id AND r.id=e.workflow_revision_id WHERE e.organization_id=${ctx.organizationId} AND e.id=${entryId} AND e.deleted_at IS NULL`,
-      );
-      const row = (result as unknown as { rows: Parameters<typeof map>[0][] })
-        .rows[0];
-      return row ? map(row) : null;
-    },
-    setOrganization: async (ctx, workflow, actor, reason) =>
-      db.transaction(async (tx) => {
-        const current = await tx.execute(
-          sql`SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry_workflow_current c JOIN entry_workflow_revision r ON r.organization_id=c.organization_id AND r.id=c.workflow_revision_id WHERE c.organization_id=${ctx.organizationId} AND c.event_id IS NULL FOR UPDATE OF c`,
-        );
-        const old = (
-          current as unknown as { rows: Parameters<typeof map>[0][] }
-        ).rows[0];
-        if (!old) throw new Error('Organization workflow not found');
-        const inserted = await tx.execute(
-          sql`INSERT INTO entry_workflow_revision (organization_id,event_id,version,workflow,actor,reason) VALUES (${ctx.organizationId},NULL,${old.version + 1},${JSON.stringify(workflow)}::jsonb,${actor},${reason}) RETURNING id, organization_id, event_id, version, workflow`,
-        );
-        const revision = (
-          inserted as unknown as { rows: Parameters<typeof map>[0][] }
-        ).rows[0];
-        if (!revision) throw new Error('Workflow revision insert failed');
-        await tx.execute(
-          sql`UPDATE entry_workflow_current SET workflow_revision_id=${revision.id} WHERE organization_id=${ctx.organizationId} AND event_id IS NULL`,
-        );
-        await tx.execute(
-          sql`INSERT INTO entry_workflow_audit (organization_id,event_id,workflow_revision_id,actor,reason) VALUES (${ctx.organizationId},NULL,${revision.id},${actor},${reason})`,
-        );
-        return map(revision);
-      }),
-    setEvent: async (ctx, eventId, workflow, actor, reason) =>
-      db.transaction(async (tx) => {
-        const current = await tx.execute(
-          sql`SELECT r.id, r.organization_id, r.event_id, r.version, r.workflow FROM entry_workflow_current c JOIN entry_workflow_revision r ON r.organization_id=c.organization_id AND r.id=c.workflow_revision_id JOIN event e ON e.organization_id=c.organization_id AND e.id=c.event_id WHERE c.organization_id=${ctx.organizationId} AND c.event_id=${eventId} FOR UPDATE OF c`,
-        );
-        const old = (
-          current as unknown as { rows: Parameters<typeof map>[0][] }
-        ).rows[0];
-        if (!old) return null;
-        const inserted = await tx.execute(
-          sql`INSERT INTO entry_workflow_revision (organization_id,event_id,version,workflow,actor,reason) VALUES (${ctx.organizationId},${eventId},${old.version + 1},${JSON.stringify(workflow)}::jsonb,${actor},${reason}) RETURNING id, organization_id, event_id, version, workflow`,
-        );
-        const revision = (
-          inserted as unknown as { rows: Parameters<typeof map>[0][] }
-        ).rows[0];
-        if (!revision) throw new Error('Workflow revision insert failed');
-        await tx.execute(
-          sql`UPDATE entry_workflow_current SET workflow_revision_id=${revision.id} WHERE organization_id=${ctx.organizationId} AND event_id=${eventId}`,
-        );
-        await tx.execute(
-          sql`INSERT INTO entry_workflow_audit (organization_id,event_id,workflow_revision_id,actor,reason) VALUES (${ctx.organizationId},${eventId},${revision.id},${actor},${reason})`,
-        );
-        return map(revision);
-      }),
-  };
-}
 
 /** Event-scoped status dimensions and audited per-entry status markers. */
-export function createEntryStatusDimensionRepository(
-  db: Database,
-): import('@racepilot/core').EntryStatusDimensionRepository {
-  return {
-    getEvent: async (ctx, eventId) => {
-      const [event] = await db
-        .select({ id: events.id })
-        .from(events)
-        .where(
-          and(
-            eq(events.organizationId, ctx.organizationId),
-            eq(events.id, eventId),
-          ),
-        )
-        .limit(1);
-      if (!event) return null;
-      const [row] = await db
-        .select({ config: eventEntryStatusDimensionConfigs.config })
-        .from(eventEntryStatusDimensionConfigs)
-        .where(
-          and(
-            eq(
-              eventEntryStatusDimensionConfigs.organizationId,
-              ctx.organizationId,
-            ),
-            eq(eventEntryStatusDimensionConfigs.eventId, eventId),
-          ),
-        )
-        .limit(1);
-      return row?.config ?? defaultEntryStatusDimensionConfig;
-    },
-    setEvent: async (ctx, eventId, config, actor, reason) => {
-      if (!ctx.permissions.has('event:write')) throw new Error('Forbidden');
-      if (!actor.trim() || !reason.trim())
-        throw new Error('Actor and reason are required');
-      const errors = validateEntryStatusDimensionConfig(config);
-      if (errors.length)
-        throw new Error(
-          `Invalid status dimension config: ${errors.join('; ')}`,
-        );
-      return db.transaction(async (tx) => {
-        const [event] = await tx
-          .select({ id: events.id })
-          .from(events)
-          .where(
-            and(
-              eq(events.organizationId, ctx.organizationId),
-              eq(events.id, eventId),
-            ),
-          )
-          .for('update')
-          .limit(1);
-        if (!event) return null;
-        const [old] = await tx
-          .select({ config: eventEntryStatusDimensionConfigs.config })
-          .from(eventEntryStatusDimensionConfigs)
-          .where(
-            and(
-              eq(
-                eventEntryStatusDimensionConfigs.organizationId,
-                ctx.organizationId,
-              ),
-              eq(eventEntryStatusDimensionConfigs.eventId, eventId),
-            ),
-          )
-          .limit(1);
-        const stateRows = await tx
-          .select({
-            dimension: entryStatusDimensionValues.dimension,
-            value: entryStatusDimensionValues.value,
-          })
-          .from(entryStatusDimensionValues)
-          .where(
-            and(
-              eq(entryStatusDimensionValues.organizationId, ctx.organizationId),
-              eq(entryStatusDimensionValues.eventId, eventId),
-            ),
-          );
-        for (const state of stateRows) {
-          const dimension = config.dimensions.find(
-            (item) => item.key === state.dimension,
-          );
-          if (!dimension?.values.some((item) => item.key === state.value))
-            throw new EntryStatusInUseError(
-              state.dimension as import('@racepilot/core').EntryStatusDimensionKey,
-              state.value,
-            );
-        }
-        await tx
-          .insert(eventEntryStatusDimensionConfigs)
-          .values({
-            organizationId: ctx.organizationId,
-            eventId,
-            config,
-            actor: actor.trim(),
-            reason: reason.trim(),
-          })
-          .onConflictDoUpdate({
-            target: [
-              eventEntryStatusDimensionConfigs.organizationId,
-              eventEntryStatusDimensionConfigs.eventId,
-            ],
-            set: {
-              config,
-              actor: actor.trim(),
-              reason: reason.trim(),
-              updatedAt: new Date(),
-            },
-          });
-        await tx.insert(eventEntryStatusDimensionConfigAudit).values({
-          organizationId: ctx.organizationId,
-          eventId,
-          beforeConfig: old?.config ?? null,
-          afterConfig: config,
-          actor: actor.trim(),
-          reason: reason.trim(),
-        });
-        return config;
-      });
-    },
-    transition: async (ctx, entryId, dimension, to, actor, reason) => {
-      if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
-      if (!actor.trim() || !reason.trim())
-        throw new Error('Actor and reason are required');
-      return db.transaction(async (tx) => {
-        // Match setEvent's lock order: serialize on the event, then lock the entry.
-        // event_id is immutable; this unlocked lookup only discovers the lock key.
-        const [identity] = await tx
-          .select({ eventId: entries.eventId })
-          .from(entries)
-          .where(
-            and(
-              eq(entries.organizationId, ctx.organizationId),
-              eq(entries.id, entryId),
-              sql`${entries.deletedAt} is null`,
-            ),
-          )
-          .limit(1);
-        if (!identity) return null;
-        const [event] = await tx
-          .select({ id: events.id })
-          .from(events)
-          .where(
-            and(
-              eq(events.organizationId, ctx.organizationId),
-              eq(events.id, identity.eventId),
-            ),
-          )
-          .for('update')
-          .limit(1);
-        if (!event) return null;
-        const [entry] = await tx
-          .select({ eventId: entries.eventId })
-          .from(entries)
-          .where(
-            and(
-              eq(entries.organizationId, ctx.organizationId),
-              eq(entries.eventId, event.id),
-              eq(entries.id, entryId),
-              sql`${entries.deletedAt} is null`,
-            ),
-          )
-          .for('update')
-          .limit(1);
-        if (!entry) return null;
-        const [configured] = await tx
-          .select({ config: eventEntryStatusDimensionConfigs.config })
-          .from(eventEntryStatusDimensionConfigs)
-          .where(
-            and(
-              eq(
-                eventEntryStatusDimensionConfigs.organizationId,
-                ctx.organizationId,
-              ),
-              eq(eventEntryStatusDimensionConfigs.eventId, entry.eventId),
-            ),
-          )
-          .limit(1);
-        const config = configured?.config ?? defaultEntryStatusDimensionConfig;
-        const definition = config.dimensions.find(
-          (item) => item.key === dimension,
-        );
-        const target = definition?.values.find((item) => item.key === to);
-        if (!definition || !target) throw new Error('Unknown status value');
-        const [current] = await tx
-          .select({ value: entryStatusDimensionValues.value })
-          .from(entryStatusDimensionValues)
-          .where(
-            and(
-              eq(entryStatusDimensionValues.organizationId, ctx.organizationId),
-              eq(entryStatusDimensionValues.entryId, entryId),
-              eq(entryStatusDimensionValues.dimension, dimension),
-            ),
-          )
-          .limit(1);
-        const from =
-          current?.value ?? (dimension === 'waiver' ? 'f_pending' : 'pending');
-        if (
-          !definition.transitions.some(
-            (edge) => edge.from === from && edge.to === to,
-          )
-        )
-          throw new Error(`Invalid ${dimension} transition: ${from} -> ${to}`);
-        await tx
-          .insert(entryStatusDimensionValues)
-          .values({
-            organizationId: ctx.organizationId,
-            eventId: entry.eventId,
-            entryId,
-            dimension,
-            value: to,
-            updatedAt: new Date(),
-          })
-          .onConflictDoUpdate({
-            target: [
-              entryStatusDimensionValues.organizationId,
-              entryStatusDimensionValues.entryId,
-              entryStatusDimensionValues.dimension,
-            ],
-            set: { value: to, updatedAt: new Date() },
-          });
-        await tx.insert(entryStatusDimensionAudit).values({
-          organizationId: ctx.organizationId,
-          eventId: entry.eventId,
-          entryId,
-          dimension,
-          fromValue: from,
-          toValue: to,
-          actor: actor.trim(),
-          reason: reason.trim(),
-        });
-        return true;
-      });
-    },
-    updateHints: async (ctx, entryId, hints, actor, reason) => {
-      if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
-      if (!actor.trim() || !reason.trim())
-        throw new Error('Actor and reason are required');
-      const allowed = new Set<EntryStatusHintKey>([
-        'double_starter',
-        'passenger',
-        'late_entry',
-      ]);
-      if (
-        !Object.keys(hints).length ||
-        Object.entries(hints).some(
-          ([key, value]) =>
-            !allowed.has(key as EntryStatusHintKey) ||
-            typeof value !== 'boolean',
-        )
-      )
-        throw new Error('Invalid status hint');
-      return db.transaction(async (tx) => {
-        const [entry] = await tx
-          .select({ eventId: entries.eventId, hints: entries.statusHints })
-          .from(entries)
-          .where(
-            and(
-              eq(entries.organizationId, ctx.organizationId),
-              eq(entries.id, entryId),
-              sql`${entries.deletedAt} is null`,
-            ),
-          )
-          .for('update')
-          .limit(1);
-        if (!entry) return false;
-        const after = { ...entry.hints, ...hints };
-        await tx
-          .update(entries)
-          .set({ statusHints: after })
-          .where(
-            and(
-              eq(entries.organizationId, ctx.organizationId),
-              eq(entries.id, entryId),
-            ),
-          );
-        await tx.insert(entryStatusHintsAudit).values({
-          organizationId: ctx.organizationId,
-          eventId: entry.eventId,
-          entryId,
-          beforeHints: entry.hints,
-          afterHints: after,
-          actor: actor.trim(),
-          reason: reason.trim(),
-        });
-        return true;
-      });
-    },
-  };
-}
 
-export interface TimingMeasurementInput {
-  readonly entryId: string;
-  readonly run: number;
-  readonly timeMs: number;
-  readonly penaltyMs?: number;
-  readonly exclusion?: 'DNF' | 'DNS' | 'DSQ' | null;
-  readonly source: string;
-  readonly recordedAt: string;
-}
-export interface TimingMeasurementRecord extends TimingMeasurementInput {
-  readonly id: string;
-  readonly organizationId: string;
-  readonly eventId: string;
-  readonly version: number;
-  readonly supersedesId: string | null;
-  readonly active: boolean;
-  readonly recordedBy: string;
-}
-export interface TimingRepository {
-  listEntries(
-    ctx: RequestContext,
-    eventId: string,
-  ): Promise<
-    { entryId: string; startNumber: string; statusCategory: string | null }[]
-  >;
-  record(
-    ctx: RequestContext,
-    eventId: string,
-    input: TimingMeasurementInput,
-    actor: string,
-  ): Promise<TimingMeasurementRecord | null>;
-  recordMany(
-    ctx: RequestContext,
-    eventId: string,
-    input: readonly TimingMeasurementInput[],
-    actor: string,
-  ): Promise<TimingMeasurementRecord[]>;
-  list(
-    ctx: RequestContext,
-    eventId: string,
-  ): Promise<TimingMeasurementRecord[]>;
-  correct(
-    ctx: RequestContext,
-    eventId: string,
-    measurementId: string,
-    input: Partial<TimingMeasurementInput>,
-    actor: string,
-  ): Promise<TimingMeasurementRecord | null>;
-  resolveEntry(
-    ctx: RequestContext,
-    eventId: string,
-    lookup: { entryId?: string; startNumber?: string },
-  ): Promise<{ entryId: string; startNumber: string } | null>;
-  createDraft(
-    ctx: RequestContext,
-    eventId: string,
-    rule: unknown,
-    results: unknown,
-    actor: string,
-  ): Promise<TimingResultVersion | null>;
-  publish(
-    ctx: RequestContext,
-    eventId: string,
-    version: number,
-    actor: string,
-  ): Promise<TimingResultVersion | null>;
-  latestPublished(
-    ctx: RequestContext,
-    eventId: string,
-  ): Promise<TimingResultVersion | null>;
-}
-export interface TimingResultVersion {
-  readonly eventId: string;
-  readonly version: number;
-  readonly status: 'draft' | 'published';
-  readonly rule: unknown;
-  readonly results: unknown;
-  readonly actor: string;
-  readonly createdAt: string;
-  readonly publishedAt: string | null;
-}
-type TimingDbRow = {
-  id: string;
-  organization_id: string;
-  event_id: string;
-  entry_id: string;
-  run: number;
-  time_ms: number;
-  penalty_ms: number;
-  exclusion: 'DNF' | 'DNS' | 'DSQ' | null;
-  source: string;
-  recorded_at: Date | string;
-  recorded_by: string;
-  version: number;
-  supersedes_id: string | null;
-  active: boolean;
-};
-const mapTimingRow = (row: TimingDbRow): TimingMeasurementRecord => ({
-  id: row.id,
-  organizationId: row.organization_id,
-  eventId: row.event_id,
-  entryId: row.entry_id,
-  run: row.run,
-  timeMs: row.time_ms,
-  penaltyMs: row.penalty_ms,
-  ...(row.exclusion ? { exclusion: row.exclusion } : {}),
-  source: row.source,
-  recordedAt: new Date(row.recorded_at).toISOString(),
-  recordedBy: row.recorded_by,
-  version: row.version,
-  supersedesId: row.supersedes_id,
-  active: row.active,
-});
-type TimingResultDbRow = {
-  event_id: string;
-  version: number;
-  status: 'draft' | 'published';
-  rule: unknown;
-  results: unknown;
-  actor: string;
-  created_at: Date | string;
-  published_at: Date | string | null;
-};
-const mapTimingResult = (r: TimingResultDbRow): TimingResultVersion => ({
-  eventId: r.event_id,
-  version: r.version,
-  status: r.status,
-  rule: r.rule,
-  results: r.results,
-  actor: r.actor,
-  createdAt: new Date(r.created_at).toISOString(),
-  publishedAt: r.published_at ? new Date(r.published_at).toISOString() : null,
-});
-const timingUuid =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const isDuplicateTimingRun = (error: unknown) => {
-  let current: unknown = error;
-  while (current && typeof current === 'object') {
-    const candidate = current as {
-      code?: string;
-      constraint?: string;
-      message?: string;
-      cause?: unknown;
-    };
-    if (
-      candidate.code === '23505' ||
-      candidate.constraint === 'timing_measurement_one_active_run'
-    )
-      return true;
-    if (candidate.message?.includes('timing_measurement_one_active_run'))
-      return true;
-    current = candidate.cause;
-  }
-  return false;
-};
-export function createTimingRepository(db: Database): TimingRepository {
-  const insert = async (
-    tx: Database,
-    ctx: RequestContext,
-    eventId: string,
-    input: TimingMeasurementInput,
-    actor: string,
-    previousId: string | null,
-  ) => {
-    const versionResult =
-      await tx.execute(sql`SELECT COALESCE(MAX(version), 0) + 1 AS version
-      FROM timing_measurement WHERE organization_id=${ctx.organizationId} AND event_id=${eventId}
-      AND entry_id=${input.entryId} AND run=${input.run}`);
-    const version = Number(
-      (versionResult as unknown as { rows: { version: number }[] }).rows[0]
-        ?.version ?? 1,
-    );
-    const result = await tx.execute(sql`INSERT INTO timing_measurement
-      (organization_id,event_id,entry_id,run,time_ms,penalty_ms,exclusion,source,recorded_at,recorded_by,version,supersedes_id)
-      SELECT ${ctx.organizationId},${eventId},${input.entryId},${input.run},${input.timeMs},${input.penaltyMs ?? 0},
-      ${input.exclusion ?? null},${input.source},${input.recordedAt}::timestamptz,${actor},${version},${previousId}
-      WHERE EXISTS (SELECT 1 FROM event WHERE organization_id=${ctx.organizationId} AND id=${eventId})
-      AND EXISTS (SELECT 1 FROM entry WHERE organization_id=${ctx.organizationId} AND event_id=${eventId} AND id=${input.entryId})
-      RETURNING *`);
-    const row = (result as unknown as { rows: TimingDbRow[] }).rows[0];
-    if (!row) return null;
-    await tx.execute(sql`INSERT INTO timing_audit (organization_id,event_id,measurement_id,action,actor,details)
-      VALUES (${ctx.organizationId},${eventId},${row.id},${previousId ? 'correct' : 'record'},${actor},
-      ${JSON.stringify({ run: input.run, version })}::jsonb)`);
-    return mapTimingRow(row);
-  };
+export function createEntryRepository(
+  db: Database,
+): import('@racepilot/core').EntryRepository {
   return {
-    listEntries: async (ctx, eventId) => {
-      if (!timingUuid.test(eventId)) return [];
-      const result = await db.execute(sql`SELECT e.id, e.requested_start_number,
-        status.value->>'category' AS status_category
-        FROM entry e
-        LEFT JOIN entry_workflow_revision w ON w.organization_id=e.organization_id AND w.id=e.workflow_revision_id
-        LEFT JOIN LATERAL jsonb_array_elements(COALESCE(w.workflow->'statuses', '[]'::jsonb)) AS status(value)
-          ON status.value->>'key'=e.acceptance_status
-        WHERE e.organization_id=${ctx.organizationId} AND e.event_id=${eventId} AND e.deleted_at IS NULL
-        ORDER BY e.requested_start_number, e.id`);
-      const rows =
-        (
-          result as unknown as {
-            rows: {
-              id: string;
-              requested_start_number: string | null;
-              status_category: string | null;
-            }[];
-          }
-        ).rows ?? [];
-      return rows.map((row) => ({
-        entryId: row.id,
-        startNumber: row.requested_start_number ?? row.id,
-        statusCategory: row.status_category,
-      }));
+    create: async (ctx, input, executor) => {
+      const executorDb = (executor as Database | undefined) ?? db;
+      const [row] = await executorDb
+        .insert(entries)
+        .values({
+          organizationId: ctx.organizationId,
+          eventId: input.eventId,
+          classId: input.classId,
+          registrationGroupId: input.registrationGroupId,
+          driverPersonId: input.driverPersonId,
+          vehicleId: input.vehicleId,
+          acceptanceStatus: 'pending',
+          requestedStartNumber: normalizeRequestedStartNumber(
+            input.requestedStartNumber,
+          ),
+          priceSnapshotVersion: input.priceSnapshotVersion,
+          formSnapshotVersion: input.formSnapshotVersion,
+          priceSnapshot: input.priceSnapshot ?? null,
+        })
+        .returning();
+      return mapEntry(row!);
     },
-    record: async (ctx, eventId, input, actor) => {
-      if (!timingUuid.test(eventId) || !timingUuid.test(input.entryId))
-        return null;
-      try {
-        return await db.transaction((tx) =>
-          insert(tx as unknown as Database, ctx, eventId, input, actor, null),
+    getById: async (ctx, id) => {
+      const [row] = await db
+        .select()
+        .from(entries)
+        .where(
+          and(
+            eq(entries.organizationId, ctx.organizationId),
+            eq(entries.id, id),
+            sql`${entries.deletedAt} is null`,
+          ),
         );
-      } catch (error) {
-        if (isDuplicateTimingRun(error))
-          throw new Error('Duplicate timing run');
-        throw error;
-      }
+      return row
+        ? (
+            await attachAdminEntryDetails(
+              db,
+              ctx,
+              await projectEntryRows(db, ctx, [row]),
+            )
+          )[0]!
+        : null;
     },
-    recordMany: async (ctx, eventId, inputs, actor) => {
-      if (
-        !timingUuid.test(eventId) ||
-        inputs.some((input) => !timingUuid.test(input.entryId))
-      )
-        return [];
-      try {
-        return await db.transaction(async (transaction) => {
-          const tx = transaction as unknown as Database;
-          const results: TimingMeasurementRecord[] = [];
-          for (const input of inputs) {
-            const row = await insert(tx, ctx, eventId, input, actor, null);
-            if (!row) throw new Error('Timing entry not found');
-            results.push(row);
-          }
-          return results;
-        });
-      } catch (error) {
-        if (isDuplicateTimingRun(error))
-          throw new Error('Duplicate timing run');
-        throw error;
-      }
-    },
-    list: async (ctx, eventId) => {
-      if (!timingUuid.test(eventId)) return [];
-      const result = await db.execute(sql`SELECT * FROM timing_measurement
-        WHERE organization_id=${ctx.organizationId} AND event_id=${eventId} ORDER BY entry_id,run,version`);
-      return ((result as unknown as { rows: TimingDbRow[] }).rows ?? []).map(
-        mapTimingRow,
-      );
-    },
-    createDraft: async (ctx, eventId, rule, results, actor) => {
-      if (!timingUuid.test(eventId)) return null;
-      return db.transaction(async (transaction) => {
-        const tx = transaction as unknown as Database;
-        await tx.execute(
-          sql`SELECT id FROM event WHERE organization_id=${ctx.organizationId} AND id=${eventId} FOR UPDATE`,
+    listAdmin: async (ctx, query) => {
+      const predicates = [
+        eq(entries.organizationId, ctx.organizationId),
+        sql`${entries.deletedAt} is null`,
+      ];
+      if (query.eventId) predicates.push(eq(entries.eventId, query.eventId));
+      if (query.classId) predicates.push(eq(entries.classId, query.classId));
+      if (query.acceptanceStatus)
+        predicates.push(eq(entries.acceptanceStatus, query.acceptanceStatus));
+      if (query.verificationStatus)
+        predicates.push(
+          eq(entries.verificationStatus, query.verificationStatus),
         );
-        const result =
-          await tx.execute(sql`INSERT INTO timing_result_version (organization_id,event_id,version,status,rule,results,actor)
-          SELECT ${ctx.organizationId},${eventId},COALESCE(MAX(version),0)+1,'draft',${JSON.stringify(rule)}::jsonb,${JSON.stringify(results)}::jsonb,${actor}
-          FROM timing_result_version WHERE organization_id=${ctx.organizationId} AND event_id=${eventId}
-          RETURNING event_id,version,status,rule,results,actor,created_at,published_at`);
-        const row = (result as unknown as { rows: TimingResultDbRow[] })
-          .rows[0];
-        if (!row) return null;
-        await tx.execute(sql`INSERT INTO timing_audit (organization_id,event_id,result_version,action,actor,details)
-          VALUES (${ctx.organizationId},${eventId},${row.version},'draft',${actor},'{}'::jsonb)`);
-        return mapTimingResult(row);
-      });
-    },
-    publish: async (ctx, eventId, version, actor) => {
-      return db.transaction(async (transaction) => {
-        const tx = transaction as unknown as Database;
-        const result =
-          await tx.execute(sql`UPDATE timing_result_version SET status='published',published_at=now()
-          WHERE organization_id=${ctx.organizationId} AND event_id=${eventId} AND version=${version} AND status='draft'
-          RETURNING event_id,version,status,rule,results,actor,created_at,published_at`);
-        const row = (result as unknown as { rows: TimingResultDbRow[] })
-          .rows[0];
-        if (!row) return null;
-        await tx.execute(sql`INSERT INTO timing_audit (organization_id,event_id,result_version,action,actor,details)
-          VALUES (${ctx.organizationId},${eventId},${version},'publish',${actor},'{}'::jsonb)`);
-        return mapTimingResult(row);
-      });
-    },
-    latestPublished: async (ctx, eventId) => {
-      if (!timingUuid.test(eventId)) return null;
-      const result =
-        await db.execute(sql`SELECT event_id,version,status,rule,results,actor,created_at,published_at FROM timing_result_version
-        WHERE organization_id=${ctx.organizationId} AND event_id=${eventId} AND status='published' ORDER BY version DESC LIMIT 1`);
-      const row = (result as unknown as { rows: TimingResultDbRow[] }).rows[0];
-      return row ? mapTimingResult(row) : null;
-    },
-    resolveEntry: async (ctx, eventId, lookup) => {
-      if (!timingUuid.test(eventId)) return null;
-      const result =
-        await db.execute(sql`SELECT id, requested_start_number FROM entry WHERE organization_id=${ctx.organizationId}
-        AND event_id=${eventId} AND deleted_at IS NULL AND (${lookup.entryId ? sql`id=${lookup.entryId}` : sql`requested_start_number=${lookup.startNumber ?? ''}`}) LIMIT 2`);
-      const rows =
-        (
-          result as unknown as {
-            rows: { id: string; requested_start_number: string | null }[];
-          }
-        ).rows ?? [];
-      if (rows.length !== 1) return null;
+      if (query.paymentStatus === 'not_required')
+        predicates.push(
+          sql`not exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId})`,
+        );
+      else if (query.paymentStatus === 'not_relevant')
+        predicates.push(
+          sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = 'cancelled')`,
+        );
+      else if (query.paymentStatus)
+        predicates.push(
+          sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = ${query.paymentStatus})`,
+        );
+      const search = query.search?.trim();
+      if (search) {
+        const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
+        predicates.push(
+          or(
+            ilike(entries.requestedStartNumber, pattern),
+            sql`${entries.id}::text ilike ${pattern}`,
+            ilike(people.firstName, pattern),
+            ilike(people.lastName, pattern),
+            ilike(vehicles.make, pattern),
+            ilike(vehicles.model, pattern),
+            ilike(vehicles.registration, pattern),
+            ilike(eventClasses.name, pattern),
+          )!,
+        );
+      }
+      const where = and(...predicates);
+      const sortColumns = {
+        createdAt: entries.createdAt,
+        requestedStartNumber: entries.requestedStartNumber,
+        acceptanceStatus: entries.acceptanceStatus,
+        verificationStatus: entries.verificationStatus,
+      } as const;
+      const sortColumn = sortColumns[query.sort];
+      const [rows, totals] = await Promise.all([
+        db
+          .select({ entry: entries })
+          .from(entries)
+          .innerJoin(
+            people,
+            and(
+              eq(people.id, entries.driverPersonId),
+              eq(people.organizationId, entries.organizationId),
+            ),
+          )
+          .innerJoin(
+            vehicles,
+            and(
+              eq(vehicles.id, entries.vehicleId),
+              eq(vehicles.organizationId, entries.organizationId),
+            ),
+          )
+          .innerJoin(
+            eventClasses,
+            and(
+              eq(eventClasses.id, entries.classId),
+              eq(eventClasses.eventId, entries.eventId),
+              eq(eventClasses.organizationId, entries.organizationId),
+            ),
+          )
+          .where(where)
+          .orderBy(
+            query.direction === 'asc' ? asc(sortColumn) : desc(sortColumn),
+            asc(entries.id),
+          )
+          .limit(query.pageSize)
+          .offset((query.page - 1) * query.pageSize),
+        db
+          .select({ total: count() })
+          .from(entries)
+          .innerJoin(
+            people,
+            and(
+              eq(people.id, entries.driverPersonId),
+              eq(people.organizationId, entries.organizationId),
+            ),
+          )
+          .innerJoin(
+            vehicles,
+            and(
+              eq(vehicles.id, entries.vehicleId),
+              eq(vehicles.organizationId, entries.organizationId),
+            ),
+          )
+          .innerJoin(
+            eventClasses,
+            and(
+              eq(eventClasses.id, entries.classId),
+              eq(eventClasses.eventId, entries.eventId),
+              eq(eventClasses.organizationId, entries.organizationId),
+            ),
+          )
+          .where(where),
+      ]);
       return {
-        entryId: rows[0]!.id,
-        startNumber: rows[0]!.requested_start_number ?? rows[0]!.id,
+        items: await attachAdminEntryDetails(
+          db,
+          ctx,
+          await projectEntryRows(
+            db,
+            ctx,
+            rows.map((row) => row.entry),
+          ),
+        ),
+        total: totals[0]?.total ?? 0,
       };
     },
-    correct: async (ctx, eventId, measurementId, input, actor) => {
-      if (!timingUuid.test(eventId) || !timingUuid.test(measurementId))
-        return null;
-      try {
-        return await db.transaction(async (transaction) => {
-          const tx = transaction as unknown as Database;
-          const found =
-            await tx.execute(sql`SELECT * FROM timing_measurement WHERE organization_id=${ctx.organizationId}
-            AND event_id=${eventId} AND id=${measurementId} AND active FOR UPDATE`);
-          const old = (found as unknown as { rows: TimingDbRow[] }).rows[0];
-          if (!old) return null;
-          await tx.execute(sql`UPDATE timing_measurement SET active=false WHERE organization_id=${ctx.organizationId}
-            AND event_id=${eventId} AND id=${measurementId}`);
-          const next = await insert(
-            tx,
-            ctx,
-            eventId,
-            {
-              entryId: input.entryId ?? old.entry_id,
-              run: input.run ?? old.run,
-              timeMs: input.timeMs ?? old.time_ms,
-              penaltyMs: input.penaltyMs ?? old.penalty_ms,
-              ...('exclusion' in input
-                ? input.exclusion
-                  ? { exclusion: input.exclusion }
-                  : {}
-                : old.exclusion
-                  ? { exclusion: old.exclusion }
-                  : {}),
-              source: input.source ?? old.source,
-              recordedAt: input.recordedAt ?? new Date().toISOString(),
-            },
-            actor,
-            old.id,
-          );
-          if (!next) throw new Error('Timing correction target not found');
-          return next;
+    transition: async (
+      ctx,
+      id,
+      transition,
+      fromStatus,
+      toStatus,
+      actor,
+      reason,
+      workflow,
+    ) =>
+      db.transaction(async (tx) => {
+        const statusColumn =
+          transition === 'verification'
+            ? entries.verificationStatus
+            : entries.acceptanceStatus;
+        const [row] = await tx
+          .update(entries)
+          .set({
+            [transition === 'verification'
+              ? 'verificationStatus'
+              : 'acceptanceStatus']: toStatus,
+          })
+          .where(
+            and(
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.id, id),
+              eq(statusColumn, fromStatus),
+              sql`${entries.deletedAt} is null`,
+            ),
+          )
+          .returning();
+        if (!row) return null;
+        await tx.insert(entryAuditEvents).values({
+          organizationId: ctx.organizationId,
+          entryId: id,
+          transition,
+          fromStatus,
+          toStatus,
+          actor,
+          reason,
+          workflowRevisionId:
+            workflow?.workflowRevisionId ?? row.workflowRevisionId!,
+          ...(workflow ? { statusCategory: workflow.statusCategory } : {}),
         });
-      } catch (error) {
-        if (isDuplicateTimingRun(error))
-          throw new Error('Duplicate timing run');
-        throw error;
-      }
+        if (transition === 'acceptance' && workflow?.notification) {
+          const [recipient] = await tx
+            .select({
+              email: sql<
+                string | null
+              >`coalesce(${registrationGroups.contactEmail}, ${people.email})`,
+              recipientName: sql<string>`concat_ws(' ', ${people.firstName}, ${people.lastName})`,
+              eventName: events.name,
+              locale: organizations.locale,
+            })
+            .from(entries)
+            .innerJoin(
+              events,
+              and(
+                eq(events.id, entries.eventId),
+                eq(events.organizationId, entries.organizationId),
+              ),
+            )
+            .innerJoin(
+              organizations,
+              eq(organizations.id, entries.organizationId),
+            )
+            .innerJoin(
+              people,
+              and(
+                eq(people.id, entries.driverPersonId),
+                eq(people.organizationId, entries.organizationId),
+              ),
+            )
+            .innerJoin(
+              registrationGroups,
+              and(
+                eq(registrationGroups.id, entries.registrationGroupId),
+                eq(registrationGroups.organizationId, entries.organizationId),
+              ),
+            )
+            .where(
+              and(
+                eq(entries.organizationId, ctx.organizationId),
+                eq(entries.id, id),
+              ),
+            )
+            .limit(1);
+          if (recipient?.email) {
+            await enqueueMailOutbox(
+              db,
+              ctx.organizationId,
+              {
+                eventId: row.eventId,
+                registrationGroupId: row.registrationGroupId,
+                templateKey: 'status-change',
+                templateVersion: 1,
+                locale: recipient.locale === 'en' ? 'en' : 'de',
+                recipient: recipient.email,
+                idempotencyKey: `entry-status:${id}:${workflow.workflowRevisionId}:${fromStatus}:${toStatus}`,
+                correlationId: ctx.correlationId,
+                variables: {
+                  recipientName: recipient.recipientName,
+                  eventName: recipient.eventName,
+                  statusKey: workflow.notification.statusKey,
+                  statusLabelDe: workflow.notification.statusLabelDe,
+                  statusLabelEn: workflow.notification.statusLabelEn,
+                },
+              },
+              tx,
+            );
+          }
+        }
+        // Return the same read model as entry detail, including the audit just written.
+        const projected = await projectEntryRows(tx, ctx, [row]);
+        return (await attachAdminEntryDetails(tx, ctx, projected))[0] ?? null;
+      }),
+    softDelete: async (ctx, id, reason) => {
+      const [row] = await db
+        .update(entries)
+        .set({ deletedAt: new Date(), deletionReason: reason })
+        .where(
+          and(
+            eq(entries.organizationId, ctx.organizationId),
+            eq(entries.id, id),
+            sql`${entries.deletedAt} is null`,
+          ),
+        )
+        .returning();
+      return row ? mapEntry(row) : null;
     },
   };
 }
