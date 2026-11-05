@@ -1,9 +1,8 @@
 import { adminFetch } from '../../auth.js';
 import { useEffect, useState } from 'react';
-import { EventSchema } from '@racepilot/contracts';
 import { WorkflowEditor } from './WorkflowEditor.js';
 
-export type Event = ReturnType<typeof EventSchema.parse>;
+export type Event = { id: string; name: string };
 export type Status = {
   key: string;
   labels: { de: string; en: string };
@@ -41,6 +40,11 @@ export function AdminWorkflow({
   useEffect(() => {
     if (!eventId) return;
     const abort = new AbortController();
+    let active = true;
+    // Loading state is scoped to this event-bound request.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setLoading(true);
+    setMessage('');
     adminFetch(
       `/admin/events/${encodeURIComponent(eventId)}/registration-workflow`,
       { credentials: 'same-origin', cache: 'no-store', signal: abort.signal },
@@ -49,28 +53,34 @@ export function AdminWorkflow({
         if (!response.ok)
           throw new Error(
             response.status === 403
-              ? 'You do not have permission to read this event workflow.'
-              : 'Workflow could not be loaded.',
+              ? 'Du darfst den Nennungsablauf dieser Veranstaltung nicht ansehen.'
+              : 'Der Nennungsablauf konnte nicht geladen werden.',
           );
         return response.json() as Promise<Revision>;
       })
       .then((value) => {
+        if (!active) return;
         setRevision(value);
         setDraft(JSON.stringify(value.workflow, null, 2));
         setMessage('');
       })
       .catch((error: Error) => {
-        if (error.name !== 'AbortError') setMessage(error.message);
+        if (active && error.name !== 'AbortError') setMessage(error.message);
       })
-      .finally(() => setLoading(false));
-    return () => abort.abort();
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+      abort.abort();
+    };
   }, [eventId]);
   async function save() {
     let workflow: Workflow;
     try {
       workflow = JSON.parse(draft) as Workflow;
     } catch {
-      setMessage('Workflow JSON is invalid.');
+      setMessage('Der Nennungsablauf ist ungültig.');
       return;
     }
     setBusy(true);
@@ -92,18 +102,20 @@ export function AdminWorkflow({
         throw new Error(
           result.details?.join(' · ') ??
             (response.status === 403
-              ? 'You do not have permission to activate this workflow.'
-              : 'Workflow validation or activation failed.'),
+              ? 'Du darfst den Nennungsablauf nicht aktivieren.'
+              : 'Der Nennungsablauf konnte nicht geprüft oder aktiviert werden.'),
         );
       setRevision(result);
       setDraft(JSON.stringify(result.workflow, null, 2));
       setReason('');
-      setMessage(`Workflow revision ${result.version} activated.`);
+      setMessage(
+        'Version ' + result.version + ' des Nennungsablaufs aktiviert.',
+      );
     } catch (error) {
       setMessage(
         error instanceof Error
           ? error.message
-          : 'Workflow could not be activated.',
+          : 'Der Nennungsablauf konnte nicht aktiviert werden.',
       );
     } finally {
       setBusy(false);

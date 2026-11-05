@@ -16,14 +16,17 @@ export type ShellModule = {
 };
 
 type EventOption = { id: string; name: string };
-type View = 'entries' | 'modules' | 'onsite' | 'account';
+type View = 'entries' | 'workflow' | 'modules' | 'onsite' | 'account';
 type NavItem = { id: View; label: string; icon: IconName; count?: string };
 type NavGroup = { label: string; items: NavItem[] };
 
 export const APP_NAVIGATION_REGISTRY: NavGroup[] = [
   {
     label: 'Veranstaltung',
-    items: [{ id: 'entries', label: 'Nennungen', icon: 'list' }],
+    items: [
+      { id: 'entries', label: 'Nennungen', icon: 'list' },
+      { id: 'workflow', label: 'Nennungsablauf', icon: 'approval' },
+    ],
   },
   {
     label: 'Vor Ort',
@@ -104,11 +107,13 @@ export function AppShell({
   const title =
     view === 'entries'
       ? 'Nennungen'
-      : view === 'modules'
-        ? 'Module'
-        : view === 'onsite'
-          ? 'Rennbetrieb'
-          : 'Einstellungen';
+      : view === 'workflow'
+        ? 'Nennungsablauf'
+        : view === 'modules'
+          ? 'Module'
+          : view === 'onsite'
+            ? 'Rennbetrieb'
+            : 'Einstellungen';
   return (
     <div
       className={`app-shell${mode === 'Rennbetrieb' ? ' is-race-mode' : ''}`}

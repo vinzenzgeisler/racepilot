@@ -28,6 +28,9 @@ describe('AppShell', () => {
     expect(
       container.querySelector('[aria-label="Veranstaltung"]'),
     ).toBeTruthy();
+    expect(
+      container.querySelector('[aria-label="Nennungsablauf"]'),
+    ).toBeTruthy();
     const event = container.querySelector<HTMLSelectElement>('#app-event')!;
     await act(async () => {
       event.value = '';
