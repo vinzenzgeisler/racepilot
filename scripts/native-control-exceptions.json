@@ -1,9 +1,4 @@
 [
-  "packages/app/src/features/entries/AdminEntries.tsx",
-  "packages/app/src/features/entries/AdminEntryDetail.tsx",
-  "packages/app/src/features/entries/AdminEntryFilters.tsx",
-  "packages/app/src/features/entries/AdminEntryList.tsx",
-  "packages/app/src/features/entries/AdminEntryPagination.tsx",
   "packages/app/src/features/modules/AdminModules.tsx",
   "packages/app/src/features/modules/ModuleSchemaFields.tsx",
   "packages/app/src/features/registration/RegistrationAppearance.tsx",
