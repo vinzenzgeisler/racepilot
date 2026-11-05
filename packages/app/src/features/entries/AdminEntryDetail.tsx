@@ -169,7 +169,12 @@ export function AdminEntryDetail({
             .map((item) => (
               <li key={item.key}>
                 <span>{item.label.de}</span>
-                <strong>{item.label.de}</strong>
+                <EntryStatusBadge
+                  status={workflow?.statuses.find(
+                    (status) => status.key === item.value,
+                  )}
+                  fallback={item.value}
+                />
               </li>
             ))}
         </ul>
