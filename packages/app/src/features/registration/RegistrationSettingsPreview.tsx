@@ -32,22 +32,31 @@ export function RegistrationSettingsPreview({
       >
         <header
           style={{
-            borderBottom: 'var(--line-section) solid var(--brand-primary)',
-            paddingBottom: 'var(--space-3)',
+            background: 'var(--brand-primary)',
+            borderRadius: 'var(--brand-radius)',
+            color: 'var(--brand-primary-text)',
+            padding: 'var(--space-3)',
           }}
         >
-          <p className="eyebrow">12.–13. JUNI 2027</p>
+          <p className="eyebrow">Beispielveranstaltung · 12.–13. Juni 2027</p>
           <h3
             style={{
-              color: 'var(--brand-primary)',
+              color: 'inherit',
               fontFamily: 'var(--font-archivo)',
             }}
           >
-            Historischer Bergpreis
+            Beispiel-Bergpreis
           </h3>
           {config.welcomeText && <p>{config.welcomeText}</p>}
         </header>
-        <p style={{ color: 'var(--brand-accent-text)' }}>
+        <p
+          style={{
+            background: 'var(--brand-accent)',
+            borderRadius: 'var(--brand-radius)',
+            color: 'var(--brand-accent-text)',
+            padding: 'var(--space-2) var(--space-3)',
+          }}
+        >
           Startgeld · Nennungsschluss
         </p>
         <Steps
