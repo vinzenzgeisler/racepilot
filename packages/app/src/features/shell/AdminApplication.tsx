@@ -5,6 +5,7 @@ import { AdminEntries } from '../entries/AdminEntries.js';
 import { AdminModules } from '../modules/AdminModules.js';
 import { AppShell, type ShellModule } from './AppShell.js';
 import { RegistrationFormSettings } from '../registration/RegistrationFormSettings.js';
+import { AdminWorkflow } from '../workflow/AdminWorkflow.js';
 import { adminFetch, restoreAdminSession, signIn } from '../../auth.js';
 
 export function AuthenticatedAdmin() {
@@ -226,6 +227,8 @@ function AdminApplication() {
               if (entry) setPreviewOpen(true);
             }}
           />
+        ) : view === 'workflow' ? (
+          <AdminWorkflow eventId={selectedEvent} events={events} />
         ) : view === 'modules' ? (
           <AdminModules
             locale={

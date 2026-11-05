@@ -12,6 +12,5 @@
   "packages/app/src/features/shell/responsive.css",
   "packages/app/src/features/shell/workspace-content.css",
   "packages/app/src/features/styles/global.css",
-  "packages/app/src/features/workflow/styles.css",
   "packages/app/src/styles.css"
 ]
