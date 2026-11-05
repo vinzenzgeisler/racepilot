@@ -1,5 +1,4 @@
 [
-  "packages/adapter-postgres/src/index.ts",
   "packages/ui/src/components.tsx",
   "packages/worker/src/mail.ts",
   "packages/ui/src/components.css"
