@@ -22,7 +22,6 @@ describe('AppShell', () => {
     );
     expect(APP_NAVIGATION_REGISTRY.map((group) => group.label)).toEqual([
       'Veranstaltung',
-      'Vor Ort',
       'Konto',
     ]);
     expect(
@@ -41,42 +40,17 @@ describe('AppShell', () => {
     await act(async () => root.unmount());
   });
 
-  it('shows enabled private modules in the dedicated individual-module group only', async () => {
+  it('hides navigation without a real destination', async () => {
     const container = document.createElement('div');
     const root = createRoot(container);
     await act(async () =>
       root.render(
-        <AppShell
-          modules={[
-            {
-              id: 'private.timer',
-              displayName: 'Zeitnahme',
-              source: 'private',
-              enabled: true,
-            },
-            {
-              id: 'private.hidden',
-              displayName: 'Inaktiv',
-              source: 'private',
-              enabled: false,
-            },
-          ]}
-        >
+        <AppShell>
           <p>Content</p>
         </AppShell>,
       ),
     );
-    expect(
-      container.querySelector('[aria-label="Module · individuell"]')
-        ?.textContent,
-    ).toContain('Zeitnahme');
-    expect(
-      container.querySelector('[aria-label="Module · individuell"]')
-        ?.textContent,
-    ).not.toContain('Inaktiv');
-    expect(
-      container.querySelector('[aria-label="Hauptnavigation"]'),
-    ).toBeTruthy();
+    expect(container.querySelector('[aria-label="Rennbetrieb"]')).toBeNull();
     expect(container.querySelector('[aria-label="Nachrichten"]')).toBeNull();
     await act(async () => root.unmount());
   });

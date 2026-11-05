@@ -30,7 +30,7 @@ export function AdminEntryPagination({
         Zurück
       </Button>
       <span>
-        Seite {totalPages === 0 ? 0 : page} von {totalPages}
+        {totalPages === 0 ? 'Keine Seiten' : `Seite ${page} von ${totalPages}`}
       </span>
       <Button
         variant="secondary"

@@ -69,6 +69,7 @@ export const EntryResponse = z
             model: z.string(),
             year: z.number().int().nullable(),
             imageUrl: z.string().nullable().optional(),
+            registration: z.string().nullable().optional(),
           })
           .strict(),
         eventClass: z.object({ code: z.string(), name: z.string() }).strict(),

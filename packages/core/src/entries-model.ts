@@ -78,7 +78,7 @@ export interface Entry {
       emailVerified: boolean;
     };
     // prettier-ignore
-    vehicle: { make: string; model: string; year: number | null; imageUrl?: string | null };
+    vehicle: { make: string; model: string; year: number | null; registration?: string | null; imageUrl?: string | null };
     eventClass: { code: string; name: string };
     startNumber: string | null;
     customAnswers: Array<{
@@ -261,6 +261,10 @@ export interface EntryRepository {
     executor?: unknown,
   ): Promise<Entry>;
   getById(ctx: RequestContext, id: string): Promise<Entry | null>;
+  countByStatus?(
+    ctx: RequestContext,
+    eventId: string,
+  ): Promise<Record<string, number>>;
   listAdmin?(
     ctx: RequestContext,
     query: EntryListQuery,
@@ -300,11 +304,8 @@ export interface EntryListQuery {
   readonly paymentStatus?:
     'open' | 'partially_paid' | 'paid' | 'not_required' | 'not_relevant';
   readonly search?: string;
-  readonly sort:
-    | 'createdAt'
-    | 'requestedStartNumber'
-    | 'acceptanceStatus'
-    | 'verificationStatus';
+  // prettier-ignore
+  readonly sort: 'createdAt' | 'requestedStartNumber' | 'acceptanceStatus' | 'verificationStatus';
   readonly direction: 'asc' | 'desc';
 }
 

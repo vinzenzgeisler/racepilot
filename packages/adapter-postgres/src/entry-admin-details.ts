@@ -174,6 +174,7 @@ export async function attachAdminEntryDetails(
       model: vehicles.model,
       year: vehicles.year,
       imageUrl: vehicles.imageUrl,
+      registration: vehicles.registration,
     })
     .from(entries)
     .innerJoin(
@@ -237,6 +238,7 @@ export async function attachAdminEntryDetails(
           model: vehicle?.model ?? '',
           year: vehicle?.year ?? null,
           imageUrl: vehicle?.imageUrl ?? null,
+          registration: vehicle?.registration ?? null,
         },
         eventClass: {
           code: eventClass?.code ?? '',

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
   Button,
   Icon,
   PageHeader,
   SelectField,
+  Wordmark,
   type IconName,
 } from '@racepilot/ui';
 
@@ -14,13 +15,18 @@ export type ShellModule = {
   enabled: boolean;
   navigationLabel?: string;
 };
-
-type EventOption = { id: string; name: string };
-type View = 'entries' | 'workflow' | 'modules' | 'onsite' | 'account';
-type NavItem = { id: View; label: string; icon: IconName; count?: string };
-type NavGroup = { label: string; items: NavItem[] };
-
-export const APP_NAVIGATION_REGISTRY: NavGroup[] = [
+type EventOption = {
+  id: string;
+  name: string;
+  slug?: string;
+  registrationClosesAt?: string | null;
+};
+type View = 'entries' | 'workflow' | 'account';
+type NavItem = { id: View; label: string; icon: IconName };
+export const APP_NAVIGATION_REGISTRY: Array<{
+  label: string;
+  items: NavItem[];
+}> = [
   {
     label: 'Veranstaltung',
     items: [
@@ -29,15 +35,10 @@ export const APP_NAVIGATION_REGISTRY: NavGroup[] = [
     ],
   },
   {
-    label: 'Vor Ort',
-    items: [{ id: 'onsite', label: 'Rennbetrieb', icon: 'approval' }],
-  },
-  {
     label: 'Konto',
     items: [{ id: 'account', label: 'Einstellungen', icon: 'more' }],
   },
 ];
-
 export function AppShell({
   children,
   preview,
@@ -45,7 +46,7 @@ export function AppShell({
   onClosePreview,
   activeEvent = '',
   events = [],
-  modules = [],
+  entryCount = 0,
   onEventChange,
 }: {
   children: ReactNode | ((view: View) => ReactNode);
@@ -54,77 +55,59 @@ export function AppShell({
   onClosePreview?: () => void;
   activeEvent?: string;
   events?: EventOption[];
-  modules?: ShellModule[];
+  entryCount?: number;
   onEventChange?: (id: string) => void;
 }) {
   const [view, setView] = useState<View>('entries');
-  const [mode, setMode] = useState<'Verwaltung' | 'Rennbetrieb'>('Verwaltung');
-
+  const selectedEvent = events.find((event) => event.id === activeEvent);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape' || !previewOpen) return;
-      onClosePreview?.();
-      document
-        .querySelector<HTMLButtonElement>('[data-selected-entry]')
-        ?.focus();
+      if (event.key === 'Escape' && previewOpen) {
+        onClosePreview?.();
+        document
+          .querySelector<HTMLButtonElement>('[data-selected-entry]')
+          ?.focus();
+      }
     };
     document.addEventListener('keydown', closeOnEscape);
     return () => document.removeEventListener('keydown', closeOnEscape);
   }, [onClosePreview, previewOpen]);
-  const enabledModules = useMemo(
-    () => modules.filter((module) => module.enabled),
-    [modules],
-  );
-  const privateModules = enabledModules.filter(
-    (module) => module.source === 'private',
-  );
-  const registeredModules = enabledModules.filter(
-    (module) => module.source !== 'private',
-  );
-  const chooseEvent = (id: string) => onEventChange?.(id);
-  const navigate = (next: View) => {
-    setView(next);
-    if (next === 'onsite') setMode('Rennbetrieb');
-  };
   const item = (entry: NavItem) => (
     <Button
-      key={`${entry.id}-${entry.label}`}
+      key={entry.id}
       variant="text"
       size={40}
       className={`app-nav-item${view === entry.id ? ' is-current' : ''}`}
       aria-current={view === entry.id ? 'page' : undefined}
       aria-label={entry.label}
-      title={entry.label}
-      onClick={() => navigate(entry.id)}
+      onClick={() => setView(entry.id)}
     >
       <span className="app-nav-icon" aria-hidden="true">
         <Icon name={entry.icon} />
       </span>
       <span className="app-nav-label">{entry.label}</span>
-      {entry.count && <span className="app-nav-count">{entry.count}</span>}
+      {entry.id === 'entries' && (
+        <span className="app-nav-count">{entryCount}</span>
+      )}
     </Button>
   );
-  const title =
-    view === 'entries'
-      ? 'Nennungen'
-      : view === 'workflow'
-        ? 'Nennungsablauf'
-        : view === 'modules'
-          ? 'Module'
-          : view === 'onsite'
-            ? 'Rennbetrieb'
-            : 'Einstellungen';
+  const closeDate = selectedEvent?.registrationClosesAt
+    ? new Intl.DateTimeFormat('de-DE', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: 'Europe/Berlin',
+      }).format(new Date(selectedEvent.registrationClosesAt))
+    : null;
   return (
-    <div
-      className={`app-shell${mode === 'Rennbetrieb' ? ' is-race-mode' : ''}`}
-    >
+    <div className="app-shell">
       <aside className="app-sidebar" aria-label="Hauptnavigation">
         <div className="app-event-picker">
+          <Wordmark variant="on-green" className="app-logo" />
           <SelectField
             id="app-event"
             label="Veranstaltung"
             value={activeEvent}
-            onChange={(event) => chooseEvent(event.target.value)}
+            onChange={(event) => onEventChange?.(event.target.value)}
           >
             <option value="">Veranstaltung wählen</option>
             {events.map((event) => (
@@ -135,7 +118,7 @@ export function AppShell({
           </SelectField>
         </div>
         <nav className="app-sidebar-nav">
-          {APP_NAVIGATION_REGISTRY.slice(0, 2).map((group) => (
+          {APP_NAVIGATION_REGISTRY.slice(0, 1).map((group) => (
             <section
               className="app-nav-group"
               key={group.label}
@@ -145,97 +128,35 @@ export function AppShell({
               {group.items.map(item)}
             </section>
           ))}
-          {registeredModules.length > 0 && (
-            <section className="app-nav-group" aria-label="Module">
-              <h2>Module</h2>
-              {registeredModules.map((module) =>
-                item({
-                  id: 'modules',
-                  label: module.navigationLabel ?? module.displayName,
-                  icon: 'document',
-                }),
-              )}
-            </section>
-          )}
-          {privateModules.length > 0 && (
-            <section
-              className="app-nav-group"
-              aria-label="Module · individuell"
-            >
-              <h2>Module · individuell</h2>
-              {privateModules.map((module) =>
-                item({
-                  id: 'modules',
-                  label: module.navigationLabel ?? module.displayName,
-                  icon: 'document',
-                }),
-              )}
-            </section>
-          )}
         </nav>
-        <Button
-          variant="text"
-          size={40}
-          className="app-account"
-          aria-current={view === 'account' ? 'page' : undefined}
-          onClick={() => navigate('account')}
-        >
-          <span className="app-nav-icon" aria-hidden="true">
-            <Icon name="more" />
-          </span>
-          <span className="app-nav-label">Konto · Einstellungen</span>
-        </Button>
+        <div className="app-account">
+          {item(APP_NAVIGATION_REGISTRY[1]!.items[0]!)}
+        </div>
       </aside>
       <div className="app-workspace">
         <PageHeader
           className="app-header"
-          title={title}
+          title={
+            view === 'entries'
+              ? 'Nennungen'
+              : view === 'workflow'
+                ? 'Nennungsablauf'
+                : 'Einstellungen'
+          }
+          description={
+            view === 'entries' && closeDate
+              ? `Nennungsschluss: ${closeDate}`
+              : undefined
+          }
           actions={
-            <div className="app-header-actions">
-              <div
-                className="app-view-switch"
-                role="group"
-                aria-label="Ansicht"
+            view === 'entries' && selectedEvent?.slug ? (
+              <a
+                className="nb-button nb-button-primary app-create-entry"
+                href={`/events/${encodeURIComponent(selectedEvent.slug)}/register`}
               >
-                <Button
-                  variant="text"
-                  size={40}
-                  aria-pressed={mode === 'Verwaltung'}
-                  onClick={() => {
-                    setMode('Verwaltung');
-                    setView('entries');
-                  }}
-                >
-                  Verwaltung
-                </Button>
-                <Button
-                  variant="text"
-                  size={40}
-                  aria-pressed={mode === 'Rennbetrieb'}
-                  onClick={() => {
-                    setMode('Rennbetrieb');
-                    setView('onsite');
-                  }}
-                >
-                  Rennbetrieb
-                </Button>
-              </div>
-              {(view === 'entries' || view === 'modules') && (
-                <Button
-                  variant="primary"
-                  size={40}
-                  onClick={() =>
-                    document
-                      .querySelector<HTMLInputElement>(
-                        '.admin-filters input, section[aria-labelledby="modules-title"] input',
-                      )
-                      ?.focus()
-                  }
-                >
-                  {view === 'entries' ? 'Startnummer suchen' : 'Modul suchen'}
-                </Button>
-              )}
-            </div>
+                Nennung anlegen ↗
+              </a>
+            ) : undefined
           }
         />
         <main className="app-main">
@@ -250,16 +171,12 @@ export function AppShell({
                 aria-label="Vorschau schließen"
                 onClick={onClosePreview}
               >
-                Schließen
+                ×
               </Button>
               {preview ?? (
                 <>
-                  <p className="app-eyebrow">VORSCHAU</p>
-                  <h2>Nennung auswählen</h2>
-                  <p>
-                    Wähle eine Zeile, um Status, Unterlagen und nächste Aktion
-                    hier zu sehen.
-                  </p>
+                  <p className="app-eyebrow">Vorschau</p>
+                  <p>Nennung auswählen</p>
                 </>
               )}
             </aside>
@@ -267,10 +184,7 @@ export function AppShell({
         </main>
       </div>
       <nav className="app-bottom-nav" aria-label="Hauptnavigation mobil">
-        {APP_NAVIGATION_REGISTRY.slice(0, 2)
-          .flatMap((group) => group.items)
-          .map(item)}
-        {item({ id: 'account', label: 'Einstellungen', icon: 'more' })}
+        {APP_NAVIGATION_REGISTRY.flatMap((group) => group.items).map(item)}
       </nav>
     </div>
   );

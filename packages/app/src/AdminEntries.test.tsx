@@ -191,6 +191,9 @@ async function click(text: string) {
     container.querySelector<HTMLButtonElement>(
       `[data-entry-action="${text}"]`,
     ) ??
+    [...container.querySelectorAll('.admin-actions button')].find(
+      (item) => item.textContent?.includes(text) ?? false,
+    ) ??
     [...container.querySelectorAll('button')].find(
       (item) => item.textContent?.includes(text) ?? false,
     );
@@ -199,14 +202,12 @@ async function click(text: string) {
   await flush();
 }
 async function submitFilters() {
-  const form = container.querySelector('.admin-filters')!;
   await act(async () => {
-    form.dispatchEvent(
-      new Event('submit', { bubbles: true, cancelable: true }),
-    );
+    await new Promise((resolve) => setTimeout(resolve, 220));
   });
   await flush();
 }
+
 function listCalls() {
   return fetchMock.mock.calls
     .map(([url]) => String(url))
@@ -449,11 +450,11 @@ describe('AdminEntries', () => {
     await click(entryA);
     await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
     await click('Angenommen');
-    await setSelect('Nennungsstatus', 'accepted');
+    await setSelect('Klasse', classA);
     await submitFilters();
     await click('Weiter');
     expect(listCalls().at(-1)).toContain('page=2');
-    expect(listCalls().at(-1)).toContain('acceptanceStatus=accepted');
+    expect(listCalls().at(-1)).toContain(`classId=${classA}`);
     const callsBeforeTransitionResolves = listCalls().length;
 
     await act(async () =>
@@ -466,7 +467,7 @@ describe('AdminEntries', () => {
     const refreshes = listCalls().slice(callsBeforeTransitionResolves);
     expect(refreshes).toHaveLength(1);
     expect(refreshes[0]).toContain('page=2');
-    expect(refreshes[0]).toContain('acceptanceStatus=accepted');
+    expect(refreshes[0]).toContain(`classId=${classA}`);
   });
 
   it('renders entry details instead of IDs and provides one next action per row', async () => {
@@ -484,7 +485,7 @@ describe('AdminEntries', () => {
     expect(firstRow.textContent).toContain('42');
     expect(firstRow.textContent).not.toContain(entryA);
     expect(
-      firstRow.querySelectorAll('.entry-row-actions > button'),
+      firstRow.querySelectorAll('.entry-open-button'),
     ).toHaveLength(1);
     expect(
       firstRow.querySelector('.nb-menu summary')?.getAttribute('aria-label'),
@@ -492,7 +493,7 @@ describe('AdminEntries', () => {
     expect(
       firstRow.querySelectorAll('.nb-menu [role=menuitem]').length,
     ).toBeGreaterThan(0);
-    expect(firstRow.querySelector('.entry-vehicle-placeholder')).not.toBeNull();
+    expect(firstRow.querySelector('.entry-image-missing')).not.toBeNull();
   });
 
   it('shows selected count and closes the wide preview with Escape; Enter opens detail', async () => {
@@ -777,7 +778,7 @@ describe('AdminEntries', () => {
     ).toBe(false);
   });
 
-  it('applies search only on submit and resets to page one for filters and sorting', async () => {
+  it('applies search immediately and resets to page one for filters and sorting', async () => {
     await mount(async (url) => {
       if (url === '/admin/events') return eventList();
       if (url.endsWith('/classes')) return classesFor(classA);

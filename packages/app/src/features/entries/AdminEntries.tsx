@@ -1,29 +1,48 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { SelectField } from '@racepilot/ui';
-import { initialQuery, type EntryQuery } from './AdminEntriesModel.js';
+import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
 import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
 export function AdminEntries({
   onSelectionChange,
+  onTotalChange,
   eventId: sharedEventId,
   onEventChange: onSharedEventChange,
 }: {
   onSelectionChange?: (entry: Entry | null) => void;
+  onTotalChange?: (total: number) => void;
   eventId?: string;
   onEventChange?: (id: string) => void;
 } = {}) {
   const [localEventId, setLocalEventId] = useState('');
   const eventId = sharedEventId ?? localEventId;
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(25);
+  const [pageSize] = useState(12);
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [draft, setDraft] = useState<EntryQuery>(initialQuery);
   const [applied, setApplied] = useState<EntryQuery>(initialQuery);
   const [selected, setSelected] = useState<Entry | null>(null);
   const [actionError, setActionError] = useState('');
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  useEffect(() => {
+    if (!eventId) return;
+    const controller = new AbortController();
+    request(`/admin/events/${encodeURIComponent(eventId)}/entry-counts`, {
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : Promise.reject()))
+      .then((data: { total: number; statuses: Record<string, number> }) => {
+        if (!controller.signal.aborted) {
+          setCounts(data.statuses);
+          onTotalChange?.(data.total);
+        }
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+  }, [eventId, refreshRevision, onTotalChange]);
   const [selection, setSelection] = useState<{
     eventId: string;
     ids: Set<string>;
@@ -55,7 +74,6 @@ export function AdminEntries({
     setBusy,
     openEntry,
     transition,
-    acceptedStatusKey,
     eligibleSelectedItems,
     bulkAccept,
     invalidateActionRequests,
@@ -71,6 +89,11 @@ export function AdminEntries({
     setActionError,
   });
   useEffect(() => onSelectionChange?.(selected), [onSelectionChange, selected]);
+  useEffect(() => {
+    const refresh = () => setRefreshRevision((value) => value + 1);
+    window.addEventListener('nennbox:entries-changed', refresh);
+    return () => window.removeEventListener('nennbox:entries-changed', refresh);
+  }, []);
   useEffect(() => {
     const handleKeys = (event: KeyboardEvent) => {
       if (
@@ -106,12 +129,17 @@ export function AdminEntries({
     document.addEventListener('keydown', handleKeys);
     return () => document.removeEventListener('keydown', handleKeys);
   }, [items, selected]);
-  function applyFilters(event: FormEvent) {
-    event.preventDefault();
-    setPage(1);
-    clearSelection();
-    setApplied({ ...draft });
-  }
+  useEffect(() => {
+    const timeout = window.setTimeout(
+      () => {
+        setPage(1);
+        clearSelection();
+        setApplied(draft);
+      },
+      draft.search ? 180 : 0,
+    );
+    return () => window.clearTimeout(timeout);
+  }, [draft]);
 
   function changeEvent(nextEventId: string) {
     resetData();
@@ -149,10 +177,7 @@ export function AdminEntries({
     return (
       <section className="admin-state">
         <h2>Anmeldung erforderlich</h2>
-        <p role="alert">
-          The API returned 401. An OIDC client session/login flow is not
-          available in this app yet.
-        </p>
+        <p role="alert">Bitte erneut anmelden.</p>
       </section>
     );
   if (apiState === 'forbidden')
@@ -166,10 +191,7 @@ export function AdminEntries({
     return (
       <section className="admin-state">
         <h2>Verwaltung nicht verfügbar</h2>
-        <p role="alert">
-          Could not load organization events. No public event data is used as a
-          fallback.
-        </p>
+        <p role="alert">Veranstaltungen konnten nicht geladen werden.</p>
       </section>
     );
 
@@ -197,7 +219,7 @@ export function AdminEntries({
         draft={draft}
         setDraft={setDraft}
         changeSort={changeSort}
-        applyFilters={applyFilters}
+        counts={counts}
         classes={classes}
         workflow={workflow}
         total={total}
@@ -206,7 +228,6 @@ export function AdminEntries({
         selectedIds={selectedIds}
         setSelection={setSelection}
         openEntry={openEntry}
-        acceptedStatusKey={acceptedStatusKey}
         eligibleSelectedItems={eligibleSelectedItems}
         busy={busy}
         clearSelection={clearSelection}
