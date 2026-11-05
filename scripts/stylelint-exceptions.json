@@ -1,4 +1,8 @@
 [
+  "packages/app/src/features/entries/admin.css",
+  "packages/app/src/features/entries/hints.css",
+  "packages/app/src/features/entries/rows.css",
+  "packages/app/src/features/entries/status.css",
   "packages/app/src/features/gallery/styles.css",
   "packages/app/src/features/modules/styles.css",
   "packages/app/src/features/registration/admin.css",
