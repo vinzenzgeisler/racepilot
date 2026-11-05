@@ -3,8 +3,9 @@ import {
   classes,
   gradientImage,
   demoCreatedAt,
-  demoWorkflow,
 } from './community-demo-data.js';
+import { ensureDemoEvent } from './community-demo-setup.js';
+import { createDemoStateHelpers } from './community-demo-states.js';
 import { and, eq, sql } from 'drizzle-orm';
 import {
   calculatePrice,
@@ -13,9 +14,6 @@ import {
 } from '@racepilot/core';
 import {
   createDatabase,
-  createEventRepository,
-  createEventClassRepository,
-  createEventClassPricingRepository,
   createPersonRepository,
   createVehicleRepository,
   createEntryRepository,
@@ -56,58 +54,19 @@ try {
     capabilities: new Set<string>(),
     correlationId: 'community-demo-seed',
   };
-  const eventRepo = createEventRepository(db);
-  let event = (await eventRepo.listByOrganization(ctx)).find(
-    (item) => item.slug === 'historischer-bergpreis-2027',
-  );
-  if (!event) {
-    event = await eventRepo.create(ctx, {
-      slug: 'historischer-bergpreis-2027',
-      name: 'Historischer Bergpreis 2027',
-      startsOn: '2027-05-22',
-      endsOn: '2027-05-23',
-      registrationOpensAt: '2026-11-01T00:00:00+01:00',
-      registrationClosesAt: '2027-05-14T23:59:00+02:00',
-    });
-    await eventRepo.transition(ctx, event.id, 'draft', 'open', new Date());
-    await createEntryWorkflowRepository(db).setEvent(
-      ctx,
-      event.id,
-      demoWorkflow,
-      'demo-seed',
-      'Designstatus für Beispieldaten',
-    );
-  }
-  const classRepo = createEventClassRepository(db);
-  const pricing = createEventClassPricingRepository(db);
-  const existingClasses = await classRepo.listByEvent(ctx, event.id);
-  const byCode = new Map(existingClasses.map((c) => [c.code, c]));
-  for (const spec of classes) {
-    let item = byCode.get(spec.code);
-    if (!item) {
-      item = await classRepo.create(ctx, event.id, {
-        code: spec.code,
-        name: spec.name,
-        vehicleType: spec.vehicleType,
-        sortOrder: spec.sortOrder,
-        maxParticipants: null,
-        closed: false,
-      });
-      byCode.set(spec.code, item);
-    }
-    await pricing.upsert(ctx, event.id, {
-      classId: item.id,
-      baseCents: spec.fee,
-      additionalEntryAdjustmentCents: 0,
-      earlyBirdDeadline: null,
-      earlyBirdDiscountCents: 0,
-    });
-  }
+  const { event, byCode } = await ensureDemoEvent(db, ctx);
   const entryRepo = createEntryRepository(db);
   const statusRepo = createEntryStatusDimensionRepository(db);
   const invoiceRepo = createInvoiceRepository(db);
   const paymentRepo = createInvoicePaymentRepository(db);
   let created = 0;
+  const { cancelInvoice, markNotRelevant } = createDemoStateHelpers(
+    db,
+    org.id,
+    ctx,
+    statusRepo,
+    invoiceRepo,
+  );
   for (const [index, row] of rows.entries()) {
     const [
       fullName,
@@ -125,7 +84,11 @@ try {
     const lastName = lastParts.join(' ');
     const email = `demo-${String(index + 1).padStart(3, '0')}@example.invalid`;
     const existing = await db
-      .select({ id: entries.id, vehicleId: entries.vehicleId })
+      .select({
+        id: entries.id,
+        vehicleId: entries.vehicleId,
+        registrationGroupId: entries.registrationGroupId,
+      })
       .from(entries)
       .innerJoin(
         people,
@@ -142,6 +105,28 @@ try {
         ),
       )
       .limit(1);
+    const eventClass = byCode.get(classCode)!;
+    const fee = classes.find((c) => c.code === classCode)!.fee;
+    const snapshot =
+      payment === 'none'
+        ? null
+        : calculatePrice({
+            currency: 'EUR',
+            submittedAt: new Date().toISOString(),
+            lines: [
+              {
+                classId: eventClass.id,
+                quantity: 1,
+                rule: {
+                  classId: eventClass.id,
+                  baseCents: fee,
+                  additionalEntryAdjustmentCents: 0,
+                  earlyBirdDeadline: null,
+                  earlyBirdDiscountCents: 0,
+                },
+              },
+            ],
+          });
     if (existing.length) {
       await db
         .update(entries)
@@ -163,6 +148,15 @@ try {
             sql`${vehicles.imageUrl} is null`,
           ),
         );
+      await markNotRelevant({
+        entryId: existing[0]!.id,
+        registrationGroupId: existing[0]!.registrationGroupId,
+        eventId: event.id,
+        snapshot,
+        payment,
+        technical,
+        waiver,
+      });
       continue;
     }
     const person = await createPersonRepository(db).create(ctx, {
@@ -188,28 +182,6 @@ try {
         contactEmail: email,
       })
       .returning();
-    const eventClass = byCode.get(classCode)!;
-    const fee = classes.find((c) => c.code === classCode)!.fee;
-    const snapshot =
-      payment === 'none'
-        ? null
-        : calculatePrice({
-            currency: 'EUR',
-            submittedAt: new Date().toISOString(),
-            lines: [
-              {
-                classId: eventClass.id,
-                quantity: 1,
-                rule: {
-                  classId: eventClass.id,
-                  baseCents: fee,
-                  additionalEntryAdjustmentCents: 0,
-                  earlyBirdDeadline: null,
-                  earlyBirdDiscountCents: 0,
-                },
-              },
-            ],
-          });
     const entry = await entryRepo.create!(ctx, {
       eventId: event.id,
       classId: eventClass.id,
@@ -250,7 +222,7 @@ try {
         'Beispielstatus',
         { entries: entryRepo, workflows: createEntryWorkflowRepository(db) },
       );
-    if (technical !== 'pending' && technical !== 'not_relevant')
+    if (technical !== 'pending')
       await statusRepo.transition(
         ctx,
         entry.id,
@@ -259,7 +231,7 @@ try {
         'demo-seed',
         'Beispielabnahme',
       );
-    if (waiver !== 'f_pending' && waiver !== 'not_relevant')
+    if (waiver !== 'f_pending')
       await statusRepo.transition(
         ctx,
         entry.id,
@@ -275,6 +247,7 @@ try {
         group!.id,
         snapshot,
       );
+      if (payment === 'cancelled') await cancelInvoice(invoice.id);
       if (payment === 'paid')
         await paymentRepo.record(
           ctx,

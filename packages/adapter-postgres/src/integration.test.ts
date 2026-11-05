@@ -1588,7 +1588,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           email: 'same@example.test',
           emailVerified: false,
         },
-        vehicle: { make: 'X', model: 'Y', year: null },
+        vehicle: { make: 'X', model: 'Y', year: null, imageUrl: null },
         eventClass: { code: 'A', name: 'A' },
         startNumber: 'A-01',
         customAnswers: [],
