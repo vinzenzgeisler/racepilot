@@ -1,74 +1,86 @@
 .admin-entries label,
 .admin-detail label {
   display: grid;
-  gap: 0.35rem;
-  font-weight: 600;
+  gap: var(--space-1);
+  font: var(--text-label);
 }
+
 .admin-entries select,
 .admin-entries input,
 .admin-entries button,
 .admin-detail textarea,
 .admin-detail button {
-  font: inherit;
-  min-height: 2.5rem;
-  padding: 0.4rem 0.65rem;
+  font: var(--text-body);
+  min-height: var(--target-min);
+  padding: var(--space-2) var(--space-3);
 }
+
 .admin-actions,
 .admin-pagination {
   display: flex;
   align-items: end;
-  gap: 0.75rem;
+  gap: var(--space-3);
   flex-wrap: wrap;
-  margin-block: 1rem;
+  margin-block: var(--space-4);
 }
+
 .admin-table-wrap {
   overflow-x: auto;
   border: 1px solid var(--color-line);
-  background: white;
+  background: var(--color-sage);
 }
+
 .admin-table-wrap table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
 }
+
 .admin-table-wrap th,
 .admin-table-wrap td {
-  padding: 0.7rem;
-  border-bottom: 1px solid var(--color-line);
+  padding: var(--space-3);
+  border-bottom: var(--space-1) solid var(--color-line);
   white-space: nowrap;
 }
+
 .link-button {
   border: 0;
   background: none;
-  color: var(--color-green);
+  color: var(--color-ink);
   text-decoration: underline;
   cursor: pointer;
 }
+
 .admin-pagination {
   justify-content: center;
   align-items: center;
 }
+
 .admin-detail,
 .admin-state {
-  margin-block: 2rem;
-  padding: 1rem;
-  background: white;
+  margin-block: var(--space-8);
+  padding: var(--space-4);
+  background: var(--color-sage);
   border: 1px solid var(--color-line);
   border-radius: 0;
 }
+
 .admin-detail dl {
   display: grid;
   grid-template-columns: minmax(10rem, 1fr) 2fr;
-  gap: 0.5rem 1rem;
+  gap: var(--space-2) var(--space-4);
   overflow-wrap: anywhere;
 }
+
 .admin-detail dt {
-  font-weight: 700;
+  font: var(--text-label);
 }
+
 .admin-detail textarea {
-  min-height: 5rem;
+  min-height: 7rem;
 }
+
 .admin-dependency {
   color: var(--color-graphite);
-  font-size: 0.9rem;
+  font-size: var(--type-small-size);
 }

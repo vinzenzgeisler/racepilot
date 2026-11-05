@@ -1,0 +1,22 @@
+.nb-split-pane {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(14rem, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+}
+.nb-split-aside.nb-sticky {
+  position: sticky;
+  top: var(--space-4);
+}
+@media (max-width: 48rem) {
+  .nb-split-pane {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+  .nb-aside-first-mobile .nb-split-aside {
+    order: -1;
+  }
+  .nb-split-aside.nb-sticky {
+    position: static;
+  }
+}

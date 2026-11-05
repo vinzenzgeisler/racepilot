@@ -27,3 +27,4 @@ export * from './dialog/Dialog.js';
 export * from './banner/Banner.js';
 export * from './empty-state/EmptyState.js';
 export * from './layout/Layout.js';
+export * from './layout/SplitPane.js';

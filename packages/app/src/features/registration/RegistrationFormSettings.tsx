@@ -1,4 +1,11 @@
 import { adminFetch } from '../../auth.js';
+import {
+  Button,
+  PageHeader,
+  SelectField,
+  SplitPane,
+  Stack,
+} from '@racepilot/ui';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import {
   defaultRegistrationFormConfig,
@@ -10,6 +17,11 @@ import {
 } from '@racepilot/contracts';
 import { RegistrationAppearance } from './RegistrationAppearance.js';
 import { RegistrationCustomFields } from './RegistrationCustomFields.js';
+import { RegistrationSettingsPreview } from './RegistrationSettingsPreview.js';
+import {
+  RegistrationFeatureOptions,
+  RegistrationFormOptions,
+} from './RegistrationFormOptions.js';
 
 const fieldLabels: Record<string, string> = {
   dateOfBirth: 'Geburtsdatum',
@@ -189,16 +201,14 @@ export function RegistrationFormSettings({ eventId }: { eventId: string }) {
       </section>
     );
   return (
-    <section
-      className="registration-admin"
-      aria-labelledby="registration-admin-title"
-    >
-      <h2 id="registration-admin-title">
-        Nennformular · Erscheinungsbild und Felder
-      </h2>
-      <label>
-        Geltungsbereich
-        <select
+    <section aria-labelledby="registration-admin-title">
+      <Stack gap={4}>
+        <PageHeader
+          id="registration-admin-title"
+          title="Nennformular · Erscheinungsbild und Felder"
+        />
+        <SelectField
+          label="Geltungsbereich"
           value={scope}
           onChange={(e) => setScope(e.target.value as typeof scope)}
         >
@@ -206,96 +216,48 @@ export function RegistrationFormSettings({ eventId }: { eventId: string }) {
           <option value="event" disabled={!eventId}>
             Veranstaltung · überschreibt Organisation
           </option>
-        </select>
-      </label>
-      <RegistrationAppearance
-        activeConfig={activeConfig}
-        updateConfig={updateConfig}
-        change={change}
-        upload={upload}
-      />
-      <h3>Felder · Pflicht, freiwillig oder aus</h3>
-      <div className="registration-admin-fields">
-        {Object.entries(activeConfig.fields).map(([key, field]) => (
-          <label key={key}>
-            {fieldLabels[key] ?? key}
-            {key === 'dateOfBirth' ? (
-              <span>
-                Pflicht · für Alters- und Erziehungsberechtigtenprüfung
-              </span>
-            ) : (
-              <select
-                value={field.state}
-                onChange={(e) =>
-                  updateConfig((x) => ({
-                    ...x,
-                    fields: {
-                      ...x.fields,
-                      [key]: { state: e.target.value as typeof field.state },
-                    },
-                  }))
-                }
-              >
-                <option value="required">Pflicht</option>
-                <option value="optional">Freiwillig</option>
-                <option value="hidden">Aus</option>
-              </select>
-            )}
-          </label>
-        ))}
-      </div>
-      <RegistrationCustomFields
-        activeConfig={activeConfig}
-        updateConfig={updateConfig}
-        updateCustomField={updateCustomField}
-        change={change}
-      />
-      <h3>Veranstaltungsoptionen</h3>
-      <label>
-        <input
-          type="checkbox"
-          checked={activeConfig.features.passenger}
-          onChange={(e) =>
-            updateConfig((x) => ({
-              ...x,
-              features: { ...x.features, passenger: e.target.checked },
-            }))
+        </SelectField>
+        <SplitPane
+          asideFirstOnMobile
+          stickyAside
+          main={
+            <Stack gap={4}>
+              <RegistrationAppearance
+                activeConfig={activeConfig}
+                updateConfig={updateConfig}
+                change={change}
+                upload={upload}
+              />
+              <RegistrationFormOptions
+                config={activeConfig}
+                updateConfig={updateConfig}
+                fieldLabels={fieldLabels}
+              />
+              <RegistrationCustomFields
+                activeConfig={activeConfig}
+                updateConfig={updateConfig}
+                updateCustomField={updateCustomField}
+                change={change}
+              />
+              <RegistrationFeatureOptions
+                config={activeConfig}
+                updateConfig={updateConfig}
+              />
+              <div>
+                <Button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void save()}
+                >
+                  {busy ? 'Wird gespeichert …' : 'Änderungen speichern'}
+                </Button>
+              </div>
+            </Stack>
           }
+          aside={<RegistrationSettingsPreview config={activeConfig} />}
         />
-        Beifahrer
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={activeConfig.features.spareVehicle}
-          onChange={(e) =>
-            updateConfig((x) => ({
-              ...x,
-              features: { ...x.features, spareVehicle: e.target.checked },
-            }))
-          }
-        />
-        Ersatzfahrzeug
-      </label>
-      <label>
-        <input
-          type="checkbox"
-          checked={activeConfig.features.multipleEntries}
-          onChange={(e) =>
-            updateConfig((x) => ({
-              ...x,
-              features: { ...x.features, multipleEntries: e.target.checked },
-            }))
-          }
-        />
-        Mehrere Starts
-      </label>
-      <div className="registration-actions">
-        <button type="button" disabled={busy} onClick={() => void save()}>
-          {busy ? 'Wird gespeichert …' : 'Änderungen speichern'}
-        </button>
-      </div>
-      {message && <p role="status">{message}</p>}
+        {message && <p role="status">{message}</p>}
+      </Stack>
     </section>
   );
 }

@@ -1,108 +1,120 @@
 /* NENNBOX authenticated work shell — A1/A6 */
 body:has(.app-shell) {
   margin: 0;
-  background: #fff;
+  background: var(--surface-panel);
 }
+
 .app-shell {
   --sidebar-width: 248px;
+
   min-height: 100vh;
   display: grid;
   grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
-  background: #fff;
+  background: var(--surface-panel);
 }
+
 .app-sidebar {
   position: sticky;
   inset-block-start: 0;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: var(--color-green);
-  color: var(--color-ivory);
+  background: var(--brand-action);
+  color: var(--surface-page);
   z-index: 2;
 }
+
 .app-event-picker {
-  padding: 20px 16px 16px;
-  border-bottom: 1px solid rgb(245 244 238 / 28%);
+  padding: var(--space-6) var(--space-4) var(--space-4);
+  border-bottom: var(--space-1) solid var(--overlay-sidebar-border);
 }
+
 .app-event-picker .nb-field > span {
   display: block;
-  margin-bottom: 8px;
-  font: 500 11px/1.4 var(--font-mono);
-  letter-spacing: 0.08em;
+  margin-bottom: var(--space-2);
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
   color: var(--color-mint);
 }
+
 .app-event-picker select {
   width: 100%;
   min-height: 44px;
-  padding: 8px;
-  color: var(--color-ivory);
+  padding: var(--space-2);
+  color: var(--surface-page);
   background: var(--color-night);
-  border: 1px solid rgb(245 244 238 / 32%);
+  border: 1px solid var(--overlay-sidebar-border);
   border-radius: 0;
-  font: inherit;
+  font: var(--text-body);
 }
+
 .app-sidebar-nav {
   flex: 1;
   overflow-y: auto;
-  padding: 8px;
+  padding: var(--space-2);
 }
+
 .app-nav-group {
-  margin-block: 12px 20px;
+  margin-block: var(--space-3) var(--space-6);
 }
+
 .app-nav-group h2 {
-  margin: 0 8px 6px;
+  margin: 0 var(--space-2) var(--space-2);
   color: var(--color-mint);
-  font: 500 11px/1.5 var(--font-mono);
-  letter-spacing: 0.08em;
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
   text-transform: uppercase;
 }
+
 .app-nav-item,
 .app-account {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-3);
   width: 100%;
   min-width: 44px;
   min-height: 44px;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 0;
   border-radius: 0;
   color: inherit;
   background: transparent;
   text-align: left;
-  font: 500 14px/1.2 var(--font-plex);
+  font: var(--text-body);
   cursor: pointer;
 }
-.app-nav-item:hover,
-.app-account:hover {
-  background: rgb(245 244 238 / 10%);
-}
+
 .app-nav-item.is-current {
-  color: var(--color-ivory);
+  color: var(--surface-page);
   background: var(--color-night);
   box-shadow: inset 3px 0 var(--color-signal);
 }
+
 .app-nav-icon {
   display: inline-grid;
   width: 24px;
   height: 24px;
   flex: 0 0 24px;
   place-items: center;
-  font-size: 19px;
+  font-size: var(--type-h4-size-app);
 }
+
 .app-nav-count {
   margin-left: auto;
-  font: 500 12px var(--font-mono);
+  font: var(--text-label);
 }
+
 .app-account {
   margin-top: auto;
   min-height: 56px;
-  border-top: 1px solid rgb(245 244 238 / 28%);
+  border-top: var(--space-1) solid var(--overlay-sidebar-border);
 }
+
 .app-workspace {
   min-width: 0;
 }
+
 .app-header {
   position: sticky;
   inset-block-start: 0;
@@ -110,92 +122,116 @@ body:has(.app-shell) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
+  gap: var(--space-6);
   height: 64px;
-  padding-inline: 32px;
-  background: #fff;
-  border-bottom: 1px solid var(--color-ink);
+  padding-inline: var(--space-8);
+  background: var(--surface-panel);
+  border-bottom: var(--space-1) solid var(--color-ink);
 }
+
 .app-header h1 {
   margin: 0;
   color: var(--color-ink);
-  font: 700 28px/1 var(--font-archivo);
-  letter-spacing: -0.035em;
+  font: var(--weight-bold) 28px/1 var(--font-archivo);
+  letter-spacing: var(--type-h1-tracking);
 }
+
 .app-header-actions,
 .app-view-switch {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
+
 .app-view-switch {
   border: 1px solid var(--color-line);
 }
+
 .app-view-switch button {
   min-height: 44px;
-  padding: 8px 12px;
+  padding: var(--space-2) var(--space-3);
   border: 0;
-  background: white;
+  background: var(--surface-panel);
   color: var(--color-ink);
-  font: 500 14px var(--font-plex);
+  font: var(--text-body);
   cursor: pointer;
 }
+
 .app-view-switch button[aria-pressed='true'] {
   background: var(--color-sage);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
+
 .app-header .nb-button {
   min-height: 44px;
 }
+
 .app-main {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 24px;
+  gap: var(--space-6);
   min-width: 0;
-  padding: 32px;
+  padding: var(--space-8);
 }
+
 .app-main-content {
   min-width: 0;
 }
+
 .app-main-content > * {
   max-width: none;
 }
+
 .app-main-content form:not(.admin-filters),
 .app-main-content .admin-detail {
   max-width: 720px;
 }
+
 .app-main-content .admin-entries {
   margin-top: 0;
 }
+
+.app-preview h2 {
+  margin: var(--space-2) 0;
+  font: var(--weight-bold) var(--type-h2-size-app) var(--font-archivo);
+}
+
 .app-main-content .admin-entries > h2 {
   display: none;
 }
+
 .app-main-content .admin-table-wrap {
   border-inline: 0;
 }
+
 .app-preview {
   display: none;
   min-width: 0;
-  padding: 24px;
-  background: var(--color-ivory);
-  border-left: 1px solid var(--color-line);
+  padding: var(--space-6);
+  background: var(--surface-page);
+  border-left: var(--space-1) solid var(--color-line);
 }
-.app-preview h2 {
-  margin: 8px 0;
-  font: 700 22px var(--font-archivo);
-}
+
 .app-preview p {
   max-width: 42ch;
   color: var(--color-graphite);
 }
+
 .app-eyebrow {
-  font: 500 11px var(--font-mono);
-  letter-spacing: 0.08em;
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
 }
+
 .app-bottom-nav {
   display: none;
 }
+
 .app-shell :focus-visible {
   outline: 3px solid var(--color-marshal-text);
   outline-offset: 3px;
+}
+
+.app-nav-item:hover,
+.app-account:hover {
+  background: var(--overlay-sidebar-hover);
 }

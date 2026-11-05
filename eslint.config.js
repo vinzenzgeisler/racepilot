@@ -78,8 +78,12 @@ export default tseslint.config(
     files: ['packages/app/src/**/*.tsx'],
     rules: { 'no-restricted-syntax': ['error', ...nativeControlSelectors] },
   },
-  {
-    files: nativeControlExceptions,
-    rules: { 'no-restricted-syntax': 'off' },
-  },
+  ...(nativeControlExceptions.length
+    ? [
+        {
+          files: nativeControlExceptions,
+          rules: { 'no-restricted-syntax': 'off' },
+        },
+      ]
+    : []),
 );
