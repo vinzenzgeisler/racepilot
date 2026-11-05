@@ -209,7 +209,9 @@ test('Community registration and admin lifecycle with API setup', async ({
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto('/app');
-  await page.getByLabel('Veranstaltung wechseln').selectOption(event.id);
+  await page
+    .getByRole('combobox', { name: 'Veranstaltung' })
+    .selectOption(event.id);
   await expect(page.getByText(participant)).toBeVisible();
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: participant });

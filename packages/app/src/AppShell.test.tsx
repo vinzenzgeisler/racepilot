@@ -23,7 +23,6 @@ describe('AppShell', () => {
     expect(APP_NAVIGATION_REGISTRY.map((group) => group.label)).toEqual([
       'Veranstaltung',
       'Vor Ort',
-      'Kommunikation',
       'Konto',
     ]);
     expect(
@@ -75,6 +74,7 @@ describe('AppShell', () => {
     expect(
       container.querySelector('[aria-label="Hauptnavigation"]'),
     ).toBeTruthy();
+    expect(container.querySelector('[aria-label="Nachrichten"]')).toBeNull();
     await act(async () => root.unmount());
   });
   it('closes the wide preview with Escape and keeps navigation keyboard focusable', async () => {

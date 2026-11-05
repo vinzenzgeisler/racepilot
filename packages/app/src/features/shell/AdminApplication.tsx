@@ -230,17 +230,7 @@ function AdminApplication() {
           />
         ) : view === 'account' ? (
           <RegistrationFormSettings eventId={selectedEvent} />
-        ) : (
-          <section className="app-empty-view">
-            <h2>
-              {view === 'communication' ? 'Nachrichten' : 'Einstellungen'}
-            </h2>
-            <p>
-              Dieser Bereich ist in dieser Veranstaltung noch nicht
-              eingerichtet.
-            </p>
-          </section>
-        )
+        ) : null
       }
     </AppShell>
   );

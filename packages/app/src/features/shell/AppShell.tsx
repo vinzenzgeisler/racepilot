@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Button, Icon, type IconName } from '@racepilot/ui';
+import {
+  Button,
+  Icon,
+  PageHeader,
+  SelectField,
+  type IconName,
+} from '@racepilot/ui';
 
 export type ShellModule = {
   id: string;
@@ -10,7 +16,7 @@ export type ShellModule = {
 };
 
 type EventOption = { id: string; name: string };
-type View = 'entries' | 'modules' | 'onsite' | 'communication' | 'account';
+type View = 'entries' | 'modules' | 'onsite' | 'account';
 type NavItem = { id: View; label: string; icon: IconName; count?: string };
 type NavGroup = { label: string; items: NavItem[] };
 
@@ -22,10 +28,6 @@ export const APP_NAVIGATION_REGISTRY: NavGroup[] = [
   {
     label: 'Vor Ort',
     items: [{ id: 'onsite', label: 'Rennbetrieb', icon: 'approval' }],
-  },
-  {
-    label: 'Kommunikation',
-    items: [{ id: 'communication', label: 'Nachrichten', icon: 'mail' }],
   },
   {
     label: 'Konto',
@@ -82,9 +84,10 @@ export function AppShell({
     if (next === 'onsite') setMode('Rennbetrieb');
   };
   const item = (entry: NavItem) => (
-    <button
+    <Button
       key={`${entry.id}-${entry.label}`}
-      type="button"
+      variant="text"
+      size={40}
       className={`app-nav-item${view === entry.id ? ' is-current' : ''}`}
       aria-current={view === entry.id ? 'page' : undefined}
       aria-label={entry.label}
@@ -96,7 +99,7 @@ export function AppShell({
       </span>
       <span className="app-nav-label">{entry.label}</span>
       {entry.count && <span className="app-nav-count">{entry.count}</span>}
-    </button>
+    </Button>
   );
   const title =
     view === 'entries'
@@ -105,22 +108,16 @@ export function AppShell({
         ? 'Module'
         : view === 'onsite'
           ? 'Rennbetrieb'
-          : view === 'communication'
-            ? 'Nachrichten'
-            : 'Einstellungen';
+          : 'Einstellungen';
   return (
     <div
       className={`app-shell${mode === 'Rennbetrieb' ? ' is-race-mode' : ''}`}
     >
       <aside className="app-sidebar" aria-label="Hauptnavigation">
         <div className="app-event-picker">
-          <label htmlFor="app-event">Veranstaltung</label>
-          <span className="app-event-switch-icon" aria-hidden="true">
-            <Icon name="calendar" />
-          </span>
-          <select
+          <SelectField
             id="app-event"
-            aria-label="Veranstaltung wechseln"
+            label="Veranstaltung"
             value={activeEvent}
             onChange={(event) => chooseEvent(event.target.value)}
           >
@@ -130,10 +127,10 @@ export function AppShell({
                 {event.name}
               </option>
             ))}
-          </select>
+          </SelectField>
         </div>
         <nav className="app-sidebar-nav">
-          {APP_NAVIGATION_REGISTRY.slice(0, 3).map((group) => (
+          {APP_NAVIGATION_REGISTRY.slice(0, 2).map((group) => (
             <section
               className="app-nav-group"
               key={group.label}
@@ -171,88 +168,85 @@ export function AppShell({
             </section>
           )}
         </nav>
-        <button
-          type="button"
+        <Button
+          variant="text"
+          size={40}
           className="app-account"
+          aria-current={view === 'account' ? 'page' : undefined}
           onClick={() => navigate('account')}
         >
           <span className="app-nav-icon" aria-hidden="true">
             <Icon name="more" />
           </span>
           <span className="app-nav-label">Konto · Einstellungen</span>
-        </button>
+        </Button>
       </aside>
       <div className="app-workspace">
-        <header className="app-header">
-          <h1>{title}</h1>
-          <div className="app-header-actions">
-            <div className="app-view-switch" role="group" aria-label="Ansicht">
-              <button
-                type="button"
-                aria-pressed={mode === 'Verwaltung'}
-                onClick={() => {
-                  setMode('Verwaltung');
-                  setView('entries');
-                }}
+        <PageHeader
+          className="app-header"
+          title={title}
+          actions={
+            <div className="app-header-actions">
+              <div
+                className="app-view-switch"
+                role="group"
+                aria-label="Ansicht"
               >
-                Verwaltung
-              </button>
-              <button
-                type="button"
-                aria-pressed={mode === 'Rennbetrieb'}
-                onClick={() => {
-                  setMode('Rennbetrieb');
-                  setView('onsite');
-                }}
-              >
-                Rennbetrieb
-              </button>
+                <Button
+                  variant="text"
+                  size={40}
+                  aria-pressed={mode === 'Verwaltung'}
+                  onClick={() => {
+                    setMode('Verwaltung');
+                    setView('entries');
+                  }}
+                >
+                  Verwaltung
+                </Button>
+                <Button
+                  variant="text"
+                  size={40}
+                  aria-pressed={mode === 'Rennbetrieb'}
+                  onClick={() => {
+                    setMode('Rennbetrieb');
+                    setView('onsite');
+                  }}
+                >
+                  Rennbetrieb
+                </Button>
+              </div>
+              {(view === 'entries' || view === 'modules') && (
+                <Button
+                  variant="primary"
+                  size={40}
+                  onClick={() =>
+                    document
+                      .querySelector<HTMLInputElement>(
+                        '.admin-filters input, section[aria-labelledby="modules-title"] input',
+                      )
+                      ?.focus()
+                  }
+                >
+                  {view === 'entries' ? 'Startnummer suchen' : 'Modul suchen'}
+                </Button>
+              )}
             </div>
-            {(view === 'entries' || view === 'modules') && (
-              <Button
-                variant="primary"
-                size={40}
-                onClick={() =>
-                  document
-                    .querySelector<HTMLInputElement>(
-                      '.admin-filters input, section[aria-labelledby="modules-title"] input',
-                    )
-                    ?.focus()
-                }
-              >
-                {view === 'entries' ? 'Startnummer suchen' : 'Modul suchen'}
-              </Button>
-            )}
-          </div>
-        </header>
-        <div className="app-filter-bar" aria-label="Filter">
-          <span>Filter</span>
-          <button
-            type="button"
-            className="app-filter-clear"
-            onClick={() =>
-              document
-                .querySelector<HTMLSelectElement>('.admin-filters select')
-                ?.focus()
-            }
-          >
-            Filter in der Liste öffnen
-          </button>
-        </div>
+          }
+        />
         <main className="app-main">
           <div className="app-main-content">
             {typeof children === 'function' ? children(view) : children}
           </div>
           {view === 'entries' && previewOpen && (
             <aside className="app-preview" aria-label="Nennungsvorschau">
-              <button
+              <Button
+                variant="text"
                 className="app-preview-close"
-                type="button"
                 aria-label="Vorschau schließen"
                 onClick={onClosePreview}
               >
-                ×
-              </button>
+                Schließen
+              </Button>
               {preview ?? (
                 <>
                   <p className="app-eyebrow">VORSCHAU</p>
@@ -268,10 +262,10 @@ export function AppShell({
         </main>
       </div>
       <nav className="app-bottom-nav" aria-label="Hauptnavigation mobil">
-        {APP_NAVIGATION_REGISTRY.slice(0, 3)
+        {APP_NAVIGATION_REGISTRY.slice(0, 2)
           .flatMap((group) => group.items)
           .map(item)}
-        {item({ id: 'account', label: 'Mehr', icon: 'more' })}
+        {item({ id: 'account', label: 'Einstellungen', icon: 'more' })}
       </nav>
     </div>
   );

@@ -24,7 +24,7 @@ body:has(.app-shell) {
   padding: 20px 16px 16px;
   border-bottom: 1px solid rgb(245 244 238 / 28%);
 }
-.app-event-picker label {
+.app-event-picker .nb-field > span {
   display: block;
   margin-bottom: 8px;
   font: 500 11px/1.4 var(--font-mono);
@@ -146,43 +146,6 @@ body:has(.app-shell) {
 }
 .app-header .nb-button {
   min-height: 44px;
-}
-.app-filter-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 56px;
-  padding: 8px 32px;
-  background: var(--color-ivory);
-  border-bottom: 1px solid var(--color-line);
-  font-size: 13px;
-}
-.app-filter-bar > span {
-  margin-right: 8px;
-  font: 500 11px var(--font-mono);
-  text-transform: uppercase;
-}
-.app-filter-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 12px;
-  min-height: 36px;
-  padding: 6px 10px;
-  border: 1px solid var(--color-line);
-  border-radius: 0;
-  background: #fff;
-  color: var(--color-ink);
-  font: 400 13px var(--font-plex);
-  cursor: pointer;
-}
-.app-filter-clear {
-  min-height: 44px;
-  margin-left: auto;
-  border: 0;
-  background: transparent;
-  color: var(--color-graphite);
-  text-decoration: underline;
-  cursor: pointer;
 }
 .app-main {
   display: grid;
