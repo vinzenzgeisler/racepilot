@@ -21,6 +21,17 @@
   --space-6: 24px;
   --space-8: 32px;
   --space-12: 48px;
+  --tracking-label: var(--type-label-tracking);
+  --text-body: 400 var(--type-body-size-app)/var(--type-body-app-line)
+    var(--font-plex);
+  --text-label: 500 var(--type-label-size-app)/var(--type-label-line)
+    var(--font-mono);
+  --text-heading-4: 600 var(--type-h4-size-app)/var(--type-h4-line)
+    var(--font-archivo);
+  --text-app-h1: 800 var(--type-h1-size-app)/var(--type-h1-line)
+    var(--font-archivo);
+  --text-app-h2: 700 var(--type-h2-size-app)/var(--type-h2-line)
+    var(--font-archivo);
   --radius: 0;
   --line-section: 2px;
   --line-group: 1px;

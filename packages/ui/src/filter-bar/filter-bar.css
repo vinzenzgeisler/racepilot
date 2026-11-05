@@ -1,0 +1,21 @@
+.nb-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-block: 1px solid var(--color-line);
+  background: var(--color-ivory);
+}
+.nb-filter-bar > div {
+  display: flex;
+  flex: 1 1 auto;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.nb-filter-bar .nb-filter-actions {
+  flex: 0 0 auto;
+}

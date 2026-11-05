@@ -1,0 +1,35 @@
+.nb-file-upload {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-body);
+}
+.nb-file-upload > label {
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.nb-file-upload input[type='file'] {
+  width: 100%;
+  min-height: 44px;
+  padding: var(--space-2);
+  border: 1px solid var(--color-line);
+  background: var(--color-white);
+  color: var(--color-ink);
+  font: inherit;
+}
+.nb-file-upload input::file-selector-button {
+  min-height: 40px;
+  margin-inline-end: var(--space-3);
+  padding-inline: var(--space-3);
+  border: 1px solid var(--color-green);
+  background: var(--color-ivory);
+  color: var(--color-green);
+  font: inherit;
+}
+.nb-file-upload input:focus-visible {
+  outline: 3px solid var(--color-marshal);
+  outline-offset: 3px;
+}
+.nb-file-error {
+  color: var(--color-marshal-text);
+}

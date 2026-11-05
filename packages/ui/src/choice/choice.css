@@ -1,0 +1,47 @@
+.nb-choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  cursor: pointer;
+}
+.nb-choice input {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-green);
+}
+.nb-choice input[type='radio'] {
+  border-radius: 50%;
+}
+.nb-switch input {
+  appearance: none;
+  width: 40px;
+  height: 24px;
+  border: 1px solid var(--color-graphite);
+  background: var(--color-white);
+  position: relative;
+  cursor: pointer;
+}
+.nb-switch input::before {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  top: 3px;
+  background: var(--color-graphite);
+  transition: transform 120ms;
+}
+.nb-switch input:checked {
+  background: var(--color-green);
+}
+.nb-switch input:checked::before {
+  background: var(--color-mint);
+  transform: translateX(16px);
+}
+.nb-choice input {
+  min-height: 20px;
+}
+.nb-switch input {
+  min-height: 24px;
+}

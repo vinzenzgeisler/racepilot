@@ -1,0 +1,12 @@
+.nb-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+}
+.nb-pagination > span {
+  min-width: 8ch;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}

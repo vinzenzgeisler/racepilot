@@ -1,0 +1,18 @@
+.nb-start-light {
+  display: inline-flex;
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid var(--color-line);
+}
+.nb-start-light i {
+  width: 9px;
+  height: 9px;
+  border: 1px solid var(--color-graphite);
+  background: var(--color-white);
+}
+.nb-light-loading i:first-child {
+  background: var(--color-marshal);
+}
+.nb-light-go i:last-child {
+  background: var(--color-signal);
+}

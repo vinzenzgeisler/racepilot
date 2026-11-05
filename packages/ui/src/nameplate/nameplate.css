@@ -1,0 +1,15 @@
+.nb-nameplate {
+  display: inline-grid;
+  gap: 2px;
+  border-left: 3px solid var(--color-green);
+  padding: 6px 10px;
+  background: var(--color-ivory);
+}
+.nb-nameplate strong {
+  font-family: var(--font-archivo);
+  font-size: 18px;
+}
+.nb-nameplate small {
+  font: 11px var(--font-mono);
+  color: var(--color-graphite);
+}

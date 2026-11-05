@@ -1,7 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
-const css = readFileSync(new URL('../components.css', import.meta.url), 'utf8');
+const css =
+  readFileSync(new URL('../button/button.css', import.meta.url), 'utf8') +
+  readFileSync(new URL('../shared.css', import.meta.url), 'utf8');
 
 describe('button interaction cascade', () => {
   it('scopes interactive hover, focus and active states to enabled buttons', () => {
@@ -26,10 +28,10 @@ describe('button interaction cascade', () => {
 
   it('preserves disabled colors without allowing hover/focus rules to override them', () => {
     expect(css).toContain(
-      '.nb-button:disabled {\n  background: #d3d8d2;\n  color: #5f6863;',
+      '.nb-button:disabled {\n  background: var(--color-sage);\n  color: var(--color-graphite);',
     );
     expect(css).toContain(
-      '.nb-primary-dark:disabled {\n  background: #2e4f42;\n  color: #9fb3a8;',
+      '.nb-primary-dark:disabled {\n  background: var(--color-green);\n  color: var(--color-mint);',
     );
   });
 });

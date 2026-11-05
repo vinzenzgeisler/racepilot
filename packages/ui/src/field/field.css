@@ -1,0 +1,30 @@
+.nb-field {
+  display: grid;
+  gap: 6px;
+  max-width: 100%;
+  font-size: 14px;
+}
+.nb-field input,
+.nb-field select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid var(--color-graphite);
+  padding: 8px 12px;
+  background: var(--color-white);
+  color: var(--color-ink);
+}
+.nb-field small {
+  font-size: 12px;
+}
+.nb-error {
+  color: var(--color-marshal-text);
+}
+.nb-field [aria-invalid='true'] {
+  border: 2px solid var(--color-marshal-text);
+}
+.nb-field input,
+.nb-field select {
+  min-height: 48px;
+  height: 48px;
+  box-sizing: border-box;
+}

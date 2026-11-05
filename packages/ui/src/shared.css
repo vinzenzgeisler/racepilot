@@ -1,0 +1,115 @@
+.nb-button,
+.nb-field input,
+.nb-field select,
+.nb-menu summary,
+.nb-menu [role='menu'],
+.nb-toast,
+.nb-selection,
+.nb-table th,
+.nb-table td,
+.nb-nameplate,
+.nb-data-field {
+  border-radius: 0;
+  box-shadow: none;
+}
+.nb-text {
+  border-color: transparent;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.nb-text::before {
+  display: none;
+}
+.nb-field > span,
+.nb-data-field > span {
+  font: 500 11px/1.4 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.nb-toast,
+.nb-selection {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-height: 56px;
+  padding: 10px 16px;
+  border: 1px solid var(--color-line);
+  background: var(--color-white);
+}
+.nb-toast button,
+.nb-selection button {
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: var(--color-green);
+  text-decoration: underline;
+  cursor: pointer;
+}
+@media (prefers-reduced-motion: reduce) {
+  .nb-button,
+  .nb-button::before,
+  .nb-button-signal,
+  .nb-switch input::before {
+    transition: none !important;
+  }
+}
+/* M6/A2 conformance refinements */
+.nb-button:focus-visible,
+.nb-menu summary:focus-visible,
+.nb-field input:focus-visible,
+.nb-field select:focus-visible,
+.nb-choice input:focus-visible,
+.nb-menu-disclosure button:focus-visible,
+.nb-toast button:focus-visible,
+.nb-selection button:focus-visible {
+  outline: 3px solid var(--color-marshal);
+  outline-offset: 3px;
+  z-index: 2;
+}
+html[data-nb-selection-bar='visible'] {
+  --nb-selection-height: 72px;
+}
+@media (max-width: 600px) {
+  .nb-gallery-grid {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+  }
+  .nb-gallery-grid > * {
+    min-width: 0;
+  }
+  .nb-selection {
+    justify-content: flex-start;
+    gap: 8px;
+  }
+  .nb-selection strong {
+    width: 100%;
+  }
+  .nb-toast {
+    right: 8px;
+    left: 8px;
+    max-width: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nb-button,
+  .nb-button::before,
+  .nb-button-signal,
+  .nb-switch input::before {
+    transition: none !important;
+  }
+}
+@media (max-width: 600px) {
+  .nb-steps {
+    flex-wrap: wrap;
+  }
+  .nb-selection button {
+    max-width: 100%;
+    min-width: 0;
+    white-space: normal;
+    text-align: left;
+  }
+}
