@@ -239,7 +239,7 @@ test('Community registration and admin lifecycle with API setup', async ({
     .getByRole('button', { name: /Angenommen|Zugelassen|Annehmen/i })
     .click();
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
-    /angenommen|zugelassen/i,
+    /zugelassen|angenommen/i,
   );
 
   // Resolve the invoice id using the local Community DB; payment itself is exercised through the requested API.

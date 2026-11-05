@@ -3,6 +3,10 @@ import { Button, Textarea } from '@racepilot/ui';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from './AdminEntriesModel.js';
 import { EntryStatusBadge } from './EntryStatusBadge.js';
+import {
+  formatEntryHistoryActor,
+  formatEntryHistoryLabel,
+} from './EntryHistoryLabel.js';
 
 export function AdminEntryDetail({
   selected,
@@ -182,7 +186,8 @@ export function AdminEntryDetail({
                   timeZone: 'Europe/Berlin',
                 }).format(new Date(event.occurredAt))}
               </time>{' '}
-              · {event.label} · {event.actor}
+              · {formatEntryHistoryLabel(event.kind, event.label, workflow)} ·{' '}
+              {formatEntryHistoryActor(event.actor)}
               {event.detail ? ` — ${event.detail}` : ''}
             </li>
           ))}
