@@ -123,6 +123,7 @@ function AdminApplication() {
           <EntryPreview
             entry={selectedEntry}
             busy={previewBusy}
+            onClose={closePreview}
             onNextAction={async (status) => {
               setPreviewBusy(true);
               try {

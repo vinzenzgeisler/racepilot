@@ -1,106 +1,81 @@
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import { Button, StatusLabel } from '@racepilot/ui';
+import {
+  ActionPanel,
+  Button,
+  DocumentList,
+  HistoryTimeline,
+  PreviewPanel,
+  StatusLabel,
+} from '@racepilot/ui';
 
 export function EntryPreview({
   entry,
   onNextAction,
+  onClose,
   busy,
 }: {
   entry: Entry;
   onNextAction: (status: string) => Promise<void>;
+  onClose: () => void;
   busy: boolean;
 }) {
   const details = entry.adminDetails;
   const status = entry.statusProjection?.dimensions;
   const next = status?.find((item) => item.key === 'entry')?.nextAction;
+  const documents =
+    details?.customAnswers
+      .filter((answer) => answer.fileDownloadUrl)
+      .map((answer) => ({
+        id: answer.key,
+        label: answer.label,
+        href: answer.fileDownloadUrl!,
+        status: <StatusLabel status="done" label="Vorhanden" />,
+      })) ?? [];
+  const history =
+    entry.adminHistory?.map((item) => ({
+      id: item.id,
+      time: new Intl.DateTimeFormat('de-DE', {
+        dateStyle: 'short',
+        timeStyle: 'short',
+        timeZone: 'Europe/Berlin',
+      }).format(new Date(item.occurredAt)),
+      content: (
+        <>
+          <strong>{item.label}</strong>
+          {item.detail && <p>{item.detail}</p>}
+        </>
+      ),
+    })) ?? [];
   return (
-    <div className="entry-preview-content">
-      <p className="app-eyebrow">Vorschau</p>
-      <div className="entry-preview-heading">
-        <strong>{entry.requestedStartNumber ?? entry.adminDetails?.startNumber ?? '—'}</strong>
-        <div>
-          <h2 className="entry-preview-name">
-            {details?.driver.name ?? 'Name nicht verfügbar'}
-          </h2>
-          <p className="entry-preview-subtitle">
-            {details
-              ? `${details.vehicle.make} ${details.vehicle.model}`
-              : 'Fahrzeug nicht verfügbar'}
-            {details?.eventClass.name ? ` · ${details.eventClass.name}` : ''}
-          </p>
-        </div>
-      </div>
-      <div className="entry-preview-labels">
-        {status
-          ?.filter((item) => ['entry', 'payment'].includes(item.key))
-          .map((item) => (
-            <StatusLabel
-              key={item.key}
-              status={item.meaning}
-              label={item.label.de}
-            />
-          ))}
-      </div>
-      {details?.vehicle.imageUrl ? (
-        <img
-          className="app-preview-vehicle"
-          src={details.vehicle.imageUrl}
-          alt="Fahrzeugbild"
-        />
-      ) : (
-        <div className="app-preview-vehicle">Kein Fahrzeugbild verfügbar</div>
-      )}
-      <section className="entry-preview-documents">
-        <h3>Unterlagen</h3>
-        <p className="entry-preview-note">
-          Unterlagenstatus ist für diese Nennung noch nicht verfügbar.
-        </p>
-        <dl>
-          {status
-            ?.filter((item) =>
-              ['technical_inspection', 'waiver'].includes(item.key),
-            )
-            .map((item) => (
-              <div className="entry-preview-document" key={item.key}>
-                <dt>
-                  {item.key === 'waiver'
-                    ? 'Haftverzicht'
-                    : 'Technische Abnahme'}
-                </dt>
-                <dd>
-                  <StatusLabel status={item.meaning} label={item.label.de} />
-                </dd>
-              </div>
-            ))}
-        </dl>
-      </section>
-      <section className="entry-preview-action">
-        <p className="app-eyebrow">Nächster Schritt</p>
-        {next ? (
-          <>
-            <Button
-              variant="primary"
-              size={40}
-              disabled={busy}
-              onClick={() => void onNextAction(next.key)}
-            >
-              {next.label.de}
-            </Button>
-            <p>
-              Der Status wird protokolliert; die Nennung bleibt vollständig
-              prüfbar.
-            </p>
-          </>
-        ) : (
-          <p className="entry-preview-hint">
-            Keine weitere Statusaktion verfügbar.
-          </p>
-        )}
-      </section>
-      <div className="entry-preview-footer">
+    <PreviewPanel
+      eyebrow="Vorschau"
+      number={entry.requestedStartNumber ?? details?.startNumber ?? null}
+      title={details?.driver.name ?? 'Name nicht verfügbar'}
+      subtitle={
+        details
+          ? `${details.vehicle.make} ${details.vehicle.model} · ${details.eventClass.name}`
+          : 'Fahrzeug nicht verfügbar'
+      }
+      imageUrl={details?.vehicle.imageUrl ?? null}
+      imageAlt="Fahrzeugbild"
+      labels={status
+        ?.filter((item) =>
+          ['entry', 'payment', 'technical_inspection', 'waiver'].includes(
+            item.key,
+          ),
+        )
+        .map((item) => (
+          <StatusLabel
+            key={item.key}
+            status={item.meaning}
+            label={item.label.de}
+          />
+        ))}
+      onClose={onClose}
+      closeLabel="Vorschau schließen"
+      footer={
         <Button
           variant="secondary"
-          size={40}
           onClick={() =>
             document
               .querySelector('.admin-detail')
@@ -109,10 +84,33 @@ export function EntryPreview({
         >
           Vollständig öffnen
         </Button>
-      </div>
-      <p className="entry-preview-keys">
-        ↑ ↓ Wechseln · Enter öffnen · Esc schließen
-      </p>
-    </div>
+      }
+    >
+      <DocumentList
+        title="Unterlagen"
+        items={documents}
+        empty={<p>Keine hochgeladenen Unterlagen vorhanden.</p>}
+      />
+      <ActionPanel
+        title="Nächster Schritt"
+        hint={
+          next ? 'Die Entscheidung wird im Verlauf protokolliert.' : ''
+        }
+        action={
+          next ? (
+            <Button disabled={busy} onClick={() => void onNextAction(next.key)}>
+              {next.label.de}
+            </Button>
+          ) : (
+            <p>Keine weitere Statusaktion verfügbar.</p>
+          )
+        }
+      />
+      <HistoryTimeline
+        title="Verlauf"
+        items={history}
+        empty={<p>Noch kein Verlauf vorhanden.</p>}
+      />
+    </PreviewPanel>
   );
 }

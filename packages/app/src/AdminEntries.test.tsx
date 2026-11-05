@@ -191,10 +191,10 @@ async function click(text: string) {
     container.querySelector<HTMLButtonElement>(
       `[data-entry-action="${text}"]`,
     ) ??
-    [...container.querySelectorAll('.admin-actions button')].find(
-      (item) => item.textContent?.includes(text) ?? false,
-    ) ??
-    [...container.querySelectorAll('button')].find(
+    [
+      ...container.querySelectorAll<HTMLButtonElement>('.admin-actions button'),
+    ].find((item) => item.textContent?.includes(text) ?? false) ??
+    [...container.querySelectorAll<HTMLButtonElement>('button')].find(
       (item) => item.textContent?.includes(text) ?? false,
     );
   if (!button) throw new Error(`Button not found: ${text}`);
@@ -484,9 +484,7 @@ describe('AdminEntries', () => {
     expect(firstRow.textContent).toContain('Touring A');
     expect(firstRow.textContent).toContain('42');
     expect(firstRow.textContent).not.toContain(entryA);
-    expect(
-      firstRow.querySelectorAll('.entry-open-button'),
-    ).toHaveLength(1);
+    expect(firstRow.querySelectorAll('.entry-open-button')).toHaveLength(1);
     expect(
       firstRow.querySelector('.nb-menu summary')?.getAttribute('aria-label'),
     ).toBe('Weitere Aktionen');
@@ -768,7 +766,9 @@ describe('AdminEntries', () => {
       ).click(),
     );
     await flush();
-    const actions = [...container.querySelectorAll('.admin-actions button')];
+    const actions = [
+      ...container.querySelectorAll<HTMLButtonElement>('.admin-actions button'),
+    ];
     expect(actions).toHaveLength(1);
     expect(actions[0]?.textContent).toContain('Angenommen');
     expect(

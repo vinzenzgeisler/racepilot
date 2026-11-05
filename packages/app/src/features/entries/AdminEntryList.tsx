@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import { Button, DataTable } from '@racepilot/ui';
+import { DataTable, SelectionBar, Tabs } from '@racepilot/ui';
 import type {
   ApiState,
   EntryQuery,
@@ -61,83 +61,21 @@ export function AdminEntryList(props: Props) {
   } = props;
   if (!eventId) return null;
   const countAll = Object.values(counts).reduce((sum, value) => sum + value, 0);
-  return (
+  const content = (
     <>
-      <AdminEntryFilters
-        draft={draft}
-        setDraft={setDraft}
-        changeSort={changeSort}
-        classes={classes}
-      />
-      <nav className="entry-status-tabs" aria-label="Nennungsstatus">
-        <Button
-          variant="text"
-          size={32}
-          className={!draft.acceptanceStatus ? 'is-active' : ''}
-          onClick={() =>
-            setDraft((value) => ({ ...value, acceptanceStatus: '' }))
-          }
-        >
-          Alle <strong>{countAll}</strong>
-        </Button>
-        {[...(workflow?.statuses ?? [])]
-          .sort(
-            (a, b) =>
-              [
-                'pending',
-                'waitlisted',
-                'accepted',
-                'rejected',
-                'withdrawn',
-              ].indexOf(a.category) -
-              [
-                'pending',
-                'waitlisted',
-                'accepted',
-                'rejected',
-                'withdrawn',
-              ].indexOf(b.category),
-          )
-          .map((status) => (
-            <Button
-              key={status.key}
-              variant="text"
-              size={32}
-              className={
-                draft.acceptanceStatus === status.key ? 'is-active' : ''
-              }
-              onClick={() =>
-                setDraft((value) => ({
-                  ...value,
-                  acceptanceStatus: status.key,
-                }))
-              }
-            >
-              {status.labels.de} <strong>{counts[status.key] ?? 0}</strong>
-            </Button>
-          ))}
-      </nav>
       <AdminEntryListStatus apiState={apiState} total={total} />
       <DataTable
-        headers={[]}
-        className="admin-table-wrap"
-        header={
-          <tr>
-            <th className="entry-select-col">
-              <span className="sr-only">Auswahl</span>
-            </th>
-            <th>Nennung</th>
-            <th>Klasse</th>
-            <th>Nr.</th>
-            <th>Status</th>
-            <th>Zahlung</th>
-            <th>Abnahme</th>
-            <th>Haftverzicht</th>
-            <th>
-              <span className="sr-only">Aktionen</span>
-            </th>
-          </tr>
-        }
+        headers={[
+          'Auswahl',
+          'Nennung',
+          'Klasse',
+          'Nr.',
+          'Status',
+          'Zahlung',
+          'Abnahme',
+          'Haftverzicht',
+          'Aktion',
+        ]}
       >
         {apiState === 'ready' &&
           items.map((entry) => (
@@ -159,28 +97,6 @@ export function AdminEntryList(props: Props) {
           </tr>
         )}
       </DataTable>
-      {selectedIds.size > 0 && (
-        <div
-          className="entry-selection-bar"
-          role="toolbar"
-          aria-label="Massenaktionen"
-        >
-          <strong>
-            {selectedIds.size} von {total} ausgewählt
-          </strong>
-          <Button variant="text" size={40} onClick={clearSelection}>
-            Auswahl aufheben
-          </Button>
-          <Button
-            variant="primary"
-            size={40}
-            disabled={busy || eligibleSelectedItems.length === 0}
-            onClick={() => void bulkAccept()}
-          >
-            Zulassen ({eligibleSelectedItems.length} von {selectedIds.size})
-          </Button>
-        </div>
-      )}
       <AdminEntryPagination
         page={page}
         totalPages={totalPages}
@@ -188,6 +104,46 @@ export function AdminEntryList(props: Props) {
         clearSelection={clearSelection}
         setPage={setPage}
       />
+    </>
+  );
+  const tabs = [
+    { id: 'all', label: `Alle ${countAll}`, content },
+    ...(workflow?.statuses ?? []).map((status) => ({
+      id: status.key,
+      label: `${status.labels.de} ${counts[status.key] ?? 0}`,
+      content,
+    })),
+  ];
+  return (
+    <>
+      <AdminEntryFilters
+        draft={draft}
+        setDraft={setDraft}
+        changeSort={changeSort}
+        classes={classes}
+      />
+      <Tabs
+        tabs={tabs}
+        selected={draft.acceptanceStatus || 'all'}
+        label="Nennungsstatus"
+        onChange={(id) =>
+          setDraft((value) => ({
+            ...value,
+            acceptanceStatus: id === 'all' ? '' : id,
+          }))
+        }
+      />
+      {selectedIds.size > 0 && (
+        <SelectionBar
+          label="Massenaktionen"
+          summary={`${selectedIds.size} von ${total} ausgewählt`}
+          clearLabel="Auswahl aufheben"
+          onClear={clearSelection}
+          actionLabel={`Zulassen (${eligibleSelectedItems.length} von ${selectedIds.size})`}
+          actionDisabled={busy || eligibleSelectedItems.length === 0}
+          onAction={() => void bulkAccept()}
+        />
+      )}
     </>
   );
 }

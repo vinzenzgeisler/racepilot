@@ -30,7 +30,7 @@ describe('AppShell', () => {
     expect(
       container.querySelector('[aria-label="Nennungsablauf"]'),
     ).toBeTruthy();
-    const event = container.querySelector<HTMLSelectElement>('#app-event')!;
+    const event = container.querySelector<HTMLSelectElement>('select')!;
     await act(async () => {
       event.value = '';
       event.dispatchEvent(new Event('change', { bubbles: true }));

@@ -1,9 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Button,
-  Icon,
+  AdminNavigation,
+  AdminWorkspace,
   PageHeader,
-  SelectField,
+  PreviewPanel,
   Wordmark,
   type IconName,
 } from '@racepilot/ui';
@@ -72,25 +72,6 @@ export function AppShell({
     document.addEventListener('keydown', closeOnEscape);
     return () => document.removeEventListener('keydown', closeOnEscape);
   }, [onClosePreview, previewOpen]);
-  const item = (entry: NavItem) => (
-    <Button
-      key={entry.id}
-      variant="text"
-      size={40}
-      className={`app-nav-item${view === entry.id ? ' is-current' : ''}`}
-      aria-current={view === entry.id ? 'page' : undefined}
-      aria-label={entry.label}
-      onClick={() => setView(entry.id)}
-    >
-      <span className="app-nav-icon" aria-hidden="true">
-        <Icon name={entry.icon} />
-      </span>
-      <span className="app-nav-label">{entry.label}</span>
-      {entry.id === 'entries' && (
-        <span className="app-nav-count">{entryCount}</span>
-      )}
-    </Button>
-  );
   const closeDate = selectedEvent?.registrationClosesAt
     ? new Intl.DateTimeFormat('de-DE', {
         dateStyle: 'short',
@@ -99,43 +80,30 @@ export function AppShell({
       }).format(new Date(selectedEvent.registrationClosesAt))
     : null;
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar" aria-label="Hauptnavigation">
-        <div className="app-event-picker">
-          <Wordmark variant="on-green" className="app-logo" />
-          <SelectField
-            id="app-event"
-            label="Veranstaltung"
-            value={activeEvent}
-            onChange={(event) => onEventChange?.(event.target.value)}
-          >
-            <option value="">Veranstaltung wählen</option>
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.name}
-              </option>
-            ))}
-          </SelectField>
-        </div>
-        <nav className="app-sidebar-nav">
-          {APP_NAVIGATION_REGISTRY.slice(0, 1).map((group) => (
-            <section
-              className="app-nav-group"
-              key={group.label}
-              aria-label={group.label}
-            >
-              <h2>{group.label}</h2>
-              {group.items.map(item)}
-            </section>
-          ))}
-        </nav>
-        <div className="app-account">
-          {item(APP_NAVIGATION_REGISTRY[1]!.items[0]!)}
-        </div>
-      </aside>
-      <div className="app-workspace">
+    <AdminWorkspace
+      navigation={
+        <AdminNavigation
+          brand={<Wordmark variant="on-green" />}
+          ariaLabel="Hauptnavigation"
+          eventLabel="Veranstaltung"
+          eventPlaceholder="Veranstaltung wählen"
+          events={events.map((event) => ({ id: event.id, label: event.name }))}
+          selectedEvent={activeEvent}
+          onEventChange={(id) => onEventChange?.(id)}
+          groups={APP_NAVIGATION_REGISTRY.map((group) => ({
+            label: group.label,
+            items: group.items.map((item) => ({
+              ...item,
+              ...(item.id === 'entries' ? { count: entryCount } : {}),
+            })),
+          }))}
+          current={view}
+          onNavigate={(id) => setView(id as View)}
+          user={<span>Angemeldet · Veranstalter</span>}
+        />
+      }
+      header={
         <PageHeader
-          className="app-header"
           title={
             view === 'entries'
               ? 'Nennungen'
@@ -151,7 +119,7 @@ export function AppShell({
           actions={
             view === 'entries' && selectedEvent?.slug ? (
               <a
-                className="nb-button nb-button-primary app-create-entry"
+                className="nb-button nb-primary nb-size-40"
                 href={`/events/${encodeURIComponent(selectedEvent.slug)}/register`}
               >
                 Nennung anlegen ↗
@@ -159,33 +127,18 @@ export function AppShell({
             ) : undefined
           }
         />
-        <main className="app-main">
-          <div className="app-main-content">
-            {typeof children === 'function' ? children(view) : children}
-          </div>
-          {view === 'entries' && previewOpen && (
-            <aside className="app-preview" aria-label="Nennungsvorschau">
-              <Button
-                variant="text"
-                className="app-preview-close"
-                aria-label="Vorschau schließen"
-                onClick={onClosePreview}
-              >
-                ×
-              </Button>
-              {preview ?? (
-                <>
-                  <p className="app-eyebrow">Vorschau</p>
-                  <p>Nennung auswählen</p>
-                </>
-              )}
-            </aside>
-          )}
-        </main>
-      </div>
-      <nav className="app-bottom-nav" aria-label="Hauptnavigation mobil">
-        {APP_NAVIGATION_REGISTRY.flatMap((group) => group.items).map(item)}
-      </nav>
-    </div>
+      }
+      preview={
+        view === 'entries' && previewOpen
+          ? (preview ?? (
+              <PreviewPanel eyebrow="Vorschau" title="Nennung auswählen" />
+            ))
+          : undefined
+      }
+      previewLabel="Nennungsvorschau"
+      mobilePreviewOpen={view === 'entries' && previewOpen && Boolean(preview)}
+    >
+      {typeof children === 'function' ? children(view) : children}
+    </AdminWorkspace>
   );
 }

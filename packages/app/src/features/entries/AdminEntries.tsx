@@ -197,7 +197,12 @@ export function AdminEntries({
 
   return (
     <section className="admin-entries" aria-labelledby="admin-entries-title">
-      <h2 id="admin-entries-title">Nennungen</h2>
+      <h2
+        id="admin-entries-title"
+        className={onSharedEventChange ? 'nb-visually-hidden' : undefined}
+      >
+        Nennungen
+      </h2>
       {!onSharedEventChange && (
         <SelectField
           label="Veranstaltung"

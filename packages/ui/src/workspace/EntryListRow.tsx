@@ -3,6 +3,7 @@ import { Checkbox } from '../choice/Choice.js';
 export function EntryListRow({
   name,
   vehicle,
+  hints,
   imageUrl,
   imageAlt = '',
   className,
@@ -20,6 +21,7 @@ export function EntryListRow({
 }: {
   name: string;
   vehicle: string;
+  hints?: ReactNode;
   imageUrl?: string | null;
   imageAlt?: string;
   className: string;
@@ -57,10 +59,26 @@ export function EntryListRow({
               —
             </span>
           )}
-          <span>
-            <strong>{name}</strong>
-            <small>{vehicle}</small>
-          </span>
+          {onOpen ? (
+            <button
+              className="nb-entry-list-open"
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen();
+              }}
+            >
+              <strong>{name}</strong>
+              <small>{vehicle}</small>
+              {hints}
+            </button>
+          ) : (
+            <span>
+              <strong>{name}</strong>
+              <small>{vehicle}</small>
+              {hints}
+            </span>
+          )}
         </div>
       </td>
       <td>{className}</td>

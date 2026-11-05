@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import {
   Button,
-  Checkbox,
+  EntryListRow,
   HintLabel,
   Menu,
   MenuItem,
@@ -46,119 +46,78 @@ export function AdminEntryRow({
   workflow: WorkflowView | null;
   openEntry: (id: string) => Promise<void>;
 }) {
+  const details = entry.adminDetails;
+  const name = details?.driver.name ?? 'Name nicht verfügbar';
+  const vehicle = details
+    ? `${details.vehicle.make} ${details.vehicle.model}${details.vehicle.registration ? ` · ${details.vehicle.registration}` : ''}`
+    : 'Fahrzeug nicht verfügbar';
+  const next = entry.statusProjection?.dimensions.find(
+    (item) => item.key === 'entry',
+  )?.nextAction;
   return (
-    <tr
-      key={entry.id}
-      className={`entry-row${selected?.id === entry.id ? ' is-selected' : ''}`}
-      onClick={() => void openEntry(entry.id)}
-    >
-      <td
-        className="entry-select-col"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <Checkbox
-          visuallyHiddenLabel
-          label={`${entry.adminDetails?.driver.name ?? 'Nennung'} auswählen`}
-          checked={selectedIds.has(entry.id)}
-          onChange={(event) =>
-            setSelection((current) => {
-              const next = new Set(
-                current.eventId === eventId ? current.ids : [],
-              );
-              if (event.target.checked) next.add(entry.id);
-              else next.delete(entry.id);
-              return { eventId, ids: next };
-            })
-          }
-        />
-      </td>
-      <td>
-        <div className="entry-person-cell">
-          {entry.adminDetails?.vehicle.imageUrl ? (
-            <img
-              className="entry-vehicle-image"
-              src={entry.adminDetails.vehicle.imageUrl}
-              alt=""
-            />
-          ) : (
-            <span
-              className="entry-vehicle-image entry-image-missing"
-              aria-label="Kein Fahrzeugbild"
-            >
-              —
-            </span>
-          )}
-          <div className="entry-person-text">
-            <strong className="entry-driver-name">
-              {entry.adminDetails?.driver.name ?? 'Name nicht verfügbar'}
-            </strong>
-            <small>
-              {entry.adminDetails
-                ? `${entry.adminDetails.vehicle.make} ${entry.adminDetails.vehicle.model}`
-                : 'Fahrzeug nicht verfügbar'}
-              {entry.adminDetails?.vehicle.registration
-                ? ` · ${entry.adminDetails.vehicle.registration}`
-                : ''}
-            </small>
-            {entry.statusProjection?.hints
-              .filter((hint) => hint.present)
-              .map((hint) => (
-                <HintLabel key={hint.key}>
-                  {hint.key === 'double_starter'
-                    ? 'Doppelstarter'
-                    : hint.key === 'passenger'
-                      ? 'Beifahrer'
-                      : 'Nachnennung'}
-                </HintLabel>
-              ))}
-          </div>
-        </div>
-      </td>
-      <td>
-        {entry.adminDetails?.eventClass.name ??
-          classes.find((item) => item.id === entry.classId)?.name ??
-          '—'}
-      </td>
-      <td>
-        <strong className="app-start-number">
-          {entry.requestedStartNumber ?? entry.adminDetails?.startNumber ?? '—'}
-        </strong>
-      </td>
-      <td>
+    <EntryListRow
+      name={name}
+      vehicle={vehicle}
+      imageUrl={details?.vehicle.imageUrl ?? null}
+      imageAlt="Fahrzeugbild"
+      hints={entry.statusProjection?.hints
+        .filter((hint) => hint.present)
+        .map((hint) => (
+          <HintLabel key={hint.key}>
+            {hint.key === 'double_starter'
+              ? 'Doppelstarter'
+              : hint.key === 'passenger'
+                ? 'Beifahrer'
+                : 'Nachnennung'}
+          </HintLabel>
+        ))}
+      className={
+        details?.eventClass.name ??
+        classes.find((item) => item.id === entry.classId)?.name ??
+        '—'
+      }
+      number={entry.requestedStartNumber ?? details?.startNumber ?? null}
+      selected={selected?.id === entry.id}
+      selectLabel={`${name} auswählen`}
+      onSelect={(checked) =>
+        setSelection((current) => {
+          const ids = new Set(current.eventId === eventId ? current.ids : []);
+          if (checked) ids.add(entry.id);
+          else ids.delete(entry.id);
+          return { eventId, ids };
+        })
+      }
+      onOpen={() => void openEntry(entry.id)}
+      status={
         <EntryStatusBadge
           status={workflow?.statuses.find(
             (status) => status.key === entry.acceptanceStatus,
           )}
           fallback={entry.acceptanceStatus}
         />
-      </td>
-      <td>
-        <Dimension entry={entry} keyName="payment" />
-      </td>
-      <td>
-        <Dimension entry={entry} keyName="technical_inspection" />
-      </td>
-      <td>
-        <Dimension entry={entry} keyName="waiver" />
-      </td>
-      <td onClick={(event) => event.stopPropagation()}>
+      }
+      payment={<Dimension entry={entry} keyName="payment" />}
+      inspection={<Dimension entry={entry} keyName="technical_inspection" />}
+      waiver={<Dimension entry={entry} keyName="waiver" />}
+      nextAction={
         <Button
           variant="text"
           size={32}
           data-selected-entry={selected?.id === entry.id ? true : undefined}
           data-entry-action={entry.id}
-          className="entry-open-button"
           onClick={() => void openEntry(entry.id)}
-          aria-label={`${entry.adminDetails?.driver.name ?? 'Nennung'} öffnen`}
+          aria-label={`${name}: ${next?.label.de ?? 'Öffnen'}`}
         >
-          Öffnen
+          {next?.label.de ?? 'Öffnen'}
         </Button>
-        <Menu label="Weitere Aktionen">
+      }
+      menu={
+        <Menu label={`Weitere Aktionen für ${name}`}>
           <MenuItem onClick={() => void openEntry(entry.id)}>
             Vorschau öffnen
           </MenuItem>
         </Menu>
-      </td>
-    </tr>
+      }
+    />
   );
 }
