@@ -29,4 +29,10 @@
 @import url('./empty-state/empty-state.css');
 @import url('./layout/layout.css');
 @import url('./layout/split-pane.css');
-@import url('./workspace/workspace.css');
+@import url('./workspace/admin-workspace.css');
+@import url('./workspace/admin-navigation.css');
+@import url('./workspace/entry-list-row.css');
+@import url('./workspace/preview-panel.css');
+@import url('./workspace/action-panel.css');
+@import url('./workspace/document-list.css');
+@import url('./workspace/history-timeline.css');

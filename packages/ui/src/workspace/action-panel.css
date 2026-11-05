@@ -1,0 +1,21 @@
+.nb-action-panel {
+  padding: var(--space-3);
+  border-top: 2px solid var(--color-green);
+  background: var(--color-white);
+}
+.nb-action-panel h3,
+.nb-document-list h3,
+.nb-history-timeline h3 {
+  margin: 0 0 var(--space-2);
+  font: var(--text-label);
+  text-transform: uppercase;
+}
+.nb-action-panel p {
+  margin: 0 0 var(--space-3);
+  color: var(--color-graphite);
+}
+.nb-action-panel-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
