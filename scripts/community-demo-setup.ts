@@ -1,9 +1,11 @@
+import { defaultEntryStatusDimensionConfig } from '@racepilot/core';
 import { classes, demoWorkflow } from './community-demo-data.js';
 import {
   createEventRepository,
   createEventClassRepository,
   createEventClassPricingRepository,
   createEntryWorkflowRepository,
+  createEntryStatusDimensionRepository,
   type createDatabase,
 } from '@racepilot/adapter-postgres';
 
@@ -11,6 +13,41 @@ type Db = Awaited<ReturnType<typeof createDatabase>>['db'];
 type DemoContext = Parameters<
   ReturnType<typeof createEventRepository>['listByOrganization']
 >[0];
+
+const demoStatusLabels: Record<string, Record<string, string>> = {
+  payment: {
+    open: 'Offen',
+    partially_paid: 'Teilweise bezahlt',
+    paid: 'Bezahlt',
+    not_required: 'Keine',
+    not_relevant: '–',
+  },
+  technical_inspection: {
+    pending: 'Ausstehend',
+    reinspection: 'Nachprüfung',
+    passed: 'Bestanden',
+    not_relevant: '–',
+  },
+  waiver: {
+    f_pending: 'F · Ausstehend',
+    f_signed: 'F · Signiert',
+    bf_signed: 'BF · Signiert',
+    not_relevant: '–',
+  },
+};
+const demoStatusConfig = {
+  ...defaultEntryStatusDimensionConfig,
+  dimensions: defaultEntryStatusDimensionConfig.dimensions.map((dimension) => ({
+    ...dimension,
+    values: dimension.values.map((value) => ({
+      ...value,
+      labels: {
+        ...value.labels,
+        de: demoStatusLabels[dimension.key]?.[value.key] ?? value.labels.de,
+      },
+    })),
+  })),
+};
 
 export async function ensureDemoEvent(db: Db, ctx: DemoContext) {
   const eventRepo = createEventRepository(db);
@@ -60,5 +97,15 @@ export async function ensureDemoEvent(db: Db, ctx: DemoContext) {
       earlyBirdDiscountCents: 0,
     });
   }
+  const statusRepo = createEntryStatusDimensionRepository(db);
+  const current = await statusRepo.getEvent(ctx, event.id);
+  if (JSON.stringify(current) !== JSON.stringify(demoStatusConfig))
+    await statusRepo.setEvent(
+      { ...ctx, permissions: new Set([...ctx.permissions, 'event:write']) },
+      event.id,
+      demoStatusConfig,
+      'demo-seed',
+      'Beschriftungen nach Design',
+    );
   return { event, byCode };
 }
