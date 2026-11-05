@@ -11,6 +11,26 @@ const maxLinesExceptions = JSON.parse(
   ),
 );
 
+const nativeControlExceptions = JSON.parse(
+  readFileSync(
+    new URL('./scripts/native-control-exceptions.json', import.meta.url),
+    'utf8',
+  ),
+);
+const nativeControlSelectors = [
+  ['button', 'Use @racepilot/ui Button instead of a raw button.'],
+  [
+    'input',
+    'Use the appropriate @racepilot/ui input component instead of a raw input.',
+  ],
+  ['select', 'Use @racepilot/ui SelectField instead of a raw select.'],
+  ['textarea', 'Use @racepilot/ui Textarea instead of a raw textarea.'],
+  ['table', 'Use @racepilot/ui DataTable instead of a raw table.'],
+].map(([name, message]) => ({
+  selector: `JSXOpeningElement[name.name='${name}']`,
+  message,
+}));
+
 export default tseslint.config(
   {
     ignores: [
@@ -53,5 +73,13 @@ export default tseslint.config(
     files: ['packages/app/src/**/*.{ts,tsx}'],
     plugins: { 'react-hooks': reactHooks },
     rules: reactHooks.configs.flat.recommended.rules,
+  },
+  {
+    files: ['packages/app/src/**/*.tsx'],
+    rules: { 'no-restricted-syntax': ['error', ...nativeControlSelectors] },
+  },
+  {
+    files: nativeControlExceptions,
+    rules: { 'no-restricted-syntax': 'off' },
   },
 );

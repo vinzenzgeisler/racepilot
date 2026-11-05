@@ -1,0 +1,18 @@
+[
+  "packages/app/src/features/entries/AdminEntries.tsx",
+  "packages/app/src/features/entries/AdminEntryDetail.tsx",
+  "packages/app/src/features/entries/AdminEntryFilters.tsx",
+  "packages/app/src/features/entries/AdminEntryList.tsx",
+  "packages/app/src/features/entries/AdminEntryPagination.tsx",
+  "packages/app/src/features/modules/AdminModules.tsx",
+  "packages/app/src/features/modules/ModuleSchemaFields.tsx",
+  "packages/app/src/features/registration/RegistrationAppearance.tsx",
+  "packages/app/src/features/registration/RegistrationChrome.tsx",
+  "packages/app/src/features/registration/RegistrationCustomAnswers.tsx",
+  "packages/app/src/features/registration/RegistrationCustomFields.tsx",
+  "packages/app/src/features/registration/RegistrationFormSettings.tsx",
+  "packages/app/src/features/registration/RegistrationVehicleFields.tsx",
+  "packages/app/src/features/registration/RegistrationView.tsx",
+  "packages/app/src/features/shell/AppShell.tsx",
+  "packages/app/src/features/workflow/WorkflowEditor.tsx"
+]
