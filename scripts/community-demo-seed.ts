@@ -1,8 +1,13 @@
-import { rows, classes, gradientImage } from './community-demo-data.js';
+import {
+  rows,
+  classes,
+  gradientImage,
+  demoCreatedAt,
+  demoWorkflow,
+} from './community-demo-data.js';
 import { and, eq, sql } from 'drizzle-orm';
 import {
   calculatePrice,
-  defaultEntryWorkflow,
   organizationId,
   transitionEntry,
 } from '@racepilot/core';
@@ -65,29 +70,10 @@ try {
       registrationClosesAt: '2027-05-14T23:59:00+02:00',
     });
     await eventRepo.transition(ctx, event.id, 'draft', 'open', new Date());
-    const workflow = {
-      ...defaultEntryWorkflow,
-      statuses: defaultEntryWorkflow.statuses.map((s) => ({
-        ...s,
-        labels: {
-          ...s.labels,
-          de:
-            (
-              {
-                pending: 'Offen',
-                accepted: 'Zugelassen',
-                waitlisted: 'Vorauswahl',
-                rejected: 'Abgelehnt',
-                withdrawn: 'Abgesagt',
-              } as Record<string, string>
-            )[s.key] ?? s.labels.de,
-        },
-      })),
-    };
     await createEntryWorkflowRepository(db).setEvent(
       ctx,
       event.id,
-      workflow,
+      demoWorkflow,
       'demo-seed',
       'Designstatus für Beispieldaten',
     );
@@ -158,6 +144,16 @@ try {
       .limit(1);
     if (existing.length) {
       await db
+        .update(entries)
+        .set({ createdAt: demoCreatedAt(index) })
+        .where(
+          and(
+            eq(entries.organizationId, org.id),
+            eq(entries.eventId, event.id),
+            eq(entries.id, existing[0]!.id),
+          ),
+        );
+      await db
         .update(vehicles)
         .set({ imageUrl: gradientImage(index) })
         .where(
@@ -225,6 +221,16 @@ try {
       priceSnapshot: snapshot,
       formSnapshotVersion: 'demo-1',
     });
+    await db
+      .update(entries)
+      .set({ createdAt: demoCreatedAt(index) })
+      .where(
+        and(
+          eq(entries.organizationId, org.id),
+          eq(entries.eventId, event.id),
+          eq(entries.id, entry.id),
+        ),
+      );
     await transitionEntry(
       ctx,
       entry.id,

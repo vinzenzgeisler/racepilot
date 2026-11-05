@@ -236,3 +236,28 @@ export function gradientImage(index: number): string {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs><rect width="640" height="400" fill="url(#g)"/></svg>`;
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
+export function demoCreatedAt(index: number): Date {
+  const day = index < 12 ? 4 : 3;
+  return new Date(Date.UTC(2026, 10, day, 12, 0) - index * 60_000);
+}
+
+import { defaultEntryWorkflow } from '@racepilot/core';
+export const demoWorkflow = {
+  ...defaultEntryWorkflow,
+  statuses: defaultEntryWorkflow.statuses.map((s) => ({
+    ...s,
+    labels: {
+      ...s.labels,
+      de:
+        (
+          {
+            pending: 'Offen',
+            accepted: 'Zugelassen',
+            waitlisted: 'Vorauswahl',
+            rejected: 'Abgelehnt',
+            withdrawn: 'Abgesagt',
+          } as Record<string, string>
+        )[s.key] ?? s.labels.de,
+    },
+  })),
+};
