@@ -112,11 +112,12 @@ nicht `localhost` oder die LAN-IP; die OIDC-Weiterleitungen sind darauf eingeste
 1. Öffne die Admin-App und klicke **Anmelden**.
 2. Nutze die im Terminal ausgegebene E-Mail-Adresse (standardmäßig
    `admin@nennbox.local`) und das automatisch generierte Passwort.
-3. Eine frische Installation enthält noch keine Veranstaltung. Veranstaltung,
-   Klassen, Teilnahmebedingungen und Öffnung der Nennung werden derzeit über
-   die authentifizierte Admin-API eingerichtet. Die Anleitung
-   [Erste lokale Testveranstaltung](docs/getting-started/community-local.md)
-   enthält ein vollständiges Beispiel.
+3. Eine frische Installation enthält noch keine Veranstaltung. Öffne in der Admin-App
+   **Veranstaltung einrichten**, trage Name, Zeitraum, mindestens eine Klasse und
+   Startgeld ein, ergänze bei Bedarf Teilnahmebedingungen und wähle **Speichern und
+   Nennung öffnen**. Die App zeigt anschließend den öffentlichen Nennungslink.
+   Eine gespeicherte Veranstaltung kann später über **Einrichten** angepasst werden;
+   zusätzliche Formularfelder findest du unter **Einstellungen**.
 4. Teilnehmende öffnen anschließend
    `http://127.0.0.1:5173/events/<veranstaltungs-slug>/register`.
    Die Bestätigungs-E-Mail erscheint in **Mailpit**, nicht im echten Postfach.
@@ -139,8 +140,9 @@ Das gespeicherte lokale Passwort kannst du bei Bedarf mit
 
 **Stand der Alpha:** Der Stack ist eine lokale Entwicklungsvorschau, kein
 abgesichertes öffentliches Hosting. Nennung, E-Mail-Bestätigung, Bild-Upload und
-Admin-Bearbeitung sind vorhanden. Einrichtung von Veranstaltungen/Klassen,
-Zahlungserfassung und CSV-Export benötigen teilweise noch die API. PDF-Belege und
+Admin-Bearbeitung sind vorhanden. Veranstaltungen, Klassen, Startgeld, Teilnahmebedingungen und das Öffnen der Nennung
+werden über die Admin-Oberfläche eingerichtet. Zahlungserfassung und CSV-Export
+benötigen teilweise noch die API. PDF-Belege und
 Einzelprüfung hochgeladener Dokumente fehlen noch. Details und ausdrücklich noch
 nicht verfügbare UI-Aktionen stehen im [lokalen Leitfaden](docs/getting-started/community-local.md)
 und im [Community-Alpha-Issue](https://github.com/vinzenzgeisler/racepilot/issues/120).
