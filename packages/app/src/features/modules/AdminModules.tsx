@@ -2,14 +2,29 @@ import { adminFetch } from '../../auth.js';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModuleListResponse, EventSchema } from '@racepilot/contracts';
 import type { ModuleViewSchema } from '@racepilot/contracts';
-import { SchemaFields, updatePath } from './ModuleSchemaFields.js';
-import { categories, words, type ModuleLocale } from './moduleWords.js';
+import {
+  Button,
+  DataTable,
+  EmptyState,
+  FilterBar,
+  PageHeader,
+  SelectField,
+  StatusLabel,
+  Tabs,
+  TextInput,
+} from '@racepilot/ui';
+import { updatePath } from './ModuleSchemaFields.js';
+import { ModuleConfigDialog } from './ModuleConfigDialog.js';
+import {
+  categories,
+  categoryLabels,
+  words,
+  type ModuleLocale,
+} from './moduleWords.js';
 
-type Module = typeof ModuleViewSchema extends { parse: (v: unknown) => infer T }
-  ? T
-  : never;
+export type Module = ReturnType<typeof ModuleViewSchema.parse>;
 export function AdminModules({
-  locale = 'en',
+  locale = 'de',
   onUpgrade,
 }: {
   locale?: ModuleLocale;
@@ -30,7 +45,7 @@ export function AdminModules({
   const base =
     scope === 'organization'
       ? '/admin/organization/modules'
-      : `/admin/events/${encodeURIComponent(eventId)}/modules`;
+      : '/admin/events/' + encodeURIComponent(eventId) + '/modules';
   const load = useCallback(async () => {
     if (scope === 'event' && !eventId) return;
     setLoading(true);
@@ -53,11 +68,11 @@ export function AdminModules({
       credentials: 'same-origin',
       cache: 'no-store',
     })
-      .then((r) => (r.ok ? r.json() : []))
+      .then((response) => (response.ok ? response.json() : []))
       .then((rows: unknown[]) => {
         const parsed = rows.map((row) => EventSchema.parse(row));
         setEvents(parsed.map(({ id, name }) => ({ id, name })));
-        setEventId(parsed[0]?.id ?? '');
+        setEventId((current) => current || parsed[0]?.id || '');
       })
       .catch(() => setEvents([]));
   }, []);
@@ -68,9 +83,15 @@ export function AdminModules({
   const filtered = useMemo(
     () =>
       modules.filter(
-        (m) =>
-          (!category || m.gallery.category === category) &&
-          `${m.gallery.name[locale]} ${m.gallery.shortDescription[locale]} ${m.id}`
+        (module) =>
+          (!category || module.gallery.category === category) &&
+          (
+            module.gallery.name[locale] +
+            ' ' +
+            module.gallery.shortDescription[locale] +
+            ' ' +
+            module.id
+          )
             .toLocaleLowerCase()
             .includes(query.toLocaleLowerCase()),
       ),
@@ -83,7 +104,7 @@ export function AdminModules({
     setError('');
     try {
       const response = await adminFetch(
-        `${base}/${encodeURIComponent(module.id)}`,
+        base + '/' + encodeURIComponent(module.id),
         {
           method: 'PATCH',
           credentials: 'same-origin',
@@ -115,150 +136,152 @@ export function AdminModules({
       setError(t.error);
     }
   }
-  return (
-    <section aria-labelledby="modules-title">
-      <h2 id="modules-title">{t.title}</h2>
-      <label>
-        {t.organization}
-        <select
-          value={scope}
-          onChange={(e) => setScope(e.target.value as typeof scope)}
+  const tabs = [
+    { id: 'organization', label: t.organization, content: null },
+    {
+      id: 'event',
+      label: t.event,
+      content: (
+        <SelectField
+          label={t.chooseEvent}
+          value={eventId}
+          onChange={(event) => setEventId(event.target.value)}
         >
-          <option value="organization">{t.organization}</option>
-          <option value="event">{t.event}</option>
-        </select>
-      </label>
-      {scope === 'event' && (
-        <label>
-          {t.event}
-          <select value={eventId} onChange={(e) => setEventId(e.target.value)}>
-            {events.map((e) => (
-              <option key={e.id} value={e.id}>
-                {e.name}
-              </option>
-            ))}
-          </select>
-        </label>
-      )}
-      <label>
-        {t.search}
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-        />
-      </label>
-      <label>
-        {t.all}
-        <select value={category} onChange={(e) => setCategory(e.target.value)}>
-          <option value="">{t.all}</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
+          {events.map((event) => (
+            <option key={event.id} value={event.id}>
+              {event.name}
             </option>
           ))}
-        </select>
-      </label>
+        </SelectField>
+      ),
+    },
+  ];
+  return (
+    <section aria-labelledby="modules-title">
+      <PageHeader id="modules-title" title={t.title} />
+      <Tabs
+        tabs={tabs}
+        selected={scope}
+        onChange={(next) => setScope(next as typeof scope)}
+        label={t.scope}
+      />
+      <FilterBar label={t.filterLabel}>
+        <TextInput
+          label={t.search}
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <SelectField
+          label={t.category}
+          value={category}
+          onChange={(event) => setCategory(event.target.value)}
+        >
+          <option value="">{t.all}</option>
+          {categories.map((value) => (
+            <option key={value} value={value}>
+              {categoryLabels[locale][value]}
+            </option>
+          ))}
+        </SelectField>
+      </FilterBar>
       {loading ? (
         <p role="status">{t.loading}</p>
       ) : error ? (
         <p role="alert">{error}</p>
+      ) : filtered.length === 0 ? (
+        <EmptyState title={t.emptyTitle} description={t.emptyDescription} />
       ) : (
-        <div className="module-gallery">
+        <DataTable headers={[t.module, t.description, t.status, t.actions]}>
           {filtered.map((module) => (
-            <article key={module.id} className="module-card">
-              <h3>
-                <span aria-hidden="true">{module.gallery.icon}</span>{' '}
-                {module.gallery.name[locale]}
-              </h3>
-              <p>{module.gallery.shortDescription[locale]}</p>
-              <p>
-                {module.status === 'unavailable'
-                  ? `${t.unavailable}: ${t[module.unavailableReason ?? 'edition']}`
-                  : module.status}
-              </p>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelected(module);
-                  setConfig(module.config);
-                  setConfigErrors({});
-                }}
-              >
-                {t.details}
-              </button>
-              {module.status === 'unavailable' ? (
-                module.unavailableReason === 'entitlement' && onUpgrade ? (
-                  <button type="button" onClick={() => onUpgrade(module.id)}>
-                    {t.upgrade}
-                  </button>
-                ) : null
-              ) : module.enabled ? (
-                <button
-                  type="button"
+            <tr key={module.id}>
+              <td>
+                <strong>{module.gallery.name[locale]}</strong>
+              </td>
+              <td>{module.gallery.shortDescription[locale]}</td>
+              <td>
+                {module.status === 'unavailable' ? (
+                  <StatusLabel
+                    status="missing"
+                    label={t[module.unavailableReason ?? 'edition']}
+                  />
+                ) : module.enabled ? (
+                  <StatusLabel status="done" label={t.active} />
+                ) : (
+                  <StatusLabel status="new" label={t.inactive} />
+                )}
+              </td>
+              <td className="module-actions">
+                <Button
+                  variant="text"
+                  size={40}
                   onClick={() => {
-                    if (window.confirm(t.confirm))
-                      void change(module, { enabled: false });
+                    setSelected(module);
+                    setConfig(module.config);
+                    setConfigErrors({});
                   }}
                 >
-                  {t.disable}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void change(module, { enabled: true })}
-                >
-                  {t.activate}
-                </button>
-              )}
-            </article>
+                  {t.details}
+                </Button>
+                {module.status === 'unavailable' ? (
+                  module.unavailableReason === 'entitlement' && onUpgrade ? (
+                    <Button
+                      variant="secondary"
+                      size={40}
+                      onClick={() => onUpgrade(module.id)}
+                    >
+                      {t.upgrade}
+                    </Button>
+                  ) : null
+                ) : module.enabled ? (
+                  <Button
+                    variant="danger"
+                    size={40}
+                    confirmation={{
+                      title: t.disableTitle,
+                      message: t.confirm,
+                      reasonLabel: t.reason,
+                      cancelLabel: t.cancel,
+                      confirmLabel: t.disable,
+                      closeLabel: t.close,
+                    }}
+                    onDangerConfirm={() =>
+                      void change(module, { enabled: false })
+                    }
+                  >
+                    {t.disable}
+                  </Button>
+                ) : (
+                  <Button
+                    variant="primary"
+                    size={40}
+                    onClick={() => void change(module, { enabled: true })}
+                  >
+                    {t.activate}
+                  </Button>
+                )}
+              </td>
+            </tr>
           ))}
-        </div>
+        </DataTable>
       )}
       {selected && (
-        <section
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="module-detail-title"
-        >
-          <h3 id="module-detail-title">{selected.gallery.name[locale]}</h3>
-          <p>{selected.gallery.longDescription[locale]}</p>
-          <p>
-            {selected.gallery.editions.join(', ')} ·{' '}
-            {selected.gallery.entitlement}
-          </p>
-          {selected.gallery.screenshots?.map((src) => (
-            <img key={src} src={src} alt="" />
-          ))}
-          <fieldset>
-            <legend>{t.configure}</legend>
-            <SchemaFields
-              schema={selected.configSchema}
-              value={config}
-              path=""
-              errors={configErrors}
-              onChange={(path, value) => {
-                setConfig((previous: unknown) =>
-                  updatePath(previous, path, value),
-                );
-                setConfigErrors((previous) => {
-                  const next = { ...previous };
-                  delete next[path];
-                  return next;
-                });
-              }}
-            />
-          </fieldset>
-          <button
-            type="button"
-            onClick={() => void change(selected, { config })}
-          >
-            {t.save}
-          </button>
-          <button type="button" onClick={() => setSelected(null)}>
-            {t.close}
-          </button>
-        </section>
+        <ModuleConfigDialog
+          selected={selected}
+          locale={locale}
+          config={config}
+          configErrors={configErrors}
+          onClose={() => setSelected(null)}
+          onSave={() => void change(selected, { config })}
+          onChange={(path, value) => {
+            setConfig((previous: unknown) => updatePath(previous, path, value));
+            setConfigErrors((previous) => {
+              const next = { ...previous };
+              delete next[path];
+              return next;
+            });
+          }}
+        />
       )}
       {error && !loading && <p role="alert">{error}</p>}
     </section>

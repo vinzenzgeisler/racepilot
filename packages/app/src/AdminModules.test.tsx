@@ -66,7 +66,6 @@ describe('AdminModules', () => {
       },
     );
     globalThis.fetch = fetch;
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     const container = document.createElement('div');
     const root = createRoot(container);
     try {
@@ -77,7 +76,7 @@ describe('AdminModules', () => {
         let i = 0;
         i < 50 &&
         ![...container.querySelectorAll('button')].some(
-          (button) => button.textContent === 'Activate',
+          (button) => button.textContent === 'Aktivieren',
         );
         i++
       ) {
@@ -87,7 +86,7 @@ describe('AdminModules', () => {
       }
       await act(async () => {
         [...container.querySelectorAll('button')]
-          .find((button) => button.textContent === 'Activate')
+          .find((button) => button.textContent === 'Aktivieren')
           ?.click();
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
@@ -135,7 +134,7 @@ describe('AdminModules', () => {
       });
       await act(async () => {
         [...container.querySelectorAll('button')]
-          .find((button) => button.textContent === 'Save')
+          .find((button) => button.textContent === 'Speichern')
           ?.click();
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
@@ -147,13 +146,27 @@ describe('AdminModules', () => {
       ).toBe(true);
       await act(async () => {
         [...container.querySelectorAll('button')]
-          .find((button) => button.textContent === 'Disable')
+          .find((button) => button.textContent === 'Deaktivieren')
           ?.click();
         await new Promise((resolve) => setTimeout(resolve, 10));
       });
-      expect(window.confirm).toHaveBeenCalledWith(
-        expect.stringContaining('retained'),
+      expect(container.querySelector('dialog')?.textContent).toContain(
+        'erhalten',
       );
+      const reason = container.querySelector('textarea')!;
+      await act(async () => {
+        Object.getOwnPropertyDescriptor(
+          reason.ownerDocument.defaultView!.HTMLTextAreaElement.prototype,
+          'value',
+        )?.set?.call(reason, 'Daten bleiben erhalten');
+        reason.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      await act(async () => {
+        [...container.querySelectorAll<HTMLButtonElement>('dialog button')]
+          .find((button) => button.textContent === 'Deaktivieren')
+          ?.click();
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      });
       expect(
         fetch.mock.calls.some(
           ([, init]) =>
