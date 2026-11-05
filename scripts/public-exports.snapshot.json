@@ -379,6 +379,7 @@
     "SelectField",
     "SelectionBar",
     "Signet",
+    "SplitPane",
     "Stack",
     "StartLight",
     "StartLine",

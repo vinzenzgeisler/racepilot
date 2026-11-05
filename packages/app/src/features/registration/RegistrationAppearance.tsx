@@ -1,4 +1,12 @@
 import type { ChangeEvent } from 'react';
+import {
+  Field,
+  FileUpload,
+  FormSection,
+  SelectField,
+  Stack,
+  Textarea,
+} from '@racepilot/ui';
 import type { RegistrationFormConfig } from '@racepilot/contracts';
 
 type UpdateConfig = (
@@ -22,10 +30,10 @@ export function RegistrationAppearance({
 }) {
   return (
     <>
-      <div className="registration-admin-grid">
-        <label>
-          Primärfarbe
-          <input
+      <FormSection title="Erscheinungsbild">
+        <Stack gap={4}>
+          <Field
+            label="Primärfarbe"
             type="color"
             value={activeConfig.branding.primaryColor}
             onChange={(e) =>
@@ -38,10 +46,8 @@ export function RegistrationAppearance({
               }))
             }
           />
-        </label>
-        <label>
-          Akzentfarbe
-          <input
+          <Field
+            label="Akzentfarbe"
             type="color"
             value={activeConfig.branding.accentColor}
             onChange={(e) =>
@@ -54,10 +60,8 @@ export function RegistrationAppearance({
               }))
             }
           />
-        </label>
-        <label>
-          Ecken
-          <select
+          <SelectField
+            label="Ecken"
             value={activeConfig.branding.corners}
             onChange={(e) =>
               updateConfig((x) => ({
@@ -70,56 +74,44 @@ export function RegistrationAppearance({
             }
           >
             <option value="square">Eckig</option>
-            <option value="rounded">6 px</option>
-          </select>
-        </label>
-        <label>
-          Überschriftenschrift
-          <select value={activeConfig.branding.headingFont} disabled>
+            <option value="rounded">Leicht gerundet · 6 px</option>
+          </SelectField>
+          <SelectField
+            label="Überschriftenschrift"
+            value={activeConfig.branding.headingFont}
+            disabled
+          >
             <option value="archivo">Archivo · Brandbook M4</option>
-          </select>
-        </label>
-        <label>
-          Logo auf hellem Grund
-          <input
-            type="file"
+          </SelectField>
+          <FileUpload
+            label="Logo auf hellem Grund"
             accept="image/svg+xml,image/png"
             onChange={(e) => void upload('logoLight', e)}
           />
-        </label>
-        <label>
-          Logo auf dunklem Grund
-          <input
-            type="file"
+          <FileUpload
+            label="Logo auf dunklem Grund"
             accept="image/svg+xml,image/png"
             onChange={(e) => void upload('logoDark', e)}
           />
-        </label>
-        <label>
-          Kopfbild · optional
-          <input
-            type="file"
+          <FileUpload
+            label="Kopfbild · optional"
             accept="image/png,image/jpeg,image/webp"
             onChange={(e) => void upload('headerImage', e)}
           />
-        </label>
-      </div>
-      <label>
-        Begrüßung
-        <textarea
-          maxLength={4000}
-          value={activeConfig.welcomeText}
-          onChange={(e) => change({ welcomeText: e.target.value })}
-        />
-      </label>
-      <label>
-        Hinweise des Veranstalters
-        <textarea
-          maxLength={10000}
-          value={activeConfig.organizerNotice}
-          onChange={(e) => change({ organizerNotice: e.target.value })}
-        />
-      </label>
+        </Stack>
+      </FormSection>
+      <Textarea
+        label="Begrüßung"
+        maxLength={4000}
+        value={activeConfig.welcomeText}
+        onChange={(e) => change({ welcomeText: e.target.value })}
+      />
+      <Textarea
+        label="Hinweise des Veranstalters"
+        maxLength={10000}
+        value={activeConfig.organizerNotice}
+        onChange={(e) => change({ organizerNotice: e.target.value })}
+      />
     </>
   );
 }

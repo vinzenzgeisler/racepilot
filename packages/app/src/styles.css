@@ -2,7 +2,6 @@
 @import './features/styles/global.css';
 @import './features/registration/styles.css';
 @import './features/entries/overview.css';
-@import './features/registration/admin.css';
 @import './features/entries/admin.css';
 @import './features/entries/status.css';
 @import './features/gallery/styles.css';
