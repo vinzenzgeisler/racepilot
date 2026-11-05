@@ -203,8 +203,12 @@ function AdminApplication() {
                 .reverse()
                 .map((item) => (
                   <p key={item.id}>
-                    {new Date(item.occurredAt).toLocaleString()} · {item.label}{' '}
-                    · {item.actor}
+                    {new Intl.DateTimeFormat('de-DE', {
+                      dateStyle: 'medium',
+                      timeStyle: 'short',
+                      timeZone: 'Europe/Berlin',
+                    }).format(new Date(item.occurredAt))}{' '}
+                    · {item.label} · {item.actor}
                   </p>
                 ))}
             </div>

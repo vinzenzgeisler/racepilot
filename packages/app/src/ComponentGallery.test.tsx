@@ -84,7 +84,8 @@ describe('component review gallery', () => {
       details.open = true;
     });
     const menuItem = details.querySelector('button')!;
-    expect(menuItem.hasAttribute('role')).toBe(false);
+    expect(menuItem.getAttribute('role')).toBe('menuitem');
+    expect(details.querySelector('[role="menu"]')).not.toBeNull();
     act(() => menuItem.focus());
     act(() =>
       document.dispatchEvent(

@@ -27,6 +27,8 @@ export function Menu({
       </summary>
       <div
         className="nb-menu-disclosure"
+        role="menu"
+        aria-label={label}
         onClick={(event) => {
           if (
             event.target instanceof Element &&
@@ -51,7 +53,7 @@ export function MenuItem({
   onClick?: () => void;
 }) {
   return (
-    <button type="button" onClick={onClick}>
+    <button type="button" role="menuitem" onClick={onClick}>
       {children}
     </button>
   );

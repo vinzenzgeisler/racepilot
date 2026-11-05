@@ -59,10 +59,10 @@ export function useAdminEntryActions({
         if (!response.ok) {
           setActionError(
             response.status === 401
-              ? 'Your OIDC session is not authorized. Sign in through the configured OIDC session.'
+              ? 'Deine Anmeldung ist abgelaufen. Bitte melde dich erneut an.'
               : response.status === 403
-                ? 'You do not have permission to view this entry.'
-                : 'Entry details are unavailable.',
+                ? 'Du darfst diese Nennung nicht ansehen.'
+                : 'Die Nennung konnte nicht geladen werden.',
           );
           return;
         }
@@ -75,7 +75,7 @@ export function useAdminEntryActions({
           setSelected(entry);
       } catch {
         if (isCurrent(detailGate.current, generation, controller))
-          setActionError('Entry details are unavailable.');
+          setActionError('Die Nennung konnte nicht geladen werden.');
       } finally {
         if (detailGate.current.controller === controller)
           detailGate.current.controller = null;
@@ -112,10 +112,10 @@ export function useAdminEntryActions({
       if (!response.ok) {
         setActionError(
           response.status === 401
-            ? 'Your OIDC session is not authorized.'
+            ? 'Deine Anmeldung ist abgelaufen.'
             : response.status === 403
-              ? 'You do not have permission to change this entry.'
-              : 'The status change was rejected.',
+              ? 'Du darfst den Status dieser Nennung nicht ändern.'
+              : 'Die Statusänderung wurde abgelehnt.',
         );
         return;
       }
@@ -153,7 +153,7 @@ export function useAdminEntryActions({
       }
     } catch {
       if (isCurrent(transitionGate.current, generation, controller))
-        setActionError('The status change could not be completed.');
+        setActionError('Die Statusänderung konnte nicht abgeschlossen werden.');
     } finally {
       if (
         isCurrent(transitionGate.current, generation, controller) &&

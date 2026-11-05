@@ -152,7 +152,7 @@ async function mount(
   return container;
 }
 async function chooseEvent(id: string) {
-  const select = container.querySelector('select[aria-label="Event"]')!;
+  const select = container.querySelector('select[aria-label="Veranstaltung"]')!;
   await act(async () => {
     (select as HTMLSelectElement).value = id;
     select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -218,7 +218,9 @@ function visibleEntryIds() {
   );
 }
 function detailEntryId() {
-  return container.querySelector('.admin-detail dl dd')?.textContent?.trim();
+  return container
+    .querySelector('.admin-detail dl dd:nth-of-type(2)')
+    ?.textContent?.trim();
 }
 
 beforeEach(() => {
@@ -257,11 +259,11 @@ describe('AdminEntries', () => {
 
   it('renders distinct 401 and 403 states without public-data fallback', async () => {
     await mount(async () => new Response('{}', { status: 401 }));
-    expect(container.textContent).toContain('Sign-in required');
+    expect(container.textContent).toContain('Anmeldung erforderlich');
     act(() => root?.unmount());
     root = undefined;
     await mount(async () => new Response('{}', { status: 403 }));
-    expect(container.textContent).toContain('Access denied');
+    expect(container.textContent).toContain('Zugriff verweigert');
   });
 
   it('ignores a slower prior-event list response after switching events', async () => {
@@ -306,9 +308,9 @@ describe('AdminEntries', () => {
       throw new Error(`Unexpected request ${url}`);
     });
     await chooseEvent(eventA);
-    await setInput('Search', 'slow');
+    await setInput('Suche', 'slow');
     await submitFilters();
-    await setInput('Search', 'fast');
+    await setInput('Suche', 'fast');
     await submitFilters();
     expect(visibleEntryIds()).toEqual([entryA2]);
     await act(async () => slowSearch.resolve(listResponse([itemsA[0]!])));
@@ -340,15 +342,15 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await click(entryA2);
-    expect(detailEntryId()).toBe(entryA2);
+    expect(detailEntryId()).toBe('Casey Driver');
     await act(async () => slowDetail.resolve(Response.json(itemsA[0])));
     await flush();
-    expect(detailEntryId()).toBe(entryA2);
-    await setSelect('Class', classA);
+    expect(detailEntryId()).toBe('Casey Driver');
+    await setSelect('Klasse', classA);
     await submitFilters();
     expect(listCalls().at(-1)).toContain(`classId=${classA}`);
     await chooseEvent(eventB);
-    expect((labeled('Class', 'select') as HTMLSelectElement).value).toBe('');
+    expect((labeled('Klasse', 'select') as HTMLSelectElement).value).toBe('');
     expect(detailEntryId()).toBeUndefined();
     expect(container.querySelector('.admin-detail textarea')).toBeNull();
     await flush();
@@ -382,8 +384,8 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
-    await setInput('Reason (required for audit)', 'Reviewed');
-    await click('accepted');
+    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
+    await click('Angenommen');
     await chooseEvent(eventB);
     expect(visibleEntryIds()).toEqual([entryB]);
     await act(async () =>
@@ -413,21 +415,17 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
-    await setInput('Reason (required for audit)', 'Reviewed');
-    await click('accepted');
+    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
+    await click('Angenommen');
     await click(entryA2);
-    expect(container.querySelector('.admin-detail dd')?.textContent).toBe(
-      entryA2,
-    );
+    expect(detailEntryId()).toBe('Casey Driver');
     await act(async () =>
       slowTransition.resolve(
         Response.json({ ...itemsA[0]!, acceptanceStatus: 'accepted' }),
       ),
     );
     await flush();
-    expect(container.querySelector('.admin-detail dd')?.textContent).toBe(
-      entryA2,
-    );
+    expect(detailEntryId()).toBe('Casey Driver');
   });
 
   it('refreshes after a pending transition using the latest applied query and page', async () => {
@@ -449,11 +447,11 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
-    await setInput('Reason (required for audit)', 'Reviewed');
-    await click('accepted');
-    await setSelect('Acceptance', 'accepted');
+    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
+    await click('Angenommen');
+    await setSelect('Nennungsstatus', 'accepted');
     await submitFilters();
-    await click('Next');
+    await click('Weiter');
     expect(listCalls().at(-1)).toContain('page=2');
     expect(listCalls().at(-1)).toContain('acceptanceStatus=accepted');
     const callsBeforeTransitionResolves = listCalls().length;
@@ -489,10 +487,10 @@ describe('AdminEntries', () => {
       firstRow.querySelectorAll('.entry-row-actions > button'),
     ).toHaveLength(1);
     expect(
-      firstRow.querySelector('.entry-more-actions summary')?.textContent,
-    ).toBe('Mehr');
+      firstRow.querySelector('.nb-menu summary')?.getAttribute('aria-label'),
+    ).toBe('Weitere Aktionen');
     expect(
-      firstRow.querySelectorAll('.entry-more-actions [role=menuitem]').length,
+      firstRow.querySelectorAll('.nb-menu [role=menuitem]').length,
     ).toBeGreaterThan(0);
     expect(firstRow.querySelector('.entry-vehicle-placeholder')).not.toBeNull();
   });
@@ -638,9 +636,9 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
-    await setInput('Reason (required for audit)', 'Reviewed');
-    await click('confirmed');
-    expect(detailEntryId()).toBe(entryA2);
+    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
+    await click('Bestätigt');
+    expect(detailEntryId()).toBe('Casey Driver');
   });
 
   it('keeps the accepted entry selected when no next pending entry exists', async () => {
@@ -686,9 +684,9 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
-    await setInput('Reason (required for audit)', 'Reviewed');
-    await click('confirmed');
-    expect(detailEntryId()).toBe(entryA);
+    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
+    await click('Bestätigt');
+    expect(detailEntryId()).toBe('Alex Driver');
   });
 
   it('clears bulk selection when changing pages, filters, and events', async () => {
@@ -717,11 +715,11 @@ describe('AdminEntries', () => {
     expect(
       container.querySelector('.entry-selection-bar')?.textContent,
     ).toContain('1 von');
-    await setInput('Search', 'Alex');
+    await setInput('Suche', 'Alex');
     await submitFilters();
     expect(container.querySelector('.entry-selection-bar')).toBeNull();
     await selectFirst();
-    await click('Next');
+    await click('Weiter');
     expect(container.querySelector('.entry-selection-bar')).toBeNull();
     await selectFirst();
     await chooseEvent(eventB);
@@ -771,9 +769,11 @@ describe('AdminEntries', () => {
     await flush();
     const actions = [...container.querySelectorAll('.admin-actions button')];
     expect(actions).toHaveLength(1);
-    expect(actions[0]?.textContent).toContain('accepted');
+    expect(actions[0]?.textContent).toContain('Angenommen');
     expect(
-      actions.some((button) => button.textContent?.includes('Mark verified')),
+      actions.some((button) =>
+        button.textContent?.includes('E-Mail verifizieren'),
+      ),
     ).toBe(false);
   });
 
@@ -788,10 +788,10 @@ describe('AdminEntries', () => {
       throw new Error(`Unexpected request ${url}`);
     });
     await chooseEvent(eventA);
-    await click('Next');
+    await click('Weiter');
     expect(listCalls().at(-1)).toContain('page=2');
     const callsBeforeTyping = listCalls().length;
-    await setInput('Search', 'driver one');
+    await setInput('Suche', 'driver one');
     expect(listCalls()).toHaveLength(callsBeforeTyping);
     await setSelect('Sort', 'requestedStartNumber');
     expect(listCalls().at(-1)).toContain('page=1');
@@ -800,7 +800,7 @@ describe('AdminEntries', () => {
     await submitFilters();
     expect(listCalls().at(-1)).toContain('page=1');
     expect(listCalls().at(-1)).toContain('search=driver');
-    await click('Next');
+    await click('Weiter');
     expect(listCalls().at(-1)).toContain('page=2');
     await setSelect('Sort', 'createdAt');
     expect(listCalls().at(-1)).toContain('page=1');

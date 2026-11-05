@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
+import { Button } from '@racepilot/ui';
 import type { ApiState } from './AdminEntriesModel.js';
 
 export function AdminEntryPagination({
@@ -15,8 +16,10 @@ export function AdminEntryPagination({
   setPage: Dispatch<SetStateAction<number>>;
 }) {
   return (
-    <nav className="admin-pagination" aria-label="Entry pages">
-      <button
+    <nav className="admin-pagination" aria-label="Nennungsseiten">
+      <Button
+        variant="secondary"
+        size={40}
         type="button"
         disabled={page <= 1 || apiState === 'loading'}
         onClick={() => {
@@ -24,12 +27,14 @@ export function AdminEntryPagination({
           setPage((value) => value - 1);
         }}
       >
-        Previous
-      </button>
+        Zurück
+      </Button>
       <span>
-        Page {totalPages === 0 ? 0 : page} of {totalPages}
+        Seite {totalPages === 0 ? 0 : page} von {totalPages}
       </span>
-      <button
+      <Button
+        variant="secondary"
+        size={40}
         type="button"
         disabled={page >= totalPages || apiState === 'loading'}
         onClick={() => {
@@ -37,8 +42,8 @@ export function AdminEntryPagination({
           setPage((value) => value + 1);
         }}
       >
-        Next
-      </button>
+        Weiter
+      </Button>
     </nav>
   );
 }

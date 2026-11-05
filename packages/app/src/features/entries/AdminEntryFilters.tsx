@@ -1,4 +1,5 @@
 import type { Dispatch, SetStateAction, FormEvent } from 'react';
+import { Button, FilterBar, SelectField, TextInput } from '@racepilot/ui';
 import type { EntryQuery, WorkflowView } from './AdminEntriesModel.js';
 
 export function AdminEntryFilters({
@@ -18,25 +19,23 @@ export function AdminEntryFilters({
 }) {
   return (
     <form className="admin-filters" onSubmit={applyFilters}>
-      <label>
-        Class
-        <select
+      <FilterBar label="Nennungen filtern">
+        <SelectField
+          label="Klasse"
           value={draft.classId}
           onChange={(e) =>
             setDraft((value) => ({ ...value, classId: e.target.value }))
           }
         >
-          <option value="">All classes</option>
+          <option value="">Alle Klassen</option>
           {classes.map((item) => (
             <option key={item.id} value={item.id}>
               {item.name}
             </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Acceptance
-        <select
+        </SelectField>
+        <SelectField
+          label="Nennungsstatus"
           value={draft.acceptanceStatus}
           onChange={(e) =>
             setDraft((value) => ({
@@ -45,17 +44,15 @@ export function AdminEntryFilters({
             }))
           }
         >
-          <option value="">All</option>
+          <option value="">Alle</option>
           {(workflow?.statuses ?? []).map((status) => (
             <option key={status.key} value={status.key}>
-              {status.labels.en} ({status.key})
+              {status.labels.de}
             </option>
           ))}
-        </select>
-      </label>
-      <label>
-        Verification
-        <select
+        </SelectField>
+        <SelectField
+          label="E-Mail-Prüfung"
           value={draft.verificationStatus}
           onChange={(e) =>
             setDraft((value) => ({
@@ -64,14 +61,12 @@ export function AdminEntryFilters({
             }))
           }
         >
-          <option value="">All</option>
-          <option value="unverified">Unverified</option>
-          <option value="verified">Verified</option>
-        </select>
-      </label>
-      <label>
-        Zahlung
-        <select
+          <option value="">Alle</option>
+          <option value="unverified">Unbestätigt</option>
+          <option value="verified">Verifiziert</option>
+        </SelectField>
+        <SelectField
+          label="Zahlung"
           value={draft.paymentStatus}
           onChange={(e) =>
             setDraft((value) => ({
@@ -86,39 +81,38 @@ export function AdminEntryFilters({
           <option value="paid">Bezahlt</option>
           <option value="not_required">Nicht erforderlich</option>
           <option value="not_relevant">Nicht relevant</option>
-        </select>
-      </label>
-      <label>
-        Search
-        <input
+        </SelectField>
+        <TextInput
+          label="Suche"
+          placeholder="Startnummer, Name oder Nennung"
           value={draft.search}
           maxLength={120}
           onChange={(e) =>
             setDraft((value) => ({ ...value, search: e.target.value }))
           }
-          placeholder="Startnummer, Name oder Nennungs-ID"
         />
-      </label>
-      <label>
-        Sort
-        <select value={draft.sort} onChange={(e) => changeSort(e.target.value)}>
-          <option value="createdAt">Created</option>
-          <option value="requestedStartNumber">Start number</option>
-          <option value="acceptanceStatus">Acceptance</option>
-          <option value="verificationStatus">Verification</option>
-        </select>
-      </label>
-      <label>
-        Order
-        <select
+        <SelectField
+          label="Sortieren nach"
+          value={draft.sort}
+          onChange={(e) => changeSort(e.target.value)}
+        >
+          <option value="createdAt">Eingang</option>
+          <option value="requestedStartNumber">Startnummer</option>
+          <option value="acceptanceStatus">Nennungsstatus</option>
+          <option value="verificationStatus">E-Mail-Prüfung</option>
+        </SelectField>
+        <SelectField
+          label="Reihenfolge"
           value={draft.direction}
           onChange={(e) => changeSort(draft.sort, e.target.value)}
         >
-          <option value="desc">Descending</option>
-          <option value="asc">Ascending</option>
-        </select>
-      </label>
-      <button type="submit">Apply filters</button>
+          <option value="desc">Absteigend</option>
+          <option value="asc">Aufsteigend</option>
+        </SelectField>
+        <Button type="submit" variant="primary" size={40}>
+          Filter anwenden
+        </Button>
+      </FilterBar>
     </form>
   );
 }
