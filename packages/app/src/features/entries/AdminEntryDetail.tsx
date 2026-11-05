@@ -1,7 +1,12 @@
 import { AdminFileDownload } from './AdminFileDownload.js';
+import { Button, Textarea } from '@racepilot/ui';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from './AdminEntriesModel.js';
 import { EntryStatusBadge } from './EntryStatusBadge.js';
+import {
+  formatEntryHistoryActor,
+  formatEntryHistoryLabel,
+} from './EntryHistoryLabel.js';
 
 export function AdminEntryDetail({
   selected,
@@ -25,21 +30,29 @@ export function AdminEntryDetail({
 }) {
   return (
     <section className="admin-detail" aria-labelledby="entry-detail-title">
-      <h3 id="entry-detail-title">Entry detail</h3>
+      <h3 id="entry-detail-title">Nennung im Detail</h3>
       <dl>
-        <dt>Entry ID</dt>
-        <dd>{selected.id}</dd>
-        <dt>Class</dt>
+        <dt>Klasse</dt>
         <dd>
-          {classes.find((item) => item.id === selected.classId)?.name ??
-            selected.classId}
+          {selected.adminDetails?.eventClass.name ??
+            classes.find((item) => item.id === selected.classId)?.name ??
+            '—'}
         </dd>
-        <dt>Registration group</dt>
-        <dd>{selected.registrationGroupId}</dd>
         <dt>Fahrer</dt>
-        <dd>{selected.adminDetails?.driver.name ?? selected.driverPersonId}</dd>
+        <dd>{selected.adminDetails?.driver.name ?? '—'}</dd>
         <dt>Geburtsdatum</dt>
-        <dd>{selected.adminDetails?.driver.dateOfBirth ?? '—'}</dd>
+        <dd>
+          {selected.adminDetails?.driver.dateOfBirth
+            ? new Intl.DateTimeFormat('de-DE', {
+                dateStyle: 'medium',
+                timeZone: 'Europe/Berlin',
+              }).format(
+                new Date(
+                  `${selected.adminDetails.driver.dateOfBirth}T12:00:00`,
+                ),
+              )
+            : '—'}
+        </dd>
         <dt>Land</dt>
         <dd>{selected.adminDetails?.driver.country ?? '—'}</dd>
         <dt>E-Mail</dt>
@@ -51,7 +64,7 @@ export function AdminEntryDetail({
         <dd>
           {selected.adminDetails
             ? `${selected.adminDetails.vehicle.make} ${selected.adminDetails.vehicle.model}${selected.adminDetails.vehicle.year ? ` · ${selected.adminDetails.vehicle.year}` : ''}`
-            : selected.vehicleId}
+            : '—'}
         </dd>
         <dt>Startnummer</dt>
         <dd>{selected.adminDetails?.startNumber ?? '—'}</dd>
@@ -82,7 +95,7 @@ export function AdminEntryDetail({
             'Keine eigenen Angaben'
           )}
         </dd>
-        <dt>Acceptance</dt>
+        <dt>Nennung</dt>
         <dd>
           <EntryStatusBadge
             status={workflow?.statuses.find(
@@ -91,26 +104,28 @@ export function AdminEntryDetail({
             fallback={selected.acceptanceStatus}
           />
         </dd>
-        <dt>Verification</dt>
-        <dd>{selected.verificationStatus}</dd>
-        <dt>Price snapshot total</dt>
+        <dt>E-Mail-Prüfung</dt>
+        <dd>
+          {selected.verificationStatus === 'verified'
+            ? 'Verifiziert'
+            : 'Unbestätigt'}
+        </dd>
+        <dt>Startgeld gesamt</dt>
         <dd>
           {selected.priceSnapshot
-            ? new Intl.NumberFormat(undefined, {
+            ? new Intl.NumberFormat('de-DE', {
                 style: 'currency',
                 currency: selected.priceSnapshot.currency,
               }).format(selected.priceSnapshot.totalCents / 100)
-            : 'Not available'}
+            : 'Nicht verfügbar'}
         </dd>
       </dl>
-      <label>
-        Reason (required for audit)
-        <textarea
-          value={reason}
-          maxLength={1000}
-          onChange={(e) => setReason(e.target.value)}
-        />
-      </label>
+      <Textarea
+        label="Begründung (für das Protokoll erforderlich)"
+        value={reason}
+        maxLength={1000}
+        onChange={(e) => setReason(e.target.value)}
+      />
       <div className="admin-actions">
         {(workflow?.transitions ?? [])
           .filter((edge) => edge.from === selected.acceptanceStatus)
@@ -119,24 +134,26 @@ export function AdminEntryDetail({
               (item) => item.key === edge.to,
             );
             return (
-              <button
+              <Button
                 key={edge.to}
-                type="button"
+                variant="secondary"
+                size={40}
                 disabled={busy || !reason.trim()}
                 onClick={() => void transition('acceptance', edge.to)}
               >
                 <EntryStatusBadge status={status} fallback={edge.to} />
-              </button>
+              </Button>
             );
           })}
         {selected.verificationStatus !== 'verified' && (
-          <button
-            type="button"
+          <Button
+            variant="secondary"
+            size={40}
             disabled={busy || !reason.trim()}
             onClick={() => void transition('verification', 'verified')}
           >
-            Mark verified
-          </button>
+            E-Mail verifizieren
+          </Button>
         )}
       </div>
       <section className="admin-documents" aria-label="Prüfstatus">
@@ -152,7 +169,12 @@ export function AdminEntryDetail({
             .map((item) => (
               <li key={item.key}>
                 <span>{item.label.de}</span>
-                <strong>{item.value}</strong>
+                <EntryStatusBadge
+                  status={workflow?.statuses.find(
+                    (status) => status.key === item.value,
+                  )}
+                  fallback={item.value}
+                />
               </li>
             ))}
         </ul>
@@ -163,9 +185,14 @@ export function AdminEntryDetail({
           {(selected.adminHistory ?? []).map((event) => (
             <li key={`${event.kind}-${event.id}`}>
               <time dateTime={event.occurredAt}>
-                {new Date(event.occurredAt).toLocaleString()}
+                {new Intl.DateTimeFormat('de-DE', {
+                  dateStyle: 'medium',
+                  timeStyle: 'short',
+                  timeZone: 'Europe/Berlin',
+                }).format(new Date(event.occurredAt))}
               </time>{' '}
-              · {event.label} · {event.actor}
+              · {formatEntryHistoryLabel(event.kind, event.label, workflow)} ·{' '}
+              {formatEntryHistoryActor(event.actor)}
               {event.detail ? ` — ${event.detail}` : ''}
             </li>
           ))}

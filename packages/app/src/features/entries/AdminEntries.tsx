@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
+import { SelectField } from '@racepilot/ui';
 import { initialQuery, type EntryQuery } from './AdminEntriesModel.js';
-import { AdminWorkflow } from '../workflow/AdminWorkflow.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
 import { useAdminEntryActions } from './useAdminEntryActions.js';
@@ -144,11 +144,11 @@ export function AdminEntries({
   }
 
   if (apiState === 'loading' && events.length === 0)
-    return <p role="status">Loading administration…</p>;
+    return <p role="status">Verwaltung wird geladen …</p>;
   if (apiState === 'unauthorized')
     return (
       <section className="admin-state">
-        <h2>Sign-in required</h2>
+        <h2>Anmeldung erforderlich</h2>
         <p role="alert">
           The API returned 401. An OIDC client session/login flow is not
           available in this app yet.
@@ -158,16 +158,14 @@ export function AdminEntries({
   if (apiState === 'forbidden')
     return (
       <section className="admin-state">
-        <h2>Access denied</h2>
-        <p role="alert">
-          Your account does not have permission to view administration events.
-        </p>
+        <h2>Zugriff verweigert</h2>
+        <p role="alert">Dein Konto darf diese Veranstaltung nicht verwalten.</p>
       </section>
     );
   if (apiState === 'unavailable' && events.length === 0)
     return (
       <section className="admin-state">
-        <h2>Administration unavailable</h2>
+        <h2>Verwaltung nicht verfügbar</h2>
         <p role="alert">
           Could not load organization events. No public event data is used as a
           fallback.
@@ -178,22 +176,21 @@ export function AdminEntries({
   return (
     <section className="admin-entries" aria-labelledby="admin-entries-title">
       <h2 id="admin-entries-title">Nennungen</h2>
-      <label>
-        Event
-        <select
-          aria-label="Event"
+      {!onSharedEventChange && (
+        <SelectField
+          label="Veranstaltung"
+          aria-label="Veranstaltung"
           value={eventId}
           onChange={(e) => changeEvent(e.target.value)}
         >
-          <option value="">Select an event</option>
+          <option value="">Veranstaltung wählen</option>
           {events.map((event) => (
             <option key={event.id} value={event.id}>
               {event.name}
             </option>
           ))}
-        </select>
-      </label>
-      <AdminWorkflow eventId={eventId} events={events} />
+        </SelectField>
+      )}
       <AdminEntryList
         eventId={eventId}
         apiState={apiState}

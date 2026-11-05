@@ -71,10 +71,6 @@
   .app-main {
     padding: 16px;
   }
-  .app-main-content .admin-filters {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-  }
   .app-main-content .admin-table-wrap {
     overflow: visible;
     border: 0;

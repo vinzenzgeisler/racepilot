@@ -170,15 +170,6 @@ body:has(.app-shell) {
 .app-main-content .admin-entries > h2 {
   display: none;
 }
-.app-main-content .admin-filters {
-  padding: 16px;
-  margin: 0 0 16px;
-  background: var(--color-ivory);
-}
-.app-main-content .admin-filters label {
-  min-width: 140px;
-  flex: 1;
-}
 .app-main-content .admin-table-wrap {
   border-inline: 0;
 }

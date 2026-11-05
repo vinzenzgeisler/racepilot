@@ -217,7 +217,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   const row = page.getByRole('row').filter({ hasText: participant });
   await row.locator('button[data-entry-action]').click();
   await expect(
-    page.getByRole('heading', { name: 'Entry detail' }),
+    page.getByRole('heading', { name: 'Nennung im Detail' }),
   ).toBeVisible();
   const fileDownload = page.getByRole('link', { name: 'Datei herunterladen' });
   await expect(fileDownload).toBeVisible();
@@ -229,17 +229,17 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(readFileSync(await download.path()!)).toEqual(uploadedPng);
   await shots('admin-entry-detail');
   const entryDetail = page.getByRole('region', {
-    name: 'Entry detail',
+    name: 'Nennung im Detail',
     exact: true,
   });
   await entryDetail
-    .getByLabel('Reason (required for audit)')
+    .getByLabel('Begründung (für das Protokoll erforderlich)')
     .fill('Alpha E2E review');
   await entryDetail
-    .getByRole('button', { name: /Accepted|Angenommen|Zugelassen|Annehmen/i })
+    .getByRole('button', { name: /Angenommen|Zugelassen|Annehmen/i })
     .click();
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
-    /accepted|zugelassen/i,
+    /zugelassen|angenommen/i,
   );
 
   // Resolve the invoice id using the local Community DB; payment itself is exercised through the requested API.

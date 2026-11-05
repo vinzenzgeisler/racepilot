@@ -124,8 +124,8 @@ export function useAdminEntriesData({
         if (!isCurrent(gate, generation, controller)) return;
         setActionError(
           error.status === 403
-            ? 'You do not have permission to view event classes.'
-            : 'Event classes are unavailable.',
+            ? 'Du darfst die Klassen dieser Veranstaltung nicht ansehen.'
+            : 'Die Klassen konnten nicht geladen werden.',
         );
       });
     return () => {

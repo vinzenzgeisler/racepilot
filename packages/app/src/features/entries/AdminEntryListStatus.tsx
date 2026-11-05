@@ -10,10 +10,12 @@ export function AdminEntryListStatus({
   return (
     <>
       <p aria-live="polite">
-        {apiState === 'loading' ? 'Loading entries…' : `${total} entries`}
+        {apiState === 'loading'
+          ? 'Nennungen werden geladen …'
+          : `${total} Nennungen`}
       </p>
       {apiState === 'unavailable' && (
-        <p role="alert">Entries could not be loaded.</p>
+        <p role="alert">Nennungen konnten nicht geladen werden.</p>
       )}
     </>
   );
