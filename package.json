@@ -21,7 +21,8 @@
     "release:pack": "npm run build && node scripts/pack-product.mjs",
     "check:max-lines": "node scripts/check-max-lines.mjs",
     "check:public-exports": "node scripts/check-public-exports.mjs",
-    "lint:styles": "stylelint 'packages/app/src/**/*.css' --config stylelint.config.mjs"
+    "lint:styles": "stylelint 'packages/app/src/**/*.css' --config stylelint.config.mjs",
+    "community:demo-seed": "tsx scripts/community-demo-seed.ts"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.0",
