@@ -230,11 +230,7 @@ function AdminApplication() {
         ) : view === 'workflow' ? (
           <AdminWorkflow eventId={selectedEvent} events={events} />
         ) : view === 'modules' ? (
-          <AdminModules
-            locale={
-              navigator.language.toLowerCase().startsWith('de') ? 'de' : 'en'
-            }
-          />
+          <AdminModules locale="de" />
         ) : view === 'account' ? (
           <RegistrationFormSettings eventId={selectedEvent} />
         ) : null
