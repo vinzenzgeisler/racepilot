@@ -1,3 +1,4 @@
+import { Button, Checkbox, Field } from '@racepilot/ui';
 import type { CSSProperties } from 'react';
 import type { RegistrationModel } from './RegistrationModel.js';
 import type { RegistrationActions } from './RegistrationActions.js';
@@ -100,53 +101,38 @@ export function RegistrationView({
                     {payload.consents
                       .filter((item) => item.language === locale)
                       .map((term) => (
-                        <label
-                          className="consent"
+                        <Checkbox
                           key={`${term.key}:${term.version}:${term.language}`}
-                        >
-                          <input
-                            type="checkbox"
-                            required={term.required !== false}
-                            checked={
-                              accepted[
-                                `${term.key}:${term.version}:${term.language}`
-                              ] ?? false
-                            }
-                            onChange={(e) =>
-                              setAccepted((old) => ({
-                                ...old,
-                                [`${term.key}:${term.version}:${term.language}`]:
-                                  e.target.checked,
-                              }))
-                            }
-                          />
-                          <span>
-                            {term.required === false
-                              ? locale === 'de'
-                                ? 'Freiwillig · '
-                                : 'Optional · '
-                              : locale === 'de'
-                                ? 'Erforderlich · '
-                                : 'Required · '}
-                            {term.text} ({t.consent})
-                          </span>
-                        </label>
+                          label={`${term.required === false ? (locale === 'de' ? 'Freiwillig · ' : 'Optional · ') : locale === 'de' ? 'Erforderlich · ' : 'Required · '}${term.text} (${t.consent})`}
+                          required={term.required !== false}
+                          checked={
+                            accepted[
+                              `${term.key}:${term.version}:${term.language}`
+                            ] ?? false
+                          }
+                          onChange={(e) =>
+                            setAccepted((old) => ({
+                              ...old,
+                              [`${term.key}:${term.version}:${term.language}`]:
+                                e.target.checked,
+                            }))
+                          }
+                        />
                       ))}
                   </div>
                 );
               const key = field.key as keyof typeof values;
               return (
-                <label key={field.key}>
-                  {field.label[locale]}
-                  <input
-                    type={field.type}
-                    required={field.required}
-                    value={values[key]}
-                    onChange={(e) =>
-                      setValues((old) => ({ ...old, [key]: e.target.value }))
-                    }
-                  />
-                </label>
+                <Field
+                  key={field.key}
+                  label={field.label[locale]}
+                  type={field.type}
+                  required={field.required}
+                  value={values[key]}
+                  onChange={(e) =>
+                    setValues((old) => ({ ...old, [key]: e.target.value }))
+                  }
+                />
               );
             })}
             <RegistrationCustomAnswers
@@ -160,9 +146,9 @@ export function RegistrationView({
             />
             {currentStep?.id === 'driver' && guardianRequired && (
               <div className="guardian-fields">
-                <label>
-                  {t.guardianName}
-                  <input
+                <>
+                  <Field
+                    label={t.guardianName}
                     required
                     value={values.guardianName}
                     onChange={(e) =>
@@ -172,10 +158,8 @@ export function RegistrationView({
                       }))
                     }
                   />
-                </label>
-                <label>
-                  {t.guardianEmail}
-                  <input
+                  <Field
+                    label={t.guardianEmail}
                     type="email"
                     required
                     value={values.guardianEmail}
@@ -186,26 +170,31 @@ export function RegistrationView({
                       }))
                     }
                   />
-                </label>
+                </>
               </div>
             )}
           </fieldset>
           {error && <p role="alert">{error}</p>}
           <div className="registration-actions">
             {step > 0 && (
-              <button type="button" onClick={() => setStep(step - 1)}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setStep(step - 1)}
+              >
                 {t.previous}
-              </button>
+              </Button>
             )}
-            <button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting}>
               {submitting
                 ? t.sending
                 : step === steps.length - 1
                   ? t.submit
                   : t.next}
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="text"
               disabled={savingDraft}
               onClick={() => void saveDraft()}
             >
@@ -214,7 +203,7 @@ export function RegistrationView({
                 : locale === 'de'
                   ? 'Zwischenspeichern'
                   : 'Save for later'}
-            </button>
+            </Button>
           </div>
           {draftMessage && <p role="status">{draftMessage}</p>}
         </form>

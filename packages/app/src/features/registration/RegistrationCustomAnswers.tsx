@@ -1,3 +1,4 @@
+import { Field, FileUpload, SelectField } from '@racepilot/ui';
 import type { Dispatch, SetStateAction } from 'react';
 import type { RegistrationCustomField } from '@racepilot/contracts';
 
@@ -24,11 +25,10 @@ export function RegistrationCustomAnswers({
   return (
     <>
       {fields.map((field) => (
-        <label key={field.key}>
-          {field.label[locale]}
+        <div key={field.key}>
           {field.type === 'text' && (
-            <input
-              type="text"
+            <Field
+              label={field.label[locale]}
               maxLength={2000}
               required={field.required}
               value={
@@ -45,7 +45,8 @@ export function RegistrationCustomAnswers({
             />
           )}
           {field.type === 'select' && (
-            <select
+            <SelectField
+              label={field.label[locale]}
               required={field.required}
               value={
                 typeof customAnswers[field.key] === 'string'
@@ -67,10 +68,11 @@ export function RegistrationCustomAnswers({
                   {option.label[locale]}
                 </option>
               ))}
-            </select>
+            </SelectField>
           )}
           {field.type === 'yes_no' && (
-            <select
+            <SelectField
+              label={field.label[locale]}
               required={field.required}
               value={
                 typeof customAnswers[field.key] === 'boolean'
@@ -91,12 +93,12 @@ export function RegistrationCustomAnswers({
               </option>
               <option value="yes">{locale === 'de' ? 'Ja' : 'Yes'}</option>
               <option value="no">{locale === 'de' ? 'Nein' : 'No'}</option>
-            </select>
+            </SelectField>
           )}
           {field.type === 'file' && (
             <>
-              <input
-                type="file"
+              <FileUpload
+                label={field.label[locale]}
                 accept="image/png,image/jpeg,image/webp"
                 required={
                   field.required && typeof customAnswers[field.key] !== 'object'
@@ -122,7 +124,7 @@ export function RegistrationCustomAnswers({
                 )}
             </>
           )}
-        </label>
+        </div>
       ))}
     </>
   );
