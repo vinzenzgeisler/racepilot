@@ -2,12 +2,18 @@ import React from 'react';
 
 export function Checkbox({
   label,
+  visuallyHiddenLabel = false,
   ...props
-}: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+}: React.InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  visuallyHiddenLabel?: boolean;
+}) {
   return (
     <label className="nb-choice">
       <input {...props} type="checkbox" />
-      <span>{label}</span>
+      <span className={visuallyHiddenLabel ? 'nb-visually-hidden' : undefined}>
+        {label}
+      </span>
     </label>
   );
 }
