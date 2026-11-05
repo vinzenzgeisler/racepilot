@@ -1,3 +1,4 @@
+import { Button, Steps } from '@racepilot/ui';
 import type { RegistrationModel } from './RegistrationModel.js';
 export function RegistrationHeader({
   model,
@@ -14,22 +15,24 @@ export function RegistrationHeader({
       <div
         className="registration-language"
         role="group"
-        aria-label="Language / Sprache"
+        aria-label={locale === 'de' ? 'Sprache' : 'Language'}
       >
-        <button
+        <Button
           type="button"
+          variant={locale === 'de' ? 'primary' : 'secondary'}
           aria-pressed={locale === 'de'}
           onClick={() => setLocale('de')}
         >
           Deutsch
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant={locale === 'en' ? 'primary' : 'secondary'}
           aria-pressed={locale === 'en'}
           onClick={() => setLocale('en')}
         >
           English
-        </button>
+        </Button>
       </div>
       <header className="registration-header">
         {payload.registrationFormConfig.branding.logoLightObjectId && (
@@ -59,16 +62,12 @@ export function RegistrationHeader({
             : 'Text colors are automatically adjusted for readability.'}
         </p>
       )}
-      <ol
-        className="registration-steps"
-        aria-label={locale === 'de' ? 'Anmeldeschritte' : 'Registration steps'}
-      >
-        {steps.map((item, index) => (
-          <li key={item.id} aria-current={index === step ? 'step' : undefined}>
-            {item.title[locale]}
-          </li>
-        ))}
-      </ol>
+      <Steps
+        steps={steps.map((item) => item.title[locale])}
+        current={step}
+        label={locale === 'de' ? 'Anmeldeschritte' : 'Registration steps'}
+        completedLabel={locale === 'de' ? 'Abgeschlossen' : 'Completed'}
+      />
     </>
   );
 }

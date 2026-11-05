@@ -1,3 +1,4 @@
+import { Button, Field, SelectField } from '@racepilot/ui';
 import type { Dispatch, SetStateAction } from 'react';
 import type { FormPayload, VehicleEntry } from './RegistrationDomain.js';
 import { translations } from './RegistrationDomain.js';
@@ -42,138 +43,124 @@ export function RegistrationVehicleFields({
           <legend>
             {field.label[locale]} {index + 1}
           </legend>
-          <label>
-            {t.class}
-            <select
-              required
-              value={item.classId}
-              onChange={(e) => setVehicle(index, { classId: e.target.value })}
-            >
-              <option value="">—</option>
-              {payload.classes.map((option) => (
-                <option
-                  key={option.id}
-                  value={option.id}
-                  disabled={
-                    new Set(
-                      vehicles.map((entry) => entry.classId).filter(Boolean),
-                    ).size >=
-                      payload.registrationSettings.maximumClassesPerGroup &&
-                    !vehicles.some(
-                      (entry, i) => i !== index && entry.classId === option.id,
-                    ) &&
-                    item.classId !== option.id
-                  }
-                >
-                  {option.name} ({option.code})
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t.make}
-            <input
-              required
-              value={item.make}
-              onChange={(e) => setVehicle(index, { make: e.target.value })}
-            />
-          </label>
-          <label>
-            {t.model}
-            <input
-              required
-              value={item.model}
-              onChange={(e) => setVehicle(index, { model: e.target.value })}
-            />
-          </label>
-          <label>
-            {t.year}
-            <input
-              type="number"
-              min="1886"
-              max="2200"
-              value={item.year}
-              onChange={(e) => setVehicle(index, { year: e.target.value })}
-            />
-          </label>
-          <label>
-            {t.registration}
-            <input
-              value={item.registration}
-              onChange={(e) =>
-                setVehicle(index, {
-                  registration: e.target.value,
-                })
-              }
-            />
-          </label>
+          <SelectField
+            label={t.class}
+            required
+            value={item.classId}
+            onChange={(e) => setVehicle(index, { classId: e.target.value })}
+          >
+            <option value="">—</option>
+            {payload.classes.map((option) => (
+              <option
+                key={option.id}
+                value={option.id}
+                disabled={
+                  new Set(
+                    vehicles.map((entry) => entry.classId).filter(Boolean),
+                  ).size >=
+                    payload.registrationSettings.maximumClassesPerGroup &&
+                  !vehicles.some(
+                    (entry, i) => i !== index && entry.classId === option.id,
+                  ) &&
+                  item.classId !== option.id
+                }
+              >
+                {option.name} ({option.code})
+              </option>
+            ))}
+          </SelectField>
+          <Field
+            label={t.make}
+            required
+            value={item.make}
+            onChange={(e) => setVehicle(index, { make: e.target.value })}
+          />
+          <Field
+            label={t.model}
+            required
+            value={item.model}
+            onChange={(e) => setVehicle(index, { model: e.target.value })}
+          />
+          <Field
+            label={t.year}
+            type="number"
+            min="1886"
+            max="2200"
+            value={item.year}
+            onChange={(e) => setVehicle(index, { year: e.target.value })}
+          />
+          <Field
+            label={t.registration}
+            value={item.registration}
+            onChange={(e) =>
+              setVehicle(index, { registration: e.target.value })
+            }
+          />
           {payload.registrationFormConfig.fields.requestedStartNumber.state !==
             'hidden' && (
-            <label>
-              {locale === 'de' ? 'Wunsch-Startnummer' : 'Requested number'}
-              <input
-                maxLength={16}
-                value={item.requestedStartNumber}
-                onChange={(e) => {
-                  const requestedStartNumber = e.target.value;
-                  numberLookup.current[index] = requestedStartNumber;
-                  setVehicle(index, { requestedStartNumber });
-                  setNumberAvailability((old) => ({
-                    ...old,
-                    [index]: null,
-                  }));
-                  if (requestedStartNumber.trim())
-                    void fetch(
-                      `/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration/start-number?number=${encodeURIComponent(requestedStartNumber)}`,
-                    )
-                      .then((response) =>
-                        response.ok ? response.json() : null,
+            <Field
+              label={
+                locale === 'de' ? 'Wunsch-Startnummer' : 'Requested number'
+              }
+              maxLength={16}
+              value={item.requestedStartNumber}
+              {...(item.requestedStartNumber
+                ? {
+                    hint:
+                      numberAvailability[index] === true
+                        ? locale === 'de'
+                          ? 'Startnummer ist frei'
+                          : 'Number is available'
+                        : numberAvailability[index] === false
+                          ? locale === 'de'
+                            ? 'Startnummer ist bereits vergeben'
+                            : 'Number is already taken'
+                          : locale === 'de'
+                            ? 'Startnummer wird geprüft …'
+                            : 'Checking number …',
+                  }
+                : {})}
+              onChange={(e) => {
+                const requestedStartNumber = e.target.value;
+                numberLookup.current[index] = requestedStartNumber;
+                setVehicle(index, { requestedStartNumber });
+                setNumberAvailability((old) => ({ ...old, [index]: null }));
+                if (requestedStartNumber.trim())
+                  void fetch(
+                    `/public/organizations/${encodeURIComponent(organizationId)}/events/${encodeURIComponent(eventSlug)}/registration/start-number?number=${encodeURIComponent(requestedStartNumber)}`,
+                  )
+                    .then((response) => (response.ok ? response.json() : null))
+                    .then((body: { available?: boolean } | null) => {
+                      if (
+                        body &&
+                        numberLookup.current[index] === requestedStartNumber
                       )
-                      .then((body: { available?: boolean } | null) => {
-                        if (
-                          body &&
-                          numberLookup.current[index] === requestedStartNumber
-                        )
-                          setNumberAvailability((old) => ({
-                            ...old,
-                            [index]: body.available === true,
-                          }));
-                      })
-                      .catch(() => undefined);
-                }}
-              />
-              {item.requestedStartNumber && (
-                <small role="status">
-                  {numberAvailability[index] === true
-                    ? locale === 'de'
-                      ? 'Startnummer ist frei'
-                      : 'Number is available'
-                    : numberAvailability[index] === false
-                      ? locale === 'de'
-                        ? 'Startnummer ist bereits vergeben'
-                        : 'Number is already taken'
-                      : locale === 'de'
-                        ? 'Startnummer wird geprüft …'
-                        : 'Checking number …'}
-                </small>
-              )}
-            </label>
+                        setNumberAvailability((old) => ({
+                          ...old,
+                          [index]: body.available === true,
+                        }));
+                    })
+                    .catch(() => undefined);
+              }}
+            />
           )}
           {vehicles.length > 1 && (
-            <button
+            <Button
               type="button"
+              variant="text"
               onClick={() =>
                 setVehicles((old) => old.filter((_, i) => i !== index))
               }
             >
               {t.remove}
-            </button>
+            </Button>
           )}
         </fieldset>
       ))}
       {payload.registrationFormConfig.features.multipleEntries && (
-        <button
+        <Button
           type="button"
+          variant="secondary"
           onClick={() =>
             setVehicles((old) => [
               ...old,
@@ -189,7 +176,7 @@ export function RegistrationVehicleFields({
           }
         >
           {t.addVehicle}
-        </button>
+        </Button>
       )}
     </div>
   );

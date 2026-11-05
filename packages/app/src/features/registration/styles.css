@@ -61,75 +61,11 @@
   padding: 1rem 0;
   margin-block: 1rem;
 }
-.registration label {
-  display: grid;
-  gap: 0.4rem;
-  margin-block: 0.8rem;
-  font-weight: 600;
-}
-.registration input,
-.registration select,
-.registration button {
-  font: inherit;
-  min-height: 44px;
-  padding: 0.5rem 0.7rem;
-}
-.registration button[type='submit'] {
-  background: var(--brand-primary);
-  color: var(--brand-primary-text);
-  border: 0;
-  border-radius: var(--brand-radius);
-  min-width: 12rem;
-}
-.registration-steps {
-  list-style: none;
-  counter-reset: regstep;
-  padding: 0;
-  align-items: end;
-}
-.registration-steps li {
-  counter-increment: regstep;
-  flex: 1;
-  min-height: calc(2rem + var(--step-height, 0px));
-  border-top: 5px solid var(--color-line);
-  padding-top: 0.5rem;
-}
-.registration-steps li:nth-child(1) {
-  --step-height: 0px;
-}
-.registration-steps li:nth-child(2) {
-  --step-height: 5px;
-}
-.registration-steps li:nth-child(3) {
-  --step-height: 10px;
-}
-.registration-steps li[aria-current='step'] {
-  border-color: var(--brand-primary);
-  color: var(--brand-primary);
-}
 .registration-language,
-.registration-actions,
-.registration-steps {
+.registration-actions {
   display: flex;
-  gap: 0.75rem;
+  gap: var(--space-3);
   flex-wrap: wrap;
-}
-.registration-steps {
-  padding-left: 1.4rem;
-}
-.registration-steps [aria-current='step'] {
-  font-weight: 700;
-  text-decoration: underline;
-  text-underline-offset: 0.2rem;
-}
-.registration .consent {
-  grid-template-columns: auto 1fr;
-  align-items: start;
-}
-.registration .consent input {
-  min-height: auto;
-  width: 1.2rem;
-  height: 1.2rem;
 }
 .registration :focus-visible {
   outline: 0.2rem solid var(--brand-accent, var(--color-marshal));
@@ -138,7 +74,7 @@
 @media (max-width: 720px) {
   .registration-layout {
     grid-template-columns: 1fr;
-    gap: 0.5rem;
+    gap: var(--space-2);
   }
   .registration-summary {
     position: static;
@@ -146,14 +82,14 @@
     border: 0;
     border-top: 1px solid var(--color-line);
     border-bottom: 1px solid var(--color-line);
-    padding: 0.5rem 0;
+    padding: var(--space-2) 0;
   }
   .registration-summary h3 {
-    margin-bottom: 0.25rem;
+    margin-bottom: var(--space-1);
   }
   .registration-summary p {
     display: inline-block;
-    margin: 0.3rem 1rem 0.3rem 0;
+    margin: var(--space-1) var(--space-4) var(--space-1) 0;
   }
   .registration-actions {
     display: grid;
