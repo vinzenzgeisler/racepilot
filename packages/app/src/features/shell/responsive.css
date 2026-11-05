@@ -38,8 +38,7 @@
     justify-content: center;
     padding-inline: 4px;
   }
-  .app-header,
-  .app-filter-bar {
+  .app-header {
     padding-inline: 24px;
   }
   .app-main {
@@ -68,17 +67,6 @@
     min-height: 44px;
     padding-inline: 8px;
     font-size: 12px;
-  }
-  .app-filter-bar {
-    min-height: 52px;
-    padding: 6px 16px;
-    overflow-x: auto;
-  }
-  .app-filter-chip {
-    flex: 0 0 auto;
-  }
-  .app-filter-clear {
-    display: none;
   }
   .app-main {
     padding: 16px;
