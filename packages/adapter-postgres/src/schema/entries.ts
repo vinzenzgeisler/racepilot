@@ -54,6 +54,7 @@ export const vehicles = pgTable(
     model: text('model').notNull(),
     year: integer('year'),
     registration: text('registration'),
+    imageUrl: text('image_url'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

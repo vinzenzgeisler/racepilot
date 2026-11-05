@@ -224,3 +224,15 @@ export const classes = [
     fee: 11000,
   },
 ];
+
+export function gradientImage(index: number): string {
+  const palettes = [
+    ['#788479', '#333d38'],
+    ['#a59e83', '#46514a'],
+    ['#516b65', '#222d2b'],
+    ['#7d7772', '#3c3938'],
+  ];
+  const [top, bottom] = palettes[index % palettes.length]!;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs><rect width="640" height="400" fill="url(#g)"/></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}

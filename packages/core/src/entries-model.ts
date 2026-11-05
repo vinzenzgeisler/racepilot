@@ -29,6 +29,7 @@ export interface Vehicle {
   model: string;
   year: number | null;
   registration: string | null;
+  imageUrl?: string | null;
   createdAt: string;
   deletedAt: string | null;
   deletionReason: string | null;
@@ -76,7 +77,8 @@ export interface Entry {
       email: string | null;
       emailVerified: boolean;
     };
-    vehicle: { make: string; model: string; year: number | null };
+    // prettier-ignore
+    vehicle: { make: string; model: string; year: number | null; imageUrl?: string | null };
     eventClass: { code: string; name: string };
     startNumber: string | null;
     customAnswers: Array<{
@@ -109,7 +111,7 @@ export type PersonInput = Pick<
 export type VehicleInput = Pick<
   Vehicle,
   'make' | 'model' | 'year' | 'registration'
->;
+> & { imageUrl?: string | null };
 
 export type RegistrationGroupInput = Pick<
   RegistrationGroup,

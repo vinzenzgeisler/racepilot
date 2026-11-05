@@ -1,4 +1,4 @@
-import { rows, classes } from './community-demo-data.js';
+import { rows, classes, gradientImage } from './community-demo-data.js';
 import { and, eq, sql } from 'drizzle-orm';
 import {
   calculatePrice,
@@ -22,6 +22,7 @@ import {
   people,
   entries,
   registrationGroups,
+  vehicles,
 } from '@racepilot/adapter-postgres';
 
 if (
@@ -138,7 +139,7 @@ try {
     const lastName = lastParts.join(' ');
     const email = `demo-${String(index + 1).padStart(3, '0')}@example.invalid`;
     const existing = await db
-      .select({ id: entries.id })
+      .select({ id: entries.id, vehicleId: entries.vehicleId })
       .from(entries)
       .innerJoin(
         people,
@@ -155,7 +156,19 @@ try {
         ),
       )
       .limit(1);
-    if (existing.length) continue;
+    if (existing.length) {
+      await db
+        .update(vehicles)
+        .set({ imageUrl: gradientImage(index) })
+        .where(
+          and(
+            eq(vehicles.organizationId, org.id),
+            eq(vehicles.id, existing[0]!.vehicleId),
+            sql`${vehicles.imageUrl} is null`,
+          ),
+        );
+      continue;
+    }
     const person = await createPersonRepository(db).create(ctx, {
       firstName: firstName!,
       lastName,
@@ -168,6 +181,7 @@ try {
       model,
       year: 1970 + (index % 30),
       registration,
+      imageUrl: gradientImage(index),
     });
     const [group] = await db
       .insert(registrationGroups)

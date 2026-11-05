@@ -162,6 +162,13 @@
       "when": 1793446468830,
       "tag": "0022_registration_form_custom_fields",
       "breakpoints": false
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1793446468831,
+      "tag": "0023_vehicle_image",
+      "breakpoints": false
     }
   ]
 }
