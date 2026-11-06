@@ -229,7 +229,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: 'Ada Lovelace' });
   await row.getByRole('button', { name: 'Ada Lovelace Lotus Seven' }).click();
-  const preview = page.getByRole('region', { name: 'Nennungsvorschau' });
+  const preview = page.getByRole('complementary', { name: 'Nennungsvorschau' });
   await expect(preview).toContainText('Ada Lovelace');
   await preview.getByRole('button', { name: 'Zulassen' }).click();
   await expect(preview).toContainText('Zugelassen');
