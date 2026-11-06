@@ -49,7 +49,7 @@ test('admin creates a class, terms and opens its public registration in the UI',
     .fill(`participant-${suffix}@example.test`);
   await page.getByLabel('Geburtsdatum').fill('1990-12-10');
   await page.getByRole('button', { name: 'Weiter', exact: true }).click();
-  await page.getByLabel('Klasse').selectOption({ label: 'Motorrad' });
+  await page.getByLabel('Klasse').selectOption({ label: 'Motorrad (MOTO)' });
   await page.getByLabel('Hersteller').fill('Honda');
   await page.getByLabel('Modell').fill('CB500');
   await page.getByRole('button', { name: 'Weiter', exact: true }).click();
