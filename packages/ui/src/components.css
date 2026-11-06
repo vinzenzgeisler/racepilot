@@ -37,3 +37,9 @@
 @import url('./workspace/action-panel.css');
 @import url('./workspace/document-list.css');
 @import url('./workspace/history-timeline.css');
+@import url('./detail/detail-layout.css');
+@import url('./detail/detail-header.css');
+@import url('./detail/detail-section.css');
+@import url('./detail/action-rail.css');
+@import url('./detail/reason-dialog.css');
+@import url('./detail/message-table.css');

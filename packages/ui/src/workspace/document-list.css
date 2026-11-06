@@ -6,8 +6,21 @@
 }
 .nb-document-list li {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
+  min-height: 48px;
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--color-line);
+}
+.nb-document-list li.is-emphasis > span:first-child {
+  font-weight: var(--weight-semibold);
+}
+.nb-document-list-end {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-4);
+  text-align: right;
 }
