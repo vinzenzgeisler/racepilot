@@ -125,7 +125,7 @@ export function AppShell({
         />
       }
       header={
-detailOpen && view === 'entries' ? null : (
+        detailOpen && view === 'entries' ? null : (
           <PageHeader
             className={view === 'entries' ? 'nb-entry-page-header' : undefined}
             title={
