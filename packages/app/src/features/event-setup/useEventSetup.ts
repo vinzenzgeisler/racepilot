@@ -32,6 +32,8 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
   const [link, setLink] = useState('');
   const [currentStep, setCurrentStep] = useState(0);
   const lock = useRef(false);
+  const loading = useRef(false);
+  const generation = useRef(0);
 
   const refreshEvents = useCallback(async () => {
     const rows = await listEvents();
@@ -40,44 +42,72 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
   }, []);
 
   const resume = useCallback(async (id: string) => {
+    if (lock.current) return;
+    const requestGeneration = ++generation.current;
+    loading.current = true;
+    setBusy(true);
     setMessage('');
     setLink('');
-    const [event, classes, pricing, consents] = await Promise.all([
-      loadEvent(id),
-      listClasses(id),
-      listPricing(id),
-      loadTerms(id),
-    ]);
-    setCurrentStep(
-      classes.length === 0
-        ? 1
-        : pricing.length < classes.length
-          ? 2
-          : consents.terms
-            ? 4
-            : 3,
-    );
-    setDraft({
-      id: event.id,
-      name: event.name,
-      slug: event.slug,
-      startsOn: event.startsOn.slice(0, 10),
-      endsOn: event.endsOn.slice(0, 10),
-      classes: classes.map((item) => ({
-        id: item.id,
-        name: item.name,
-        code: item.code,
-        vehicleType: item.vehicleType,
-        fee: (
-          (pricing.find((price) => price.classId === item.id)?.baseCents ?? 0) /
-          100
-        ).toFixed(2),
-      })),
-      terms: consents.terms?.[0]?.text ?? '',
-    });
+    try {
+      const [event, classes, pricing, consents] = await Promise.all([
+        loadEvent(id),
+        listClasses(id),
+        listPricing(id),
+        loadTerms(id),
+      ]);
+      if (generation.current !== requestGeneration) return;
+      setCurrentStep(
+        classes.length === 0
+          ? 1
+          : pricing.length < classes.length
+            ? 2
+            : consents.terms?.length
+              ? 4
+              : 3,
+      );
+      setDraft({
+        id: event.id,
+        name: event.name,
+        slug: event.slug,
+        startsOn: event.startsOn.slice(0, 10),
+        endsOn: event.endsOn.slice(0, 10),
+        classes: classes.map((item) => {
+          const rule = pricing.find((price) => price.classId === item.id);
+          return {
+            id: item.id,
+            name: item.name,
+            code: item.code,
+            vehicleType: item.vehicleType,
+            maxParticipants: item.maxParticipants,
+            closed: item.closed,
+            additionalEntryAdjustmentCents:
+              rule?.additionalEntryAdjustmentCents ?? 0,
+            earlyBirdDeadline: rule?.earlyBirdDeadline ?? null,
+            earlyBirdDiscountCents: rule?.earlyBirdDiscountCents ?? 0,
+            fee: ((rule?.baseCents ?? 0) / 100).toFixed(2),
+          };
+        }),
+        terms:
+          consents.terms?.find(
+            (term) => term.key === 'participation' && term.language === 'de',
+          )?.text ?? '',
+        consentTerms: consents.terms ?? [],
+      });
+    } catch (error) {
+      if (generation.current === requestGeneration) throw error;
+    } finally {
+      if (generation.current === requestGeneration) {
+        loading.current = false;
+        setBusy(false);
+      }
+    }
   }, []);
 
   const reset = useCallback(() => {
+    if (lock.current) return;
+    generation.current += 1;
+    loading.current = false;
+    setBusy(false);
     setDraft(emptyDraft());
     setMessage('');
     setLink('');
@@ -86,7 +116,7 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
 
   const save = useCallback(
     async (form: HTMLFormElement, open: boolean) => {
-      if (lock.current) return;
+      if (lock.current || loading.current) return;
       if (!form.reportValidity()) return;
       lock.current = true;
       setBusy(true);
@@ -149,10 +179,25 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
               (price) => price.classId === classId && price.baseCents === cents,
             )
           )
-            await savePricing(stored.id, classId, cents);
+            await savePricing(stored.id, classId, {
+              baseCents: cents,
+              additionalEntryAdjustmentCents:
+                item.additionalEntryAdjustmentCents ?? 0,
+              earlyBirdDeadline: item.earlyBirdDeadline ?? null,
+              earlyBirdDiscountCents: item.earlyBirdDiscountCents ?? 0,
+            });
         }
         setCurrentStep(3);
-        await saveTerms(stored.id, draft.terms);
+        const savedTerms = await saveTerms(
+          stored.id,
+          draft.terms,
+          draft.consentTerms ?? [],
+        );
+        if (savedTerms)
+          setDraft((current) => ({
+            ...current,
+            consentTerms: savedTerms.terms,
+          }));
         setCurrentStep(4);
         let finalEvent = stored;
         if (open && stored.status !== 'open')

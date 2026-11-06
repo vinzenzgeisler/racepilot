@@ -47,7 +47,6 @@ export function EventSetup({
         busy={setup.busy}
         onResume={(id) =>
           void setup.resume(id).catch((error: unknown) => {
-            setup.setDraft((current) => ({ ...current, id }));
             // The form stays available so a failed load can be retried by reselecting the draft.
             setup.setMessage(
               error instanceof Error

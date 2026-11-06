@@ -18,12 +18,32 @@ export type SetupClass = {
   closed: boolean;
 };
 export type VehicleType = 'car' | 'motorcycle' | 'kart' | 'other';
+export type SetupPriceRule = {
+  classId: string;
+  baseCents: number;
+  additionalEntryAdjustmentCents: number;
+  earlyBirdDeadline: string | null;
+  earlyBirdDiscountCents: number;
+};
+export type SetupConsent = {
+  key: string;
+  version: string;
+  language: 'de' | 'en';
+  text: string;
+  hash: string;
+  required: boolean;
+};
 export type SetupClassDraft = {
   id?: string;
   name: string;
   code: string;
   fee: string;
   vehicleType: VehicleType;
+  maxParticipants?: number | null;
+  closed?: boolean;
+  additionalEntryAdjustmentCents?: number;
+  earlyBirdDeadline?: string | null;
+  earlyBirdDiscountCents?: number;
 };
 export type SetupDraft = {
   id?: string;
@@ -33,6 +53,7 @@ export type SetupDraft = {
   endsOn: string;
   classes: SetupClassDraft[];
   terms: string;
+  consentTerms?: SetupConsent[];
 };
 export type EventOption = Pick<SetupEvent, 'id' | 'name' | 'slug' | 'status'>;
 
@@ -91,7 +112,7 @@ export const saveEvent = (draft: SetupDraft) =>
 export const listClasses = (eventId: string) =>
   request<SetupClass[]>(`/admin/events/${encodeURIComponent(eventId)}/classes`);
 export const listPricing = (eventId: string) =>
-  request<Array<{ classId: string; baseCents: number }>>(
+  request<SetupPriceRule[]>(
     `/admin/events/${encodeURIComponent(eventId)}/pricing`,
   );
 export const saveClass = (
@@ -110,34 +131,37 @@ export const saveClass = (
         code: item.code.trim(),
         vehicleType: item.vehicleType,
         sortOrder,
-        maxParticipants: null,
-        closed: false,
       }),
     },
   );
 export const savePricing = (
   eventId: string,
   classId: string,
-  baseCents: number,
+  rule: Omit<SetupPriceRule, 'classId'>,
 ) =>
   request(
     `/admin/events/${encodeURIComponent(eventId)}/pricing/${encodeURIComponent(classId)}`,
     {
       method: 'PUT',
       body: JSON.stringify({
-        baseCents,
-        additionalEntryAdjustmentCents: 0,
-        earlyBirdDeadline: null,
-        earlyBirdDiscountCents: 0,
+        ...rule,
       }),
     },
   );
 export const loadTerms = (eventId: string) =>
-  request<{ terms?: Array<{ text?: string }> }>(
+  request<{ terms?: SetupConsent[] }>(
     `/admin/events/${encodeURIComponent(eventId)}/consents`,
   );
-export const saveTerms = async (eventId: string, terms: string) => {
+export const saveTerms = async (
+  eventId: string,
+  terms: string,
+  existing: SetupConsent[],
+) => {
   const text = terms.trim();
+  const current = existing.find(
+    (term) => term.key === 'participation' && term.language === 'de',
+  );
+  if (current?.text === text || (!current && !text)) return;
   const hash = [
     ...new Uint8Array(
       await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)),
@@ -145,23 +169,31 @@ export const saveTerms = async (eventId: string, terms: string) => {
   ]
     .map((value) => value.toString(16).padStart(2, '0'))
     .join('');
-  return request(`/admin/events/${encodeURIComponent(eventId)}/consents`, {
-    method: 'PUT',
-    body: JSON.stringify({
-      terms: text
-        ? [
-            {
-              key: 'participation',
-              version: '1',
-              language: 'de',
-              text,
-              hash,
-              required: true,
-            },
-          ]
-        : [],
-    }),
-  });
+  return request<{ terms: SetupConsent[] }>(
+    `/admin/events/${encodeURIComponent(eventId)}/consents`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({
+        terms: [
+          ...existing.filter(
+            (term) => !(term.key === 'participation' && term.language === 'de'),
+          ),
+          ...(text
+            ? [
+                {
+                  key: 'participation',
+                  version: nextTermVersion(current?.version),
+                  language: 'de' as const,
+                  text,
+                  hash,
+                  required: current?.required ?? true,
+                },
+              ]
+            : []),
+        ],
+      }),
+    },
+  );
 };
 export const openEvent = (eventId: string) =>
   request<SetupEvent>(
@@ -171,3 +203,9 @@ export const openEvent = (eventId: string) =>
       body: JSON.stringify({ status: 'open' }),
     },
   );
+
+function nextTermVersion(version: string | undefined): string {
+  if (!version) return '1';
+  const match = /^(.*?)(\d+)$/.exec(version);
+  return match ? `${match[1]}${Number(match[2]) + 1}` : `${version}.1`;
+}
