@@ -8,6 +8,7 @@ import { PriceSnapshot } from './pricing.js';
 import { RequestContext } from './context.js';
 import { StoredObjectRef } from './providers.js';
 import type {
+  AdminEntryConsent,
   AdminEntryDriver,
   AdminEntryInvoice,
   AdminEntryVehicle,
@@ -78,6 +79,7 @@ export interface Entry {
     driver: AdminEntryDriver;
     vehicle: AdminEntryVehicle;
     invoice?: AdminEntryInvoice | null;
+    consents?: AdminEntryConsent[];
     eventClass: { code: string; name: string };
     startNumber: string | null;
     customAnswers: Array<{

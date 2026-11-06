@@ -1,5 +1,15 @@
 import type { RequestContext } from './context.js';
 
+/** One recorded acceptance of a versioned text; `text` is null when the event no longer carries it. */
+export interface AdminEntryConsent {
+  key: string;
+  version: string;
+  language: 'de' | 'en';
+  acceptedAt: string;
+  text: string | null;
+  required: boolean | null;
+}
+
 export interface AdminEntryDriver {
   /** Display name; edit the structured parts below, never split this string. */
   name: string;
