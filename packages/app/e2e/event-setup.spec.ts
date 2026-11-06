@@ -20,7 +20,7 @@ test('admin creates a class, terms and opens its public registration in the UI',
   const suffix = randomUUID().slice(0, 8);
   const name = `UI Setup ${suffix}`;
   const terms = `Teilnahmebedingungen ${suffix}`;
-  await page.getByLabel('Name').fill(name);
+  await page.getByLabel('Name', { exact: true }).fill(name);
   await page.getByLabel('Beginn').fill('2027-06-01');
   await page.getByLabel('Ende').fill('2027-06-02');
   await page.getByLabel('Klassenname').fill('Motorrad');
