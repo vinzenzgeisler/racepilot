@@ -80,6 +80,21 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
       totalPages: Math.ceil(result.total / parsed.data.pageSize),
     });
   });
+  app.get('/admin/events/:eventId/entry-counts', async (c) => {
+    const member = await resolveMemberContext(c.req.raw);
+    if (!member) return c.json({ error: 'Unauthorized' }, 401);
+    if (!member.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entries?.countByStatus)
+      return c.json({ error: 'Not found' }, 404);
+    const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
+    if (!eventId.success) return c.json({ error: 'Invalid event' }, 400);
+    const counts = await deps.entries.countByStatus(member, eventId.data);
+    return c.json({
+      total: Object.values(counts).reduce((a, b) => a + b, 0),
+      statuses: counts,
+    });
+  });
   app.get('/admin/entries/:entryId', async (c) => {
     const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);

@@ -1,13 +1,9 @@
-.admin-entries label,
 .admin-detail label {
   display: grid;
   gap: var(--space-1);
   font: var(--text-label);
 }
 
-.admin-entries select,
-.admin-entries input,
-.admin-entries button,
 .admin-detail textarea,
 .admin-detail button {
   font: var(--text-body);
@@ -56,6 +52,14 @@
   align-items: center;
 }
 
+.admin-detail-view {
+  max-width: 1000px;
+}
+
+.admin-detail-view > .nb-button {
+  margin-top: var(--space-4);
+}
+
 .admin-detail,
 .admin-state {
   margin-block: var(--space-8);
@@ -83,4 +87,28 @@
 .admin-dependency {
   color: var(--color-graphite);
   font-size: var(--type-small-size);
+}
+
+.nb-entry-page-header {
+  min-height: 54px;
+  padding: var(--space-2) var(--space-4);
+}
+
+.nb-entry-page-header > div > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+
+.nb-entry-page-header div p {
+  margin: 0;
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+
+@media (width < 768px) {
+  .nb-entry-page-header > div > div:first-child {
+    display: block;
+  }
 }

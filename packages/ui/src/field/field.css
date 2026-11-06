@@ -13,6 +13,18 @@
   background: var(--color-white);
   color: var(--color-ink);
 }
+.nb-field select {
+  appearance: none;
+  padding-right: 36px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-green) 50%),
+    linear-gradient(135deg, var(--color-green) 50%, transparent 50%);
+  background-repeat: no-repeat;
+  background-size: 6px 6px;
+  background-position:
+    calc(100% - 18px) center,
+    calc(100% - 12px) center;
+}
 .nb-field small {
   font-size: 12px;
 }

@@ -276,10 +276,18 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         sort: 'createdAt' as const,
         direction: 'asc' as const,
       };
-      const result = await createEntryRepository(db).listAdmin!(
-        ctx(orgId),
-        query,
-      );
+      const entryRepo = createEntryRepository(db);
+      expect(await entryRepo.countByStatus!(ctx(orgId), eventId)).toEqual({
+        accepted: 1,
+        pending: 1,
+      });
+      expect(
+        await entryRepo.countByStatus!(
+          ctx('00000000-0000-4000-8000-000000000000'),
+          eventId,
+        ),
+      ).toEqual({});
+      const result = await entryRepo.listAdmin!(ctx(orgId), query);
       const first = result.items.find((item) => item.id === entryA!.id)!;
       const second = result.items.find((item) => item.id === entryB!.id)!;
       expect(first.adminHistory?.map((item) => item.kind)).toEqual([
@@ -1588,7 +1596,13 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           email: 'same@example.test',
           emailVerified: false,
         },
-        vehicle: { make: 'X', model: 'Y', year: null, imageUrl: null },
+        vehicle: {
+          make: 'X',
+          model: 'Y',
+          year: null,
+          registration: null,
+          imageUrl: null,
+        },
         eventClass: { code: 'A', name: 'A' },
         startNumber: 'A-01',
         customAnswers: [],
@@ -1603,6 +1617,14 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(byDriverName.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       expect(byDriverName.total).toBe(1);
+      const byFullName = await adminEntries.listAdmin!(ctxA, {
+        page: 1,
+        pageSize: 100,
+        search: 'Same Name',
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      expect(byFullName.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       const byEntryId = await adminEntries.listAdmin!(ctxA, {
         page: 1,
         pageSize: 100,

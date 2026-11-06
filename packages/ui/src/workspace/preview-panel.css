@@ -1,12 +1,14 @@
 .nb-preview-panel {
   position: relative;
   display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   align-content: start;
-  gap: var(--space-4);
+  min-height: calc(100vh - 250px);
+  gap: var(--space-3);
 }
 .nb-preview-close {
   position: absolute;
-  top: 0;
+  top: -4px;
   right: 0;
   min-width: 32px;
   min-height: 32px;
@@ -28,7 +30,8 @@
   gap: var(--space-3);
 }
 .nb-preview-number {
-  font: var(--text-app-h1);
+  font: 800 42px/1 var(--font-archivo);
+  font-variation-settings: 'wdth' 75;
 }
 .nb-preview-panel h2 {
   margin: 0;
@@ -48,7 +51,8 @@
   display: grid;
   place-items: center;
   width: 100%;
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 1.8 / 1;
+  margin-top: 20px;
   object-fit: cover;
   background: var(--color-line);
 }
@@ -56,10 +60,23 @@
   color: var(--color-graphite);
 }
 .nb-preview-body {
-  display: grid;
-  gap: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.nb-preview-body .nb-action-panel {
+  margin-top: auto;
 }
 .nb-preview-panel footer {
-  display: grid;
+  display: flex;
   gap: var(--space-2);
+}
+.nb-preview-panel footer > * {
+  flex: 1;
+}
+
+@media (width < 768px) {
+  .nb-preview-panel {
+    min-height: calc(100vh - 90px);
+  }
 }

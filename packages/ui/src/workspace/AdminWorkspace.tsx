@@ -3,32 +3,21 @@ export function AdminWorkspace({
   navigation,
   header,
   children,
-  preview,
-  previewLabel,
-  mobilePreviewOpen = false,
+  inset = true,
 }: {
   navigation: ReactNode;
   header: ReactNode;
   children: ReactNode;
-  preview?: ReactNode;
-  previewLabel?: string;
-  mobilePreviewOpen?: boolean;
+  /** false lets the content run edge to edge, e.g. for WorkspaceSplit. */
+  inset?: boolean;
 }) {
   return (
     <div className="nb-admin-workspace">
       {navigation}
       <div className="nb-admin-workspace-body">
         {header}
-        <main className="nb-admin-workspace-main">
-          <div className="nb-admin-workspace-content">{children}</div>
-          {preview && (
-            <aside
-              className={`nb-admin-workspace-preview${mobilePreviewOpen ? ' is-mobile-open' : ''}`}
-              aria-label={previewLabel}
-            >
-              {preview}
-            </aside>
-          )}
+        <main className={`nb-admin-workspace-main${inset ? ' is-inset' : ''}`}>
+          {children}
         </main>
       </div>
     </div>

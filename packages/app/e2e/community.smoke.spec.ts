@@ -212,13 +212,19 @@ test('Community registration and admin lifecycle with API setup', async ({
   await page
     .getByRole('combobox', { name: 'Veranstaltung' })
     .selectOption(event.id);
-  await expect(page.getByText(participant)).toBeVisible();
+  await expect(page.getByText('Ada Lovelace', { exact: true })).toBeVisible();
   await shots('admin-populated-list');
-  const row = page.getByRole('row').filter({ hasText: participant });
+  const row = page.getByRole('row').filter({ hasText: 'Ada Lovelace' });
   await row.locator('button[data-entry-action]').click();
-  await expect(
-    page.getByRole('heading', { name: 'Nennung im Detail' }),
-  ).toBeVisible();
+  // Enter opens the detail of the selected entry; wait until it is loaded.
+  await expect(row.locator('button[data-selected-entry]')).toBeVisible();
+  await page.keyboard.press('Enter');
+  const entryDetail = page.getByRole('region', {
+    name: 'Nennung im Detail',
+    exact: true,
+  });
+  await expect(entryDetail).toBeVisible();
+  await expect(entryDetail).toContainText(participant);
   const fileDownload = page.getByRole('link', { name: 'Datei herunterladen' });
   await expect(fileDownload).toBeVisible();
   const [download] = await Promise.all([
@@ -228,10 +234,6 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(download.suggestedFilename()).toMatch(/^registration-upload-/);
   expect(readFileSync(await download.path()!)).toEqual(uploadedPng);
   await shots('admin-entry-detail');
-  const entryDetail = page.getByRole('region', {
-    name: 'Nennung im Detail',
-    exact: true,
-  });
   await entryDetail
     .getByLabel('Begründung (für das Protokoll erforderlich)')
     .fill('Alpha E2E review');

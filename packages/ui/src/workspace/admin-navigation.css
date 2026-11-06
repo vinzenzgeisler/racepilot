@@ -1,7 +1,7 @@
 .nb-admin-nav {
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  min-height: 100%;
   padding: var(--space-6) var(--space-4);
   background: var(--color-green);
   color: var(--color-white);
@@ -55,6 +55,7 @@
   font: var(--text-body);
   text-align: start;
   cursor: pointer;
+  text-decoration: none;
 }
 .nb-admin-nav-item:hover {
   background: var(--overlay-sidebar-hover);
@@ -77,6 +78,27 @@
 .nb-admin-nav-item.is-current .nb-admin-nav-count {
   background: var(--color-green);
   color: var(--color-white);
+}
+.nb-user-identity {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.nb-user-identity > b {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--color-mint);
+  color: var(--color-green);
+  font: var(--text-label);
+}
+.nb-user-identity > span {
+  display: grid;
+}
+.nb-user-identity small {
+  color: var(--color-mint);
 }
 .nb-admin-nav-user {
   padding-top: var(--space-4);

@@ -6,6 +6,7 @@ export function SelectionBar({
   label,
   summary,
   actionLabel,
+  actionDisabled = false,
   clearLabel,
 }: {
   onAction?: () => void;
@@ -13,6 +14,7 @@ export function SelectionBar({
   label: string;
   summary: string;
   actionLabel: string;
+  actionDisabled?: boolean;
   clearLabel: string;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
@@ -41,7 +43,7 @@ export function SelectionBar({
   return (
     <div ref={barRef} className="nb-selection" role="region" aria-label={label}>
       <strong>{summary}</strong>
-      <button type="button" onClick={onAction}>
+      <button type="button" onClick={onAction} disabled={actionDisabled}>
         {actionLabel}
       </button>
       <button type="button" onClick={onClear}>

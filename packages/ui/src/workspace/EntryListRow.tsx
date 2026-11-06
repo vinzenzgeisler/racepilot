@@ -3,13 +3,16 @@ import { Checkbox } from '../choice/Choice.js';
 export function EntryListRow({
   name,
   vehicle,
+  hints,
   imageUrl,
   imageAlt = '',
   className,
   number,
   selected = false,
+  checked = false,
   onSelect,
   onOpen,
+  openActionId,
   status,
   payment,
   inspection,
@@ -20,13 +23,16 @@ export function EntryListRow({
 }: {
   name: string;
   vehicle: string;
+  hints?: ReactNode;
   imageUrl?: string | null;
   imageAlt?: string;
   className: string;
   number?: string | null;
   selected?: boolean;
+  checked?: boolean;
   onSelect?: (selected: boolean) => void;
   onOpen?: () => void;
+  openActionId?: string;
   status: ReactNode;
   payment?: ReactNode;
   inspection?: ReactNode;
@@ -44,7 +50,7 @@ export function EntryListRow({
         <Checkbox
           visuallyHiddenLabel
           label={selectLabel}
-          checked={selected}
+          checked={checked}
           onChange={(event) => onSelect?.(event.target.checked)}
         />
       </td>
@@ -57,10 +63,28 @@ export function EntryListRow({
               —
             </span>
           )}
-          <span>
-            <strong>{name}</strong>
-            <small>{vehicle}</small>
-          </span>
+          {onOpen ? (
+            <button
+              className="nb-entry-list-open"
+              data-entry-action={openActionId}
+              data-selected-entry={selected ? true : undefined}
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpen();
+              }}
+            >
+              <strong>{name}</strong>
+              <small>{vehicle}</small>
+              {hints}
+            </button>
+          ) : (
+            <span>
+              <strong>{name}</strong>
+              <small>{vehicle}</small>
+              {hints}
+            </span>
+          )}
         </div>
       </td>
       <td>{className}</td>

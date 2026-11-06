@@ -148,6 +148,7 @@ export function ComponentGallery() {
               'done',
               'rejected',
               'not_relevant',
+              'empty',
             ] as const
           ).map((status) => (
             <StatusLabel
@@ -162,6 +163,7 @@ export function ComponentGallery() {
                     done: 'Erledigt',
                     rejected: 'Abgelehnt',
                     not_relevant: 'Nicht relevant',
+                    empty: 'Kein Wert',
                   } as const
                 )[status]
               }

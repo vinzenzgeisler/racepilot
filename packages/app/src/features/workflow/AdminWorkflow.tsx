@@ -187,6 +187,12 @@ export const defaultWorkflow: Workflow = {
       category: 'pending',
     },
     {
+      key: 'waitlisted',
+      labels: { de: 'Warteliste', en: 'Waitlisted' },
+      color: '#a16207',
+      category: 'waitlisted',
+    },
+    {
       key: 'accepted',
       labels: { de: 'Angenommen', en: 'Accepted' },
       color: '#15803d',
@@ -197,12 +203,6 @@ export const defaultWorkflow: Workflow = {
       labels: { de: 'Abgelehnt', en: 'Rejected' },
       color: '#b91c1c',
       category: 'rejected',
-    },
-    {
-      key: 'waitlisted',
-      labels: { de: 'Warteliste', en: 'Waitlisted' },
-      color: '#a16207',
-      category: 'waitlisted',
     },
     {
       key: 'withdrawn',

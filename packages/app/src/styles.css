@@ -1,13 +1,8 @@
 @import url('@racepilot/ui/tokens.css');
 @import url('./features/styles/global.css');
 @import url('./features/registration/styles.css');
-@import url('./features/entries/overview.css');
 @import url('./features/entries/admin.css');
 @import url('./features/entries/status.css');
 @import url('./features/gallery/styles.css');
-@import url('./features/shell/layout.css');
-@import url('./features/shell/responsive.css');
-@import url('./features/shell/workspace-content.css');
 @import url('./features/entries/rows.css');
-@import url('./features/shell/preview.css');
 @import url('./features/entries/hints.css');

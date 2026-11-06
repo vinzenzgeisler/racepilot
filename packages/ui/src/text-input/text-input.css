@@ -17,6 +17,32 @@
   color: var(--color-ink);
   font: inherit;
 }
+.nb-text-input input[type='search'] {
+  appearance: none;
+  padding-left: 38px;
+  background-image:
+    radial-gradient(
+      circle at 7px 7px,
+      transparent 4px,
+      var(--color-graphite) 4.5px,
+      var(--color-graphite) 5.5px,
+      transparent 6px
+    ),
+    linear-gradient(
+      45deg,
+      transparent 42%,
+      var(--color-graphite) 43%,
+      var(--color-graphite) 57%,
+      transparent 58%
+    );
+  background-repeat: no-repeat;
+  background-size:
+    16px 16px,
+    8px 8px;
+  background-position:
+    12px center,
+    24px calc(50% + 6px);
+}
 .nb-text-input input:focus-visible {
   outline: 3px solid var(--color-marshal);
   outline-offset: 3px;
