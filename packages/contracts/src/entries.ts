@@ -94,6 +94,20 @@ export const EntryResponse = z
             history: z.string().nullable().optional(),
           })
           .strict(),
+        consents: z
+          .array(
+            z
+              .object({
+                key: z.string(),
+                version: z.string(),
+                language: z.enum(['de', 'en']),
+                acceptedAt: z.string().datetime({ offset: true }),
+                text: z.string().nullable(),
+                required: z.boolean().nullable(),
+              })
+              .strict(),
+          )
+          .optional(),
         invoice: z
           .object({
             id: z.string().uuid(),

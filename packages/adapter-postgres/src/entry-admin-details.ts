@@ -10,6 +10,7 @@ import { organizations, events, eventClasses } from './schema/organization.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { registrationFormUploads } from './schema/forms.js';
 import { sql } from 'drizzle-orm';
+import { loadConsentEvidence } from './entry-admin-consents.js';
 import { loadDriverContexts } from './entry-admin-driver-context.js';
 import { loadInvoiceSummaries } from './entry-admin-invoice.js';
 import { loadEntryAdminHistory } from './entry-admin-history.js';
@@ -219,6 +220,7 @@ export async function attachAdminEntryDetails(
     );
   const invoiceByGroup = await loadInvoiceSummaries(db, ctx, groupIds);
   const driverContexts = await loadDriverContexts(db, ctx, ids);
+  const consentsByGroup = await loadConsentEvidence(db, ctx, groupIds);
   const historyByEntry = await loadEntryAdminHistory(db, ctx, ids);
   const drivers = new Map(peopleRows.map((row) => [row.entryId, row]));
   const vehiclesByEntry = new Map(vehicleRows.map((row) => [row.entryId, row]));
@@ -266,6 +268,7 @@ export async function attachAdminEntryDetails(
           history: vehicle?.history ?? null,
         },
         invoice: invoiceByGroup.get(item.registrationGroupId) ?? null,
+        consents: consentsByGroup.get(item.registrationGroupId) ?? [],
         eventClass: {
           code: eventClass?.code ?? '',
           name: eventClass?.name ?? '',
