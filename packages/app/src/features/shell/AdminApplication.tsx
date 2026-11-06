@@ -6,7 +6,12 @@ import { AppShell } from './AppShell.js';
 import { EntryPreview } from './EntryPreview.js';
 import { RegistrationFormSettings } from '../registration/RegistrationFormSettings.js';
 import { AdminWorkflow } from '../workflow/AdminWorkflow.js';
-import { adminFetch, restoreAdminSession, signIn } from '../../auth.js';
+import {
+  adminFetch,
+  getAdminIdentity,
+  restoreAdminSession,
+  signIn,
+} from '../../auth.js';
 
 export function AuthenticatedAdmin() {
   const [session, setSession] = useState<
@@ -70,6 +75,7 @@ function AdminApplication() {
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(true);
+  const [detailOpen, setDetailOpen] = useState(false);
   const closePreview = () => setPreviewOpen(false);
   useEffect(() => {
     let active = true;
@@ -116,7 +122,9 @@ function AdminApplication() {
       activeEvent={selectedEvent}
       entryCount={entryCount}
       onEventChange={setSelectedEvent}
-      previewOpen={previewOpen}
+      previewOpen={previewOpen && !detailOpen}
+      detailOpen={detailOpen}
+      identity={getAdminIdentity()}
       onClosePreview={closePreview}
       preview={
         selectedEntry ? (
@@ -124,6 +132,10 @@ function AdminApplication() {
             entry={selectedEntry}
             busy={previewBusy}
             onClose={closePreview}
+            onOpenDetail={() => {
+              setDetailOpen(true);
+              setPreviewOpen(false);
+            }}
             onNextAction={async (status) => {
               setPreviewBusy(true);
               try {
@@ -157,9 +169,18 @@ function AdminApplication() {
             eventId={selectedEvent}
             onEventChange={setSelectedEvent}
             onTotalChange={setEntryCount}
+            detailOpen={detailOpen}
+            onOpenDetail={() => {
+              setDetailOpen(true);
+              setPreviewOpen(false);
+            }}
+            onCloseDetail={() => {
+              setDetailOpen(false);
+              setPreviewOpen(true);
+            }}
             onSelectionChange={(entry) => {
               setSelectedEntry(entry);
-              if (entry) setPreviewOpen(true);
+              if (entry && !detailOpen) setPreviewOpen(true);
             }}
           />
         ) : view === 'workflow' ? (

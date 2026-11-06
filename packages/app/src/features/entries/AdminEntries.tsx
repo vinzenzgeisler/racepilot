@@ -1,17 +1,23 @@
 import { useEffect, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import { SelectField } from '@racepilot/ui';
+import { Button, SelectField } from '@racepilot/ui';
 import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
 import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
 export function AdminEntries({
+  detailOpen = false,
+  onOpenDetail,
+  onCloseDetail,
   onSelectionChange,
   onTotalChange,
   eventId: sharedEventId,
   onEventChange: onSharedEventChange,
 }: {
+  detailOpen?: boolean;
+  onOpenDetail?: () => void;
+  onCloseDetail?: () => void;
   onSelectionChange?: (entry: Entry | null) => void;
   onTotalChange?: (total: number) => void;
   eventId?: string;
@@ -116,19 +122,21 @@ export function AdminEntries({
           ?.click();
       } else if (event.key === 'Escape' && selected) {
         setSelected(null);
-      } else if (event.key === 'Enter') {
-        const focusedAction = (
-          event.target as HTMLElement | null
-        )?.closest<HTMLButtonElement>('[data-entry-action]');
-        (
-          focusedAction ??
-          document.querySelector<HTMLButtonElement>('[data-selected-entry]')
-        )?.click();
+      } else if (
+        event.key === 'Enter' &&
+        selected &&
+        !(
+          event.target instanceof HTMLElement &&
+          event.target.closest('button, a, [role=tab]')
+        )
+      ) {
+        event.preventDefault();
+        onOpenDetail?.();
       }
     };
     document.addEventListener('keydown', handleKeys);
     return () => document.removeEventListener('keydown', handleKeys);
-  }, [items, selected]);
+  }, [items, selected, onOpenDetail]);
   useEffect(() => {
     const timeout = window.setTimeout(
       () => {
@@ -218,39 +226,46 @@ export function AdminEntries({
           ))}
         </SelectField>
       )}
-      <AdminEntryList
-        eventId={eventId}
-        apiState={apiState}
-        draft={draft}
-        setDraft={setDraft}
-        changeSort={changeSort}
-        counts={counts}
-        classes={classes}
-        workflow={workflow}
-        total={total}
-        items={items}
-        selected={selected}
-        selectedIds={selectedIds}
-        setSelection={setSelection}
-        openEntry={openEntry}
-        eligibleSelectedItems={eligibleSelectedItems}
-        busy={busy}
-        clearSelection={clearSelection}
-        bulkAccept={bulkAccept}
-        page={page}
-        totalPages={totalPages}
-        setPage={setPage}
-      />
-      {selected && (
-        <AdminEntryDetail
-          selected={selected}
+      {!detailOpen && (
+        <AdminEntryList
+          eventId={eventId}
+          apiState={apiState}
+          draft={draft}
+          setDraft={setDraft}
+          changeSort={changeSort}
+          counts={counts}
           classes={classes}
           workflow={workflow}
-          reason={reason}
-          setReason={setReason}
+          total={total}
+          items={items}
+          selected={selected}
+          selectedIds={selectedIds}
+          setSelection={setSelection}
+          openEntry={openEntry}
+          eligibleSelectedItems={eligibleSelectedItems}
           busy={busy}
-          transition={transition}
+          clearSelection={clearSelection}
+          bulkAccept={bulkAccept}
+          page={page}
+          totalPages={totalPages}
+          setPage={setPage}
         />
+      )}
+      {detailOpen && selected && (
+        <div className="admin-detail-view">
+          <Button variant="secondary" onClick={onCloseDetail}>
+            ← Zurück zur Liste
+          </Button>
+          <AdminEntryDetail
+            selected={selected}
+            classes={classes}
+            workflow={workflow}
+            reason={reason}
+            setReason={setReason}
+            busy={busy}
+            transition={transition}
+          />
+        </div>
       )}
       {actionError && <p role="alert">{actionError}</p>}
     </section>

@@ -41,7 +41,8 @@ export function AdminEntryFilters({
     >
       <TextInput
         label="Suche"
-        placeholder="Startnummer, Name oder Nennung"
+        type="search"
+        placeholder="Name, Startnummer, Orga-Code"
         value={draft.search}
         maxLength={120}
         onChange={(e) =>

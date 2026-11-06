@@ -52,6 +52,12 @@
   align-items: center;
 }
 
+.admin-detail-view {
+  max-width: 1000px;
+}
+.admin-detail-view > .nb-button {
+  margin-top: var(--space-4);
+}
 .admin-detail,
 .admin-state {
   margin-block: var(--space-8);

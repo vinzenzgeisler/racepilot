@@ -3,6 +3,10 @@ import { UserManager, WebStorageStateStore } from 'oidc-client-ts';
 type OidcConfig = { issuerUrl: string; clientId: string; redirectUri: string };
 let managerPromise: Promise<UserManager | null> | null = null;
 let accessToken: string | null = null;
+let identity: { name: string; role: string } | null = null;
+export function getAdminIdentity() {
+  return identity;
+}
 let callbackPromise: ReturnType<UserManager['signinRedirectCallback']> | null =
   null;
 
@@ -50,6 +54,29 @@ export async function restoreAdminSession(): Promise<
     : await client.getUser();
   if (isCallback) window.history.replaceState(null, '', '/app');
   accessToken = user && !user.expired ? user.access_token : null;
+  if (user && !user.expired) {
+    const profile = user.profile as Record<string, unknown>;
+    const name =
+      [profile.given_name, profile.family_name]
+        .filter((part) => typeof part === 'string')
+        .join(' ') ||
+      (typeof profile.name === 'string' ? profile.name : '') ||
+      (typeof profile.preferred_username === 'string'
+        ? profile.preferred_username
+        : 'Angemeldet');
+    const realm = profile.realm_access as { roles?: unknown } | undefined;
+    const roles = Array.isArray(realm?.roles)
+      ? realm.roles.filter((role): role is string => typeof role === 'string')
+      : [];
+    identity = {
+      name,
+      role: roles.includes('admin')
+        ? 'Admin'
+        : roles.includes('member')
+          ? 'Mitglied'
+          : 'Angemeldet',
+    };
+  } else identity = null;
   return accessToken ? 'ready' : 'signed-out';
 }
 
@@ -61,6 +88,7 @@ export async function signIn(): Promise<void> {
 
 export async function signOut(): Promise<void> {
   accessToken = null;
+  identity = null;
   await (await manager())?.removeUser();
   window.location.assign('/app');
 }

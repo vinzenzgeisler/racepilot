@@ -43,6 +43,8 @@ export function AppShell({
   children,
   preview,
   previewOpen = true,
+  detailOpen = false,
+  identity,
   onClosePreview,
   activeEvent = '',
   events = [],
@@ -52,6 +54,8 @@ export function AppShell({
   children: ReactNode | ((view: View) => ReactNode);
   preview?: ReactNode;
   previewOpen?: boolean;
+  detailOpen?: boolean;
+  identity?: { name: string; role: string } | null;
   onClosePreview?: () => void;
   activeEvent?: string;
   events?: EventOption[];
@@ -74,8 +78,11 @@ export function AppShell({
   }, [onClosePreview, previewOpen]);
   const closeDate = selectedEvent?.registrationClosesAt
     ? new Intl.DateTimeFormat('de-DE', {
-        dateStyle: 'short',
-        timeStyle: 'short',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
         timeZone: 'Europe/Berlin',
       }).format(new Date(selectedEvent.registrationClosesAt))
     : null;
@@ -99,32 +106,41 @@ export function AppShell({
           }))}
           current={view}
           onNavigate={(id) => setView(id as View)}
-          user={<span>Angemeldet · Veranstalter</span>}
+          user={
+            identity ? (
+              <span className="nb-user-identity">
+                <b aria-hidden="true">
+                  {identity.name
+                    .split(/\s+/)
+                    .map((part) => part[0])
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase()}
+                </b>
+                <span>
+                  <strong>{identity.name}</strong>
+                  <small>{identity.role}</small>
+                </span>
+              </span>
+            ) : undefined
+          }
         />
       }
       header={
         <PageHeader
           title={
             view === 'entries'
-              ? 'Nennungen'
+              ? detailOpen
+                ? 'Nennung im Detail'
+                : 'Nennungen'
               : view === 'workflow'
                 ? 'Nennungsablauf'
                 : 'Einstellungen'
           }
           description={
             view === 'entries' && closeDate
-              ? `Nennungsschluss: ${closeDate}`
+              ? `Nennungsschluss  ${closeDate.replace(', ', ' · ')}`
               : undefined
-          }
-          actions={
-            view === 'entries' && selectedEvent?.slug ? (
-              <a
-                className="nb-button nb-primary nb-size-40"
-                href={`/events/${encodeURIComponent(selectedEvent.slug)}/register`}
-              >
-                Nennung anlegen ↗
-              </a>
-            ) : undefined
           }
         />
       }

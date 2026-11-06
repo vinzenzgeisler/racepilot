@@ -2,7 +2,7 @@
   position: relative;
   display: grid;
   align-content: start;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 .nb-preview-close {
   position: absolute;
@@ -48,7 +48,7 @@
   display: grid;
   place-items: center;
   width: 100%;
-  aspect-ratio: 3 / 2;
+  aspect-ratio: 2 / 1;
   object-fit: cover;
   background: var(--color-line);
 }
@@ -57,7 +57,7 @@
 }
 .nb-preview-body {
   display: grid;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 .nb-preview-panel footer {
   display: flex;
