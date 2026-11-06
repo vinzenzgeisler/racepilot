@@ -116,7 +116,7 @@ nicht `localhost` oder die LAN-IP; die OIDC-Weiterleitungen sind darauf eingeste
    **Veranstaltung einrichten**, trage Name, Zeitraum, mindestens eine Klasse und
    Startgeld ein, ergänze bei Bedarf Teilnahmebedingungen und wähle **Speichern und
    Nennung öffnen**. Die App zeigt anschließend den öffentlichen Nennungslink.
-   Eine gespeicherte Veranstaltung kann später über **Einrichten** angepasst werden;
+   Ein gespeicherter Entwurf kann später über **Einrichten** fortgesetzt werden;
    zusätzliche Formularfelder findest du unter **Einstellungen**.
 4. Teilnehmende öffnen anschließend
    `http://127.0.0.1:5173/events/<veranstaltungs-slug>/register`.

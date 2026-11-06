@@ -12,6 +12,7 @@ import { AppShell } from './AppShell.js';
 import { EntryPreview } from './EntryPreview.js';
 import { RegistrationFormSettings } from '../registration/RegistrationFormSettings.js';
 import { AdminWorkflow } from '../workflow/AdminWorkflow.js';
+import { EventSetup } from '../event-setup/EventSetup.js';
 import {
   adminFetch,
   getAdminIdentity,
@@ -92,6 +93,7 @@ export function AdminApplication() {
       name: string;
       slug: string;
       registrationClosesAt: string | null;
+      status: 'draft' | 'open' | 'closed' | 'archived';
     }>
   >([]);
   const [entryCount, setEntryCount] = useState(0);
@@ -155,6 +157,7 @@ export function AdminApplication() {
             name?: unknown;
             slug?: unknown;
             registrationClosesAt?: unknown;
+            status?: unknown;
           };
           return typeof value.id === 'string' && typeof value.name === 'string'
             ? [
@@ -166,6 +169,11 @@ export function AdminApplication() {
                     typeof value.registrationClosesAt === 'string'
                       ? value.registrationClosesAt
                       : null,
+                  status: (value.status === 'open' ||
+                  value.status === 'closed' ||
+                  value.status === 'archived'
+                    ? value.status
+                    : 'draft') as 'draft' | 'open' | 'closed' | 'archived',
                 },
               ]
             : [];
@@ -258,6 +266,16 @@ export function AdminApplication() {
           />
         ) : view === 'workflow' ? (
           <AdminWorkflow eventId={selectedEvent} events={events} />
+        ) : view === 'setup' ? (
+          <EventSetup
+            onCreated={(event) => {
+              setEvents((current) => [
+                ...current.filter((item) => item.id !== event.id),
+                { ...event, registrationClosesAt: null },
+              ]);
+              setSelectedEvent(event.id);
+            }}
+          />
         ) : view === 'account' ? (
           <RegistrationFormSettings eventId={selectedEvent} />
         ) : null
