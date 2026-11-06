@@ -1,5 +1,5 @@
 import { Button, PreviewPanel } from '@racepilot/ui';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { AdminEntries } from '../entries/AdminEntries.js';
 import { AppShell } from './AppShell.js';
@@ -60,7 +60,25 @@ export function AuthenticatedAdmin() {
   );
 }
 
+const narrowQuery = '(width < 768px)';
+/** Below 768px the list is the start view; a preview would cover it. */
+function useNarrowViewport() {
+  return useSyncExternalStore(
+    (notify) => {
+      if (typeof window.matchMedia !== 'function') return () => undefined;
+      const query = window.matchMedia(narrowQuery);
+      query.addEventListener('change', notify);
+      return () => query.removeEventListener('change', notify);
+    },
+    () =>
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(narrowQuery).matches,
+    () => false,
+  );
+}
+
 function AdminApplication() {
+  const narrow = useNarrowViewport();
   const [identity, setIdentity] = useState(getAdminIdentity());
   const [events, setEvents] = useState<
     Array<{
@@ -201,7 +219,7 @@ function AdminApplication() {
             onEventChange={setSelectedEvent}
             onTotalChange={setEntryCount}
             detailOpen={detailOpen}
-            autoPreview
+            autoPreview={!narrow}
             onOpenDetail={() => {
               setDetailOpen(true);
               setPreviewOpen(false);

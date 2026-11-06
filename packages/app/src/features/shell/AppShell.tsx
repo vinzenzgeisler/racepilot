@@ -142,7 +142,7 @@ export function AppShell({
           />
         )
       }
-      inset={view !== 'entries' || detailOpen}
+      inset={view !== 'entries'}
     >
       {typeof children === 'function' ? children(view) : children}
     </AdminWorkspace>

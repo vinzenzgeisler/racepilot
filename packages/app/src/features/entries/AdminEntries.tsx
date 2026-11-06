@@ -270,22 +270,18 @@ export function AdminEntries({
         />
       )}
       {isDetailOpen && selected && (
-        <div className="admin-detail-view">
-          <AdminEntryDetail
-            selected={selected}
-            workflow={workflow}
-            busy={busy}
-            error={actionError}
-            transition={(type, status, reasonText) =>
-              transition(type, status, reasonText, { advance: false })
-            }
-            onBack={closeDetail}
-            onUpdated={(entry) => {
-              setSelected(entry);
-              setRefreshRevision((value) => value + 1);
-            }}
-          />
-        </div>
+        <AdminEntryDetail
+          selected={selected}
+          workflow={workflow}
+          busy={busy}
+          error={actionError}
+          transition={transition}
+          onBack={closeDetail}
+          onUpdated={(entry) => {
+            setSelected(entry);
+            setRefreshRevision((value) => value + 1);
+          }}
+        />
       )}
       {actionError && !(isDetailOpen && selected) && (
         <p role="alert">{actionError}</p>

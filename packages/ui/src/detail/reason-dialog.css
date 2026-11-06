@@ -8,7 +8,13 @@
   color: var(--color-graphite);
   cursor: not-allowed;
 }
+.nb-reason-body {
+  display: grid;
+  gap: var(--space-3);
+}
+.nb-reason-body p {
+  margin: 0;
+}
 .nb-reason-error {
-  margin: var(--space-3) 0 0;
   color: var(--color-marshal-text);
 }

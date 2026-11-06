@@ -225,16 +225,26 @@ async function openDetail() {
     ),
   );
   await flush();
-  expect(container.querySelector('.admin-detail')).not.toBeNull();
+  expect(container.querySelector('.admin-detail-view')).not.toBeNull();
 }
 async function closeDetail() {
-  await click('Zurück zur Liste');
-  expect(container.querySelector('.admin-detail')).toBeNull();
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('.nb-detail-back')!.click(),
+  );
+  await flush();
+  expect(container.querySelector('.admin-detail-view')).toBeNull();
 }
 function detailEntryId() {
   return container
-    .querySelector('.admin-detail dl dd:nth-of-type(2)')
-    ?.textContent?.trim();
+    .querySelector('.nb-detail-head-title h2')
+    ?.textContent?.split(' · ')[0]
+    ?.trim();
+}
+/** Status changes go through the reason dialog of the action rail. */
+async function changeStatus(action: string, reason = 'Reviewed') {
+  await click(action);
+  await setInput('Begründung', reason);
+  await click('Status ändern');
 }
 
 beforeEach(() => {
@@ -368,7 +378,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventB);
     expect((labeled('Klasse', 'select') as HTMLSelectElement).value).toBe('');
     expect(detailEntryId()).toBeUndefined();
-    expect(container.querySelector('.admin-detail textarea')).toBeNull();
+    expect(container.querySelector('.admin-detail-view textarea')).toBeNull();
     await flush();
     expect(listCalls().at(-1)).toContain(`eventId=${eventB}`);
     expect(listCalls().at(-1)).not.toContain('classId=');
@@ -401,8 +411,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Angenommen');
+    await changeStatus('Zulassen');
     await chooseEvent(eventB);
     expect(visibleEntryIds()).toEqual([entryB]);
     await act(async () =>
@@ -433,8 +442,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Angenommen');
+    await changeStatus('Zulassen');
     await closeDetail();
     await click(entryA2);
     await openDetail();
@@ -468,8 +476,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Angenommen');
+    await changeStatus('Zulassen');
     await closeDetail();
     await setSelect('Klasse', classA);
     await submitFilters();
@@ -545,27 +552,27 @@ describe('AdminEntries', () => {
       ),
     );
     await flush();
-    expect(container.querySelector('.admin-detail')).not.toBeNull();
-    expect(container.querySelector('.admin-detail')?.textContent).toContain(
-      'Verein: MSC Beispielstadt',
-    );
+    expect(container.querySelector('.admin-detail-view')).not.toBeNull();
+    expect(
+      container.querySelector('.admin-detail-view')?.textContent,
+    ).toContain('MSC Beispielstadt');
     const download = container.querySelector(
-      '.admin-detail a[href*="registration-form-uploads"]',
+      '.admin-detail-view a[href*="registration-form-uploads"]',
     ) as HTMLAnchorElement | null;
     expect(download?.textContent).toBe('Datei herunterladen');
     expect(download?.getAttribute('href')).toContain(eventA);
-    expect(container.querySelector('.admin-detail')?.textContent).not.toContain(
-      'uploadToken',
-    );
     expect(
-      container.querySelector('.admin-detail')?.getAttribute('aria-labelledby'),
-    ).toBe('entry-detail-title');
+      container.querySelector('.admin-detail-view')?.textContent,
+    ).not.toContain('uploadToken');
+    expect(
+      container.querySelector('.admin-detail-view')?.getAttribute('aria-label'),
+    ).toBe('Nennung im Detail');
     await act(async () =>
       document.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
       ),
     );
-    expect(container.querySelector('.admin-detail')).toBeNull();
+    expect(container.querySelector('.admin-detail-view')).toBeNull();
   });
 
   it('uses the configured accepted status key for bulk acceptance', async () => {
@@ -615,7 +622,7 @@ describe('AdminEntries', () => {
     expect(transitionBodies[0]?.status).toBe('confirmed');
   });
 
-  it('opens the next pending entry after acceptance using the configured accepted key', async () => {
+  it('keeps the changed entry open after acceptance using the configured accepted key', async () => {
     vi.spyOn(window, 'prompt').mockReturnValue('Reviewed');
     const second = entry(entryA2, eventA, classA);
     const updatedFirst = { ...itemsA[0]!, acceptanceStatus: 'confirmed' };
@@ -657,9 +664,10 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Bestätigt');
-    expect(detailEntryId()).toBe('Casey Driver');
+    await changeStatus('Zulassen');
+    // The detail stays on the changed entry so its history can be checked.
+    expect(detailEntryId()).toBe('Alex Driver');
+    expect(second.id).toBe(entryA2);
   });
 
   it('keeps the accepted entry selected when no next pending entry exists', async () => {
@@ -706,8 +714,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Bestätigt');
+    await changeStatus('Zulassen');
     expect(detailEntryId()).toBe('Alex Driver');
   });
 
@@ -791,10 +798,12 @@ describe('AdminEntries', () => {
     await flush();
     await openDetail();
     const actions = [
-      ...container.querySelectorAll<HTMLButtonElement>('.admin-actions button'),
+      ...container.querySelectorAll<HTMLButtonElement>(
+        '.nb-detail-rail button',
+      ),
     ];
     expect(actions).toHaveLength(1);
-    expect(actions[0]?.textContent).toContain('Angenommen');
+    expect(actions[0]?.textContent).toContain('Zulassen');
     expect(
       actions.some((button) =>
         button.textContent?.includes('E-Mail verifizieren'),

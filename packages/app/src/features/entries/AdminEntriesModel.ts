@@ -23,11 +23,14 @@ export const initialQuery: EntryQuery = {
   direction: 'desc',
 };
 export type Gate = { generation: number; controller: AbortController | null };
+type StatusMeaning =
+  'new' | 'in_progress' | 'missing' | 'done' | 'rejected' | 'not_relevant';
 export type WorkflowStatus = {
   key: string;
   labels: { de: string; en: string };
   color: string;
   category: string;
+  meaning?: StatusMeaning;
 };
 export type WorkflowView = {
   statuses: WorkflowStatus[];

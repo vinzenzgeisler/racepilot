@@ -57,20 +57,22 @@ export function ReasonDialog({
         </>
       }
     >
-      {message && <p>{message}</p>}
-      {children}
-      <Textarea
-        label={reasonLabel}
-        value={reason}
-        maxLength={1000}
-        required
-        onChange={(event) => setReason(event.target.value)}
-      />
-      {error && (
-        <p role="alert" className="nb-reason-error">
-          {error}
-        </p>
-      )}
+      <div className="nb-reason-body">
+        {message && <p>{message}</p>}
+        {children}
+        <Textarea
+          label={reasonLabel}
+          value={reason}
+          maxLength={1000}
+          required
+          onChange={(event) => setReason(event.target.value)}
+        />
+        {error && (
+          <p role="alert" className="nb-reason-error">
+            {error}
+          </p>
+        )}
+      </div>
     </Dialog>
   );
 }

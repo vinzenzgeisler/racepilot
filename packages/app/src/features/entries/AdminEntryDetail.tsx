@@ -13,6 +13,7 @@ import {
   EntryDocumentsSection,
   type DimensionAction,
 } from './detail/EntryDocumentsSection.js';
+import { EntryCustomAnswers } from './detail/EntryCustomAnswers.js';
 import { EntryDriverSection } from './detail/EntryDriverSection.js';
 import { EntryHistorySection } from './detail/EntryHistorySection.js';
 import { EntryMessagesSection } from './detail/EntryMessagesSection.js';
@@ -199,6 +200,7 @@ export function AdminEntryDetail({
           busy={api.busy}
           onSave={api.saveVehicle}
         />
+        <EntryCustomAnswers answers={details.customAnswers} />
         <EntryDocumentsSection
           entry={selected}
           onDimensionAction={(action) =>

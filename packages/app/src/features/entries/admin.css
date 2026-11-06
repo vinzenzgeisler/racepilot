@@ -87,13 +87,22 @@
   color: var(--color-graphite);
 }
 
-.nb-vehicle figcaption,
-.nb-detail-note {
+.nb-vehicle .nb-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.nb-vehicle figcaption {
   margin: var(--space-2) 0 0;
   color: var(--color-graphite);
   font: var(--text-label);
   letter-spacing: var(--tracking-label);
   text-transform: uppercase;
+}
+
+.nb-detail-note {
+  margin: var(--space-3) 0 0;
+  color: var(--color-graphite);
+  font: 400 13px/1.45 var(--font-plex);
 }
 
 .nb-field-empty {

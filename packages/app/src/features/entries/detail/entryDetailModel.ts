@@ -26,7 +26,8 @@ const euro = (cents: number, currency: string) =>
     cents / 100,
   );
 
-export const formatDateTime = (iso: string) => full.format(new Date(iso));
+export const formatDateTime = (iso: string) =>
+  full.format(new Date(iso)).replace(', ', ' ');
 export const formatShortDateTime = (iso: string) =>
   short.format(new Date(iso)).replace(', ', ' ');
 export const formatMoney = euro;

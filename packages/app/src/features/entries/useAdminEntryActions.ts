@@ -89,7 +89,6 @@ export function useAdminEntryActions({
     transitionType: 'acceptance' | 'verification',
     status: string,
     reasonOverride?: string,
-    options: { advance?: boolean } = {},
   ): Promise<boolean> {
     const current = selected;
     const requestedReason = (reasonOverride ?? reason).trim();
@@ -137,30 +136,6 @@ export function useAdminEntryActions({
       setSelected(updated);
       setReason('');
       setRefreshRevision((revision) => revision + 1);
-      const acceptedCategory = workflow?.statuses.find(
-        (item) => item.key === status && item.category === 'accepted',
-      );
-      if (
-        options.advance !== false &&
-        transitionType === 'acceptance' &&
-        acceptedCategory
-      ) {
-        const currentIndex = items.findIndex((item) => item.id === current.id);
-        const nextOpen = items
-          .slice(Math.max(0, currentIndex + 1))
-          .find(
-            (item) =>
-              workflow?.statuses.find(
-                (candidate) => candidate.key === item.acceptanceStatus,
-              )?.category === 'pending' &&
-              workflow.transitions.some(
-                (edge) =>
-                  edge.from === item.acceptanceStatus &&
-                  edge.to === acceptedCategory.key,
-              ),
-          );
-        if (nextOpen) void openEntry(nextOpen.id);
-      }
     } catch {
       if (isCurrent(transitionGate.current, generation, controller))
         setActionError('Die Statusänderung konnte nicht abgeschlossen werden.');
