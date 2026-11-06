@@ -233,8 +233,8 @@ test('Community registration and admin lifecycle with API setup', async ({
   await row.getByRole('button', { name: 'Ada Lovelace Lotus Seven' }).click();
   await expect(
     page
-      .getByRole('region', { name: 'Nennungsvorschau' })
-      .getByText('Ada Lovelace', { exact: true }),
+      .getByRole('complementary', { name: 'Nennungsvorschau' })
+      .getByText('Ada Lovelace'),
   ).toBeVisible();
   // Enter opens the detail of the selected entry; wait until it is loaded.
   await expect(row.locator('button[data-selected-entry]')).toBeVisible();

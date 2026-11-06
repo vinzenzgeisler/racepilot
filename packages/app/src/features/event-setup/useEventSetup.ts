@@ -203,14 +203,12 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
         setCurrentStep(4);
         let finalEvent = stored;
         if (open) {
-          const hasUsableParticipationTerms = Boolean(
-            draft.terms.trim() ||
-            (draft.consentTerms ?? []).some(
-              (term) =>
-                term.key === 'participation' &&
-                term.required &&
-                term.text.trim().length > 0,
-            ),
+          const effectiveTerms = savedTerms?.terms ?? draft.consentTerms ?? [];
+          const hasUsableParticipationTerms = effectiveTerms.some(
+            (term) =>
+              term.key === 'participation' &&
+              term.required &&
+              term.text.trim().length > 0,
           );
           if (!hasUsableParticipationTerms)
             throw new Error(
