@@ -1,7 +1,9 @@
 .nb-preview-panel {
   position: relative;
   display: grid;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   align-content: start;
+  min-height: calc(100vh - 120px);
   gap: var(--space-3);
 }
 .nb-preview-close {
@@ -56,8 +58,12 @@
   color: var(--color-graphite);
 }
 .nb-preview-body {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: var(--space-3);
+}
+.nb-preview-body .nb-action-panel {
+  margin-top: auto;
 }
 .nb-preview-panel footer {
   display: flex;

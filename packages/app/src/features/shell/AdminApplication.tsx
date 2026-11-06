@@ -170,6 +170,7 @@ function AdminApplication() {
             onEventChange={setSelectedEvent}
             onTotalChange={setEntryCount}
             detailOpen={detailOpen}
+            autoPreview
             onOpenDetail={() => {
               setDetailOpen(true);
               setPreviewOpen(false);

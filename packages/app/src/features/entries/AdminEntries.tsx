@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { Button, SelectField } from '@racepilot/ui';
 import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
@@ -7,7 +7,8 @@ import { AdminEntryList } from './AdminEntryList.js';
 import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
 export function AdminEntries({
-  detailOpen = false,
+  detailOpen,
+  autoPreview = false,
   onOpenDetail,
   onCloseDetail,
   onSelectionChange,
@@ -16,6 +17,7 @@ export function AdminEntries({
   onEventChange: onSharedEventChange,
 }: {
   detailOpen?: boolean;
+  autoPreview?: boolean;
   onOpenDetail?: () => void;
   onCloseDetail?: () => void;
   onSelectionChange?: (entry: Entry | null) => void;
@@ -23,6 +25,13 @@ export function AdminEntries({
   eventId?: string;
   onEventChange?: (id: string) => void;
 } = {}) {
+  const [internalDetailOpen, setInternalDetailOpen] = useState(false);
+  const autoPreviewedEvent = useRef('');
+  const isDetailOpen = detailOpen ?? internalDetailOpen;
+  const openDetail = () =>
+    onOpenDetail ? onOpenDetail() : setInternalDetailOpen(true);
+  const closeDetail = () =>
+    onCloseDetail ? onCloseDetail() : setInternalDetailOpen(false);
   const [localEventId, setLocalEventId] = useState('');
   const eventId = sharedEventId ?? localEventId;
   const [page, setPage] = useState(1);
@@ -96,6 +105,23 @@ export function AdminEntries({
   });
   useEffect(() => onSelectionChange?.(selected), [onSelectionChange, selected]);
   useEffect(() => {
+    if (
+      !autoPreview ||
+      !eventId ||
+      !items.length ||
+      autoPreviewedEvent.current === eventId ||
+      !workflow
+    )
+      return;
+    autoPreviewedEvent.current = eventId;
+    const firstPending = items.find(
+      (item) =>
+        workflow.statuses.find((status) => status.key === item.acceptanceStatus)
+          ?.category === 'pending',
+    );
+    void openEntry((firstPending ?? items[0]!).id);
+  }, [autoPreview, eventId, items, workflow, openEntry]);
+  useEffect(() => {
     const refresh = () => setRefreshRevision((value) => value + 1);
     window.addEventListener('nennbox:entries-changed', refresh);
     return () => window.removeEventListener('nennbox:entries-changed', refresh);
@@ -120,6 +146,8 @@ export function AdminEntries({
             `[data-entry-action="${items[next]!.id}"]`,
           )
           ?.click();
+      } else if (event.key === 'Escape' && isDetailOpen) {
+        closeDetail();
       } else if (event.key === 'Escape' && selected) {
         setSelected(null);
       } else if (
@@ -127,16 +155,18 @@ export function AdminEntries({
         selected &&
         !(
           event.target instanceof HTMLElement &&
-          event.target.closest('button, a, [role=tab]')
+          event.target.closest(
+            'a, [role=tab], summary, [role=menuitem], input, select, textarea',
+          )
         )
       ) {
         event.preventDefault();
-        onOpenDetail?.();
+        openDetail();
       }
     };
     document.addEventListener('keydown', handleKeys);
     return () => document.removeEventListener('keydown', handleKeys);
-  }, [items, selected, onOpenDetail]);
+  }, [items, selected, isDetailOpen, onOpenDetail, onCloseDetail]);
   useEffect(() => {
     const timeout = window.setTimeout(
       () => {
@@ -159,6 +189,7 @@ export function AdminEntries({
     setDraft({ ...initialQuery });
     setApplied({ ...initialQuery });
     setSelected(null);
+    closeDetail();
     setReason('');
     setActionError('');
     setBusy(false);
@@ -226,7 +257,7 @@ export function AdminEntries({
           ))}
         </SelectField>
       )}
-      {!detailOpen && (
+      {!isDetailOpen && (
         <AdminEntryList
           eventId={eventId}
           apiState={apiState}
@@ -251,9 +282,9 @@ export function AdminEntries({
           setPage={setPage}
         />
       )}
-      {detailOpen && selected && (
+      {isDetailOpen && selected && (
         <div className="admin-detail-view">
-          <Button variant="secondary" onClick={onCloseDetail}>
+          <Button variant="secondary" onClick={closeDetail}>
             ← Zurück zur Liste
           </Button>
           <AdminEntryDetail

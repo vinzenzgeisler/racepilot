@@ -55,7 +55,7 @@ export async function restoreAdminSession(): Promise<
   if (isCallback) window.history.replaceState(null, '', '/app');
   accessToken = user && !user.expired ? user.access_token : null;
   if (user && !user.expired) {
-    const profile = user.profile as Record<string, unknown>;
+    const profile = (user.profile ?? {}) as Record<string, unknown>;
     const name =
       [profile.given_name, profile.family_name]
         .filter((part) => typeof part === 'string')

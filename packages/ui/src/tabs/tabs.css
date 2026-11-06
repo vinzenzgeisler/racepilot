@@ -1,9 +1,11 @@
 .nb-tabs [role='tablist'] {
   display: flex;
   gap: var(--space-2);
+  overflow-x: auto;
   border-bottom: 1px solid var(--color-line);
 }
 .nb-tabs [role='tab'] {
+  flex: none;
   min-height: 44px;
   padding-inline: var(--space-3);
   border: 0;

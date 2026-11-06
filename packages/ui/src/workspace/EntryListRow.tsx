@@ -9,8 +9,10 @@ export function EntryListRow({
   className,
   number,
   selected = false,
+  checked = false,
   onSelect,
   onOpen,
+  openActionId,
   status,
   payment,
   inspection,
@@ -27,8 +29,10 @@ export function EntryListRow({
   className: string;
   number?: string | null;
   selected?: boolean;
+  checked?: boolean;
   onSelect?: (selected: boolean) => void;
   onOpen?: () => void;
+  openActionId?: string;
   status: ReactNode;
   payment?: ReactNode;
   inspection?: ReactNode;
@@ -46,7 +50,7 @@ export function EntryListRow({
         <Checkbox
           visuallyHiddenLabel
           label={selectLabel}
-          checked={selected}
+          checked={checked}
           onChange={(event) => onSelect?.(event.target.checked)}
         />
       </td>
@@ -62,6 +66,8 @@ export function EntryListRow({
           {onOpen ? (
             <button
               className="nb-entry-list-open"
+              data-entry-action={openActionId}
+              data-selected-entry={selected ? true : undefined}
               type="button"
               onClick={(event) => {
                 event.stopPropagation();

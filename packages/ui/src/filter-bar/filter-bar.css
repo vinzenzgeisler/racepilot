@@ -16,6 +16,12 @@
   gap: var(--space-3);
   min-width: 0;
 }
+@media (width >= 768px) {
+  .nb-filter-bar > div:first-child {
+    display: grid;
+    grid-template-columns: minmax(240px, 2fr) repeat(3, minmax(140px, 1fr));
+  }
+}
 .nb-filter-bar .nb-filter-actions {
   flex: 0 0 auto;
 }

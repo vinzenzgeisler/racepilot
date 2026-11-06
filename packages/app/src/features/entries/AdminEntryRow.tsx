@@ -1,7 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import {
-  Button,
   EntryListRow,
   HintLabel,
   Menu,
@@ -51,9 +50,6 @@ export function AdminEntryRow({
   const vehicle = details
     ? `${details.vehicle.make} ${details.vehicle.model}${details.vehicle.registration ? ` · ${details.vehicle.registration}` : ''}`
     : 'Fahrzeug nicht verfügbar';
-  const next = entry.statusProjection?.dimensions.find(
-    (item) => item.key === 'entry',
-  )?.nextAction;
   return (
     <EntryListRow
       name={name}
@@ -78,6 +74,7 @@ export function AdminEntryRow({
       }
       number={entry.requestedStartNumber ?? details?.startNumber ?? null}
       selected={selected?.id === entry.id}
+      checked={selectedIds.has(entry.id)}
       selectLabel={`${name} auswählen`}
       onSelect={(checked) =>
         setSelection((current) => {
@@ -99,18 +96,7 @@ export function AdminEntryRow({
       payment={<Dimension entry={entry} keyName="payment" />}
       inspection={<Dimension entry={entry} keyName="technical_inspection" />}
       waiver={<Dimension entry={entry} keyName="waiver" />}
-      nextAction={
-        <Button
-          variant="text"
-          size={32}
-          data-selected-entry={selected?.id === entry.id ? true : undefined}
-          data-entry-action={entry.id}
-          onClick={() => void openEntry(entry.id)}
-          aria-label={`${name}: ${next?.label.de ?? 'Öffnen'}`}
-        >
-          {next?.label.de ?? 'Öffnen'}
-        </Button>
-      }
+      openActionId={entry.id}
       menu={
         <Menu label={`Weitere Aktionen für ${name}`}>
           <MenuItem onClick={() => void openEntry(entry.id)}>
