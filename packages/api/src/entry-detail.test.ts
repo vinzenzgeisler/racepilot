@@ -29,11 +29,12 @@ function appWith(permissions: string[], calls: unknown[] = []) {
     entryDetails: {
       updateDriver: async (ctx, id, patch, actor) => {
         calls.push(['driver', ctx.organizationId, id, patch, actor]);
-        return id === entryId;
+        if (patch.firstName === 'Shared') return 'person_shared';
+        return id === entryId ? 'updated' : 'not_found';
       },
       updateVehicle: async (ctx, id, patch, actor) => {
         calls.push(['vehicle', ctx.organizationId, id, patch, actor]);
-        return id === entryId;
+        return id === entryId ? 'updated' : 'not_found';
       },
       listMessages: async (_ctx, id) =>
         id === entryId
@@ -147,6 +148,14 @@ describe('entry detail routes', () => {
     expect(
       (await appWith([]).request(`/admin/entries/${entryId}/messages`)).status,
     ).toBe(403);
+  });
+  it('answers 409 when the person is shared with other registrations', async () => {
+    const response = await appWith(['entry:read', 'entry:write']).request(
+      `/admin/entries/${entryId}/driver`,
+      json('PATCH', { firstName: 'Shared' }),
+    );
+    expect(response.status).toBe(409);
+    expect(await response.json()).toEqual({ error: 'person_shared' });
   });
   it('lists the mails of an entry', async () => {
     const response = await appWith(['entry:read']).request(

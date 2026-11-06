@@ -1,19 +1,14 @@
-import { and, desc, eq, sql } from 'drizzle-orm';
-import type {
-  EntryDetailRepository,
-  EntryMessage,
-  RequestContext,
-} from '@racepilot/core';
+import { and, eq, ne, sql } from 'drizzle-orm';
+import type { EntryDetailRepository, RequestContext } from '@racepilot/core';
 import type { Database } from './database.js';
 import {
   entries,
   entryDataAuditEvents,
   people,
+  registrationGroups,
   vehicles,
 } from './schema/entries.js';
-import { emailOutbox, emailTemplateVersions } from './mail-schema.js';
-import { events } from './schema/organization.js';
-import { renderOutboxSubject } from './mail-subject.js';
+import { listEntryMessages } from './entry-messages.js';
 
 type Scalar = string | number | null;
 type Tx = Parameters<Parameters<Database['transaction']>[0]>[0];
@@ -27,6 +22,7 @@ async function loadEntry(tx: Tx, ctx: RequestContext, entryId: string) {
     .select({
       driverPersonId: entries.driverPersonId,
       vehicleId: entries.vehicleId,
+      registrationGroupId: entries.registrationGroupId,
     })
     .from(entries)
     .where(
@@ -54,16 +50,62 @@ function diff(current: object, patch: object) {
   return changes;
 }
 
+const identityKeys = ['firstName', 'lastName', 'dateOfBirth', 'country'];
+const pick = (source: object, keys: string[], include: boolean) =>
+  Object.fromEntries(
+    Object.entries(source).filter(([key]) => keys.includes(key) === include),
+  );
+
+type Changes = Record<string, { from: Scalar; to: Scalar }>;
+
+/** One audit row per entry the change applies to, so no affected entry is left without a trace. */
+async function auditEntries(
+  tx: Tx,
+  ctx: RequestContext,
+  entryIds: string[],
+  subject: 'driver' | 'vehicle',
+  changes: Changes,
+  actor: string,
+  copiedFromId: string | null = null,
+) {
+  await tx.insert(entryDataAuditEvents).values(
+    entryIds.map((entryId) => ({
+      organizationId: ctx.organizationId,
+      entryId,
+      subject,
+      changes,
+      actor,
+      copiedFromId,
+    })),
+  );
+}
+
 export function createEntryDetailRepository(
   db: Database,
 ): EntryDetailRepository {
   return {
+    /**
+     * Contact data is stored on the registration and applies to its entries only.
+     * Name, birth date and country live on the organization-wide person: they change only
+     * while no other registration uses that person, otherwise the request is refused.
+     */
     updateDriver: async (ctx, entryId, patch, actor) => {
       requireWrite(ctx);
       if (!actor.trim()) throw new Error('Actor is required');
       return db.transaction(async (tx) => {
         const entry = await loadEntry(tx, ctx, entryId);
-        if (!entry) return false;
+        if (!entry) return 'not_found';
+        const [group] = await tx
+          .select()
+          .from(registrationGroups)
+          .where(
+            and(
+              eq(registrationGroups.organizationId, ctx.organizationId),
+              eq(registrationGroups.id, entry.registrationGroupId),
+            ),
+          )
+          .for('update')
+          .limit(1);
         const [person] = await tx
           .select()
           .from(people)
@@ -75,34 +117,75 @@ export function createEntryDetailRepository(
           )
           .for('update')
           .limit(1);
-        if (!person) return false;
-        const changes = diff(person, patch);
-        if (!Object.keys(changes).length) return true;
-        await tx
-          .update(people)
-          .set(patch)
+        if (!group || !person) return 'not_found';
+        const identityChanges = diff(person, pick(patch, identityKeys, true));
+        const contactChanges = diff(group, pick(patch, identityKeys, false));
+        if (
+          !Object.keys(identityChanges).length &&
+          !Object.keys(contactChanges).length
+        )
+          return 'updated';
+        if (Object.keys(identityChanges).length) {
+          const [other] = await tx
+            .select({ id: entries.id })
+            .from(entries)
+            .where(
+              and(
+                eq(entries.organizationId, ctx.organizationId),
+                eq(entries.driverPersonId, person.id),
+                ne(entries.registrationGroupId, group.id),
+              ),
+            )
+            .limit(1);
+          if (other) return 'person_shared';
+          await tx
+            .update(people)
+            .set(pick(patch, identityKeys, true))
+            .where(
+              and(
+                eq(people.organizationId, ctx.organizationId),
+                eq(people.id, person.id),
+              ),
+            );
+        }
+        if (Object.keys(contactChanges).length)
+          await tx
+            .update(registrationGroups)
+            .set(pick(patch, identityKeys, false))
+            .where(
+              and(
+                eq(registrationGroups.organizationId, ctx.organizationId),
+                eq(registrationGroups.id, group.id),
+              ),
+            );
+        const mates = await tx
+          .select({ id: entries.id })
+          .from(entries)
           .where(
             and(
-              eq(people.organizationId, ctx.organizationId),
-              eq(people.id, person.id),
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.registrationGroupId, group.id),
+              sql`${entries.deletedAt} is null`,
             ),
           );
-        await tx.insert(entryDataAuditEvents).values({
-          organizationId: ctx.organizationId,
-          entryId,
-          subject: 'driver',
-          changes,
+        await auditEntries(
+          tx,
+          ctx,
+          mates.map((mate) => mate.id),
+          'driver',
+          { ...identityChanges, ...contactChanges },
           actor,
-        });
-        return true;
+        );
+        return 'updated';
       });
     },
+    /** A vehicle used by several entries is copied for this entry; the others keep the original. */
     updateVehicle: async (ctx, entryId, patch, actor) => {
       requireWrite(ctx);
       if (!actor.trim()) throw new Error('Actor is required');
       return db.transaction(async (tx) => {
         const entry = await loadEntry(tx, ctx, entryId);
-        if (!entry) return false;
+        if (!entry) return 'not_found';
         const [vehicle] = await tx
           .select()
           .from(vehicles)
@@ -114,9 +197,48 @@ export function createEntryDetailRepository(
           )
           .for('update')
           .limit(1);
-        if (!vehicle) return false;
+        if (!vehicle) return 'not_found';
         const changes = diff(vehicle, patch);
-        if (!Object.keys(changes).length) return true;
+        if (!Object.keys(changes).length) return 'updated';
+        const [shared] = await tx
+          .select({ id: entries.id })
+          .from(entries)
+          .where(
+            and(
+              eq(entries.organizationId, ctx.organizationId),
+              eq(entries.vehicleId, vehicle.id),
+              ne(entries.id, entryId),
+            ),
+          )
+          .limit(1);
+        if (shared) {
+          const { id, createdAt, ...fields } = vehicle;
+          void id;
+          void createdAt;
+          const [copy] = await tx
+            .insert(vehicles)
+            .values({ ...fields, ...patch })
+            .returning({ id: vehicles.id });
+          await tx
+            .update(entries)
+            .set({ vehicleId: copy!.id })
+            .where(
+              and(
+                eq(entries.organizationId, ctx.organizationId),
+                eq(entries.id, entryId),
+              ),
+            );
+          await auditEntries(
+            tx,
+            ctx,
+            [entryId],
+            'vehicle',
+            changes,
+            actor,
+            vehicle.id,
+          );
+          return 'updated';
+        }
         await tx
           .update(vehicles)
           .set(patch)
@@ -126,87 +248,10 @@ export function createEntryDetailRepository(
               eq(vehicles.id, vehicle.id),
             ),
           );
-        await tx.insert(entryDataAuditEvents).values({
-          organizationId: ctx.organizationId,
-          entryId,
-          subject: 'vehicle',
-          changes,
-          actor,
-        });
-        return true;
+        await auditEntries(tx, ctx, [entryId], 'vehicle', changes, actor);
+        return 'updated';
       });
     },
-    listMessages: async (ctx, entryId) => {
-      if (!ctx.permissions.has('entry:read')) throw new Error('Forbidden');
-      const [entry] = await db
-        .select({
-          groupId: entries.registrationGroupId,
-          eventId: entries.eventId,
-          eventName: events.name,
-        })
-        .from(entries)
-        .innerJoin(
-          events,
-          and(
-            eq(events.id, entries.eventId),
-            eq(events.organizationId, entries.organizationId),
-          ),
-        )
-        .where(
-          and(
-            eq(entries.organizationId, ctx.organizationId),
-            eq(entries.id, entryId),
-            sql`${entries.deletedAt} is null`,
-          ),
-        )
-        .limit(1);
-      if (!entry) return null;
-      const rows = await db
-        .select({
-          id: emailOutbox.id,
-          status: emailOutbox.status,
-          templateKey: emailOutbox.templateKey,
-          locale: emailOutbox.locale,
-          recipient: emailOutbox.recipient,
-          variables: emailOutbox.variables,
-          createdAt: emailOutbox.createdAt,
-          sentAt: emailOutbox.sentAt,
-          subjectTemplate: emailTemplateVersions.subject,
-        })
-        .from(emailOutbox)
-        .leftJoin(
-          emailTemplateVersions,
-          and(
-            eq(
-              emailTemplateVersions.organizationId,
-              emailOutbox.organizationId,
-            ),
-            eq(emailTemplateVersions.id, emailOutbox.templateVersionId),
-          ),
-        )
-        .where(
-          and(
-            eq(emailOutbox.organizationId, ctx.organizationId),
-            eq(emailOutbox.registrationGroupId, entry.groupId),
-            eq(emailOutbox.eventId, entry.eventId),
-          ),
-        )
-        .orderBy(desc(emailOutbox.createdAt))
-        .limit(100);
-      return rows.map((row): EntryMessage => ({
-        id: row.id,
-        status: row.status as EntryMessage['status'],
-        subject: renderOutboxSubject(
-          row.templateKey,
-          row.locale,
-          row.subjectTemplate,
-          { eventName: entry.eventName, ...row.variables },
-        ),
-        templateKey: row.templateKey,
-        recipient: row.recipient,
-        createdAt: row.createdAt.toISOString(),
-        sentAt: row.sentAt?.toISOString() ?? null,
-      }));
-    },
+    listMessages: (ctx, entryId) => listEntryMessages(db, ctx, entryId),
   };
 }

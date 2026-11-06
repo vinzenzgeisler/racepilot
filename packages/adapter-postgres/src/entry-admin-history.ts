@@ -170,7 +170,7 @@ export async function loadEntryAdminHistory(
     appendHistory(row.entryId, {
       id: row.id,
       kind: 'entry',
-      label: `data: ${row.subject}`,
+      label: `data: ${row.subject}${row.copiedFromId ? ' (copy)' : ''}`,
       actor: row.actor,
       occurredAt: row.occurredAt,
       detail: Object.keys(row.changes).join(','),

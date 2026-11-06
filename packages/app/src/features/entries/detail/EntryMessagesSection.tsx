@@ -8,7 +8,7 @@ import { formatShortDateTime } from './entryDetailModel.js';
 import type { EntryMessage } from './useEntryDetailApi.js';
 
 const STATUS = {
-  sent: ['done', 'Zugestellt'],
+  sent: ['done', 'Gesendet'],
   pending: ['in_progress', 'Wartet'],
   sending: ['in_progress', 'Wird gesendet'],
   failed: ['missing', 'Fehlgeschlagen'],

@@ -161,7 +161,7 @@ it('renders mails as table rows with a column label on every cell', () => {
       rows={[
         {
           id: '1',
-          status: 'Zugestellt',
+          status: 'Gesendet',
           subject: 'Betreff 1',
           template: 'entry-received',
           sent: '02.09.',

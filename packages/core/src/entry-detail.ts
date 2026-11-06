@@ -16,6 +16,10 @@ export interface AdminEntryDriver {
   emergencyContactName?: string | null;
   emergencyContactPhone?: string | null;
   publicationPreference?: 'name_visible' | 'initials' | 'hidden' | null;
+  /** Name, birth date and country belong to the person; true when entries elsewhere use the same person. */
+  identityShared?: boolean;
+  /** Entries of this registration; contact data applies to all of them. */
+  registrationEntryCount?: number;
 }
 
 export interface AdminEntryVehicle {
@@ -76,21 +80,32 @@ export interface EntryMessage {
   sentAt: string | null;
 }
 
-/** Admin-side maintenance of the person and vehicle behind one entry. */
+/**
+ * - `not_found`: no such entry in the caller's organization.
+ * - `person_shared`: the change touches name, birth date or country of a person that other
+ *   registrations use; nothing was written.
+ */
+export type EntryUpdateResult = 'updated' | 'not_found' | 'person_shared';
+
+/**
+ * Admin-side maintenance behind one entry.
+ * Contact, address, emergency and publication data are stored per registration and apply to
+ * the entries of that registration only. A vehicle that several entries share is copied for
+ * the edited entry. Every change is audited on each affected entry.
+ */
 export interface EntryDetailRepository {
-  /** Returns false when the entry does not exist in the caller's organization. */
   updateDriver(
     ctx: RequestContext,
     entryId: string,
     patch: EntryDriverPatch,
     actor: string,
-  ): Promise<boolean>;
+  ): Promise<EntryUpdateResult>;
   updateVehicle(
     ctx: RequestContext,
     entryId: string,
     patch: EntryVehiclePatch,
     actor: string,
-  ): Promise<boolean>;
+  ): Promise<Exclude<EntryUpdateResult, 'person_shared'>>;
   /** Null when the entry does not exist in the caller's organization. */
   listMessages(
     ctx: RequestContext,

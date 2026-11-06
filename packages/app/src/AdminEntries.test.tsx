@@ -1030,4 +1030,69 @@ describe('AdminEntries', () => {
     await flush();
     expect(detailEntryId()).toBe('Casey Driver');
   });
+
+  it('locks identity fields of a shared person, explains the scope and reports a 409', async () => {
+    const shared = {
+      ...itemsA[0]!,
+      adminDetails: {
+        ...itemsA[0]!.adminDetails,
+        driver: {
+          ...itemsA[0]!.adminDetails.driver,
+          identityShared: true,
+          registrationEntryCount: 2,
+        },
+      },
+    };
+    let calls = 0;
+    await mount(async (url) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}/driver`) {
+        calls += 1;
+        return new Response('{}', { status: 409 });
+      }
+      if (url === `/admin/entries/${entryA}`) return Response.json(shared);
+      if (url.endsWith('/messages'))
+        return Response.json({
+          items: [
+            {
+              id: '55555555-5555-4555-8555-555555555555',
+              status: 'sent',
+              subject: 'Nennung eingegangen',
+              templateKey: 'entry-received',
+              recipient: 'family@example.test',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              sentAt: '2026-01-01T00:00:05.000Z',
+            },
+          ],
+        });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    // A sent mail is not a delivery receipt.
+    expect(container.textContent).toContain('Gesendet');
+    expect(container.textContent).not.toContain('Zugestellt');
+    await click('Bearbeiten');
+    for (const label of ['Vorname', 'Nachname', 'Geburtsdatum', 'Land'])
+      expect(
+        (labeled(label, 'input,select') as HTMLInputElement | HTMLSelectElement)
+          .disabled,
+      ).toBe(true);
+    expect((labeled('Telefon', 'input') as HTMLInputElement).disabled).toBe(
+      false,
+    );
+    expect(container.textContent).toContain(
+      'gelten auch für ihre Nennungen in anderen Veranstaltungen',
+    );
+    expect(container.textContent).toContain('alle 2 Nennungen darin');
+    await setInput('Telefon', '+49 3');
+    await click('Speichern');
+    expect(calls).toBe(1);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Sie lassen sich hier nicht ändern',
+    );
+  });
 });

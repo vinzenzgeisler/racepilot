@@ -1604,6 +1604,8 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           emergencyContactName: null,
           emergencyContactPhone: null,
           publicationPreference: null,
+          identityShared: false,
+          registrationEntryCount: 1,
         },
         vehicle: {
           make: 'X',

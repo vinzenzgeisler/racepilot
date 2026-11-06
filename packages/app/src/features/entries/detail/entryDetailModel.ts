@@ -233,19 +233,23 @@ function describe(
       tone: 'dark',
       ...(detail ? { detail: `An ${detail}` } : {}),
     };
-  const data = /^data: (driver|vehicle)$/.exec(event.label);
-  if (data)
+  const data = /^data: (driver|vehicle)( \(copy\))?$/.exec(event.label);
+  if (data) {
+    const fields = event.detail
+      .split(',')
+      .map((key) => FIELD_NAMES[key] ?? key)
+      .join(', ');
     return {
       title:
         data[1] === 'driver'
           ? 'Fahrerdaten geändert'
           : 'Fahrzeugdaten geändert',
       tone: 'dark',
-      detail: event.detail
-        .split(',')
-        .map((key) => FIELD_NAMES[key] ?? key)
-        .join(', '),
+      detail: data[2]
+        ? `${fields} · Das Fahrzeug war mehreren Nennungen zugeordnet und wurde für diese Nennung kopiert; die anderen bleiben unverändert.`
+        : fields,
     };
+  }
   const match = /^([^:]+): (.+) → (.+)$/.exec(event.label);
   if (!match)
     return {

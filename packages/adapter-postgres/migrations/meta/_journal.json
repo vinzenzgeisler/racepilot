@@ -176,6 +176,13 @@
       "when": 1793446468832,
       "tag": "0024_entry_detail_fields",
       "breakpoints": false
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1793446468834,
+      "tag": "0025_registration_contact_scope",
+      "breakpoints": false
     }
   ]
 }

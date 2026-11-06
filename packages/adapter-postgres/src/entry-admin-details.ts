@@ -10,6 +10,7 @@ import { organizations, events, eventClasses } from './schema/organization.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { registrationFormUploads } from './schema/forms.js';
 import { sql } from 'drizzle-orm';
+import { loadDriverContexts } from './entry-admin-driver-context.js';
 import { loadInvoiceSummaries } from './entry-admin-invoice.js';
 import { loadEntryAdminHistory } from './entry-admin-history.js';
 
@@ -151,13 +152,6 @@ export async function attachAdminEntryDetails(
       dateOfBirth: people.dateOfBirth,
       country: people.country,
       email: people.email,
-      phone: people.phone,
-      street: people.street,
-      postalCode: people.postalCode,
-      city: people.city,
-      emergencyContactName: people.emergencyContactName,
-      emergencyContactPhone: people.emergencyContactPhone,
-      publicationPreference: people.publicationPreference,
       emailVerified: entries.verificationStatus,
     })
     .from(entries)
@@ -224,12 +218,14 @@ export async function attachAdminEntryDetails(
       ),
     );
   const invoiceByGroup = await loadInvoiceSummaries(db, ctx, groupIds);
+  const driverContexts = await loadDriverContexts(db, ctx, ids);
   const historyByEntry = await loadEntryAdminHistory(db, ctx, ids);
   const drivers = new Map(peopleRows.map((row) => [row.entryId, row]));
   const vehiclesByEntry = new Map(vehicleRows.map((row) => [row.entryId, row]));
   const classesByEntry = new Map(classRows.map((row) => [row.entryId, row]));
   return items.map((item) => {
     const driver = drivers.get(item.id);
+    const context = driverContexts.get(item.id);
     const vehicle = vehiclesByEntry.get(item.id);
     const eventClass = classesByEntry.get(item.id);
     const adminHistory = (historyByEntry.get(item.id) ?? []).sort((a, b) =>
@@ -247,16 +243,15 @@ export async function attachAdminEntryDetails(
           country: driver?.country ?? null,
           email: driver?.email ?? null,
           emailVerified: driver?.emailVerified === 'verified',
-          phone: driver?.phone ?? null,
-          street: driver?.street ?? null,
-          postalCode: driver?.postalCode ?? null,
-          city: driver?.city ?? null,
-          emergencyContactName: driver?.emergencyContactName ?? null,
-          emergencyContactPhone: driver?.emergencyContactPhone ?? null,
-          publicationPreference:
-            (driver?.publicationPreference as
-              'name_visible' | 'initials' | 'hidden' | null | undefined) ??
-            null,
+          phone: context?.phone ?? null,
+          street: context?.street ?? null,
+          postalCode: context?.postalCode ?? null,
+          city: context?.city ?? null,
+          emergencyContactName: context?.emergencyContactName ?? null,
+          emergencyContactPhone: context?.emergencyContactPhone ?? null,
+          publicationPreference: context?.publicationPreference ?? null,
+          identityShared: context?.identityShared ?? false,
+          registrationEntryCount: context?.registrationEntryCount ?? 1,
         },
         vehicle: {
           make: vehicle?.make ?? '',

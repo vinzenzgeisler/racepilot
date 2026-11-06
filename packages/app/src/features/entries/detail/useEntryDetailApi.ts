@@ -15,9 +15,11 @@ const failure = (status: number, action: string) =>
       ? `Du darfst ${action} nicht.`
       : status === 404
         ? 'Die Nennung wurde nicht gefunden.'
-        : status === 400
-          ? 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
-          : 'Der Server konnte die Anfrage nicht ausführen.';
+        : status === 409
+          ? 'Name, Geburtsdatum und Land gehören zur Person und gelten auch für ihre Nennungen in anderen Veranstaltungen. Sie lassen sich hier nicht ändern.'
+          : status === 400
+            ? 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
+            : 'Der Server konnte die Anfrage nicht ausführen.';
 
 export type { Outcome };
 

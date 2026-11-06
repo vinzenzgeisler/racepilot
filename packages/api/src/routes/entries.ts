@@ -249,7 +249,7 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
       const actor = context.subject
         ? `${context.subject.issuer}#${context.subject.subject}`
         : context.correlationId;
-      const found =
+      const result =
         subject === 'driver'
           ? await deps.entryDetails.updateDriver(
               context,
@@ -263,7 +263,10 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
               parsed.data as import('@racepilot/core').EntryVehiclePatch,
               actor,
             );
-      if (!found) return c.json({ error: 'Not found' }, 404);
+      if (result === 'not_found') return c.json({ error: 'Not found' }, 404);
+      // The person is shared with other registrations; nothing was written.
+      if (result === 'person_shared')
+        return c.json({ error: 'person_shared' }, 409);
       const entry = await deps.entries.getById(context, entryId.data);
       return entry ? c.json(entry) : c.json({ error: 'Not found' }, 404);
     });

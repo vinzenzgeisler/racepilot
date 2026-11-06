@@ -127,10 +127,28 @@ export function EntryDriverSection({
           }}
         >
           <FormGrid>
-            <TextInput label="Vorname" required {...bind('firstName')} />
-            <TextInput label="Nachname" required {...bind('lastName')} />
-            <DateInput label="Geburtsdatum" {...bind('dateOfBirth')} />
-            <SelectField label="Land" {...bind('country')}>
+            <TextInput
+              label="Vorname"
+              required
+              disabled={driver.identityShared === true}
+              {...bind('firstName')}
+            />
+            <TextInput
+              label="Nachname"
+              required
+              disabled={driver.identityShared === true}
+              {...bind('lastName')}
+            />
+            <DateInput
+              label="Geburtsdatum"
+              disabled={driver.identityShared === true}
+              {...bind('dateOfBirth')}
+            />
+            <SelectField
+              label="Land"
+              disabled={driver.identityShared === true}
+              {...bind('country')}
+            >
               <option value="">{NOT_GIVEN}</option>
               {countries.map((code) => (
                 <option key={code} value={code}>
@@ -166,7 +184,16 @@ export function EntryDriverSection({
               <DetailNote>
                 {driver.emailVerified
                   ? 'Die E-Mail-Adresse ist bestätigt und wird hier nicht geändert.'
-                  : 'Die E-Mail-Adresse wird hier nicht geändert.'}
+                  : 'Die E-Mail-Adresse wird hier nicht geändert.'}{' '}
+                {driver.identityShared
+                  ? 'Name, Geburtsdatum und Land gehören zur Person und gelten auch für ihre Nennungen in anderen Veranstaltungen; sie lassen sich hier nicht ändern. '
+                  : ''}
+                Telefon, Anschrift, Notfallkontakt und Veröffentlichung gelten
+                nur für diese Anmeldung
+                {(driver.registrationEntryCount ?? 1) > 1
+                  ? ` und alle ${driver.registrationEntryCount} Nennungen darin`
+                  : ''}
+                .
               </DetailNote>
             </FormWide>
           </FormGrid>

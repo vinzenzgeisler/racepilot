@@ -212,6 +212,7 @@
     "EntryStatusMeaning",
     "EntryStatusProjection",
     "EntryStatusValue",
+    "EntryUpdateResult",
     "EntryVehiclePatch",
     "EntryVerificationStatus",
     "EntryWorkflow",

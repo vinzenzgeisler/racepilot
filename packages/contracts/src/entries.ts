@@ -76,6 +76,8 @@ export const EntryResponse = z
             emergencyContactPhone: z.string().nullable().optional(),
             publicationPreference:
               PublicationPreferenceSchema.nullable().optional(),
+            identityShared: z.boolean().optional(),
+            registrationEntryCount: z.number().int().optional(),
           })
           .strict(),
         vehicle: z

@@ -26,13 +26,6 @@ export const people = pgTable(
     emailNormalized: text('email_normalized'),
     dateOfBirth: date('date_of_birth'),
     country: text('country'),
-    phone: text('phone'),
-    street: text('street'),
-    postalCode: text('postal_code'),
-    city: text('city'),
-    emergencyContactName: text('emergency_contact_name'),
-    emergencyContactPhone: text('emergency_contact_phone'),
-    publicationPreference: text('publication_preference'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -96,6 +89,13 @@ export const registrationGroups = pgTable(
     contactEmail: text('contact_email'),
     guardianName: text('guardian_name'),
     guardianEmail: text('guardian_email'),
+    phone: text('phone'),
+    street: text('street'),
+    postalCode: text('postal_code'),
+    city: text('city'),
+    emergencyContactName: text('emergency_contact_name'),
+    emergencyContactPhone: text('emergency_contact_phone'),
+    publicationPreference: text('publication_preference'),
     customAnswers: jsonb('custom_answers')
       .$type<Record<string, string | boolean | { objectId: string }>>()
       .notNull()
@@ -269,6 +269,7 @@ export const entryDataAuditEvents = pgTable(
       >()
       .notNull(),
     actor: text('actor').notNull(),
+    copiedFromId: uuid('copied_from_id'),
     occurredAt: timestamp('occurred_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

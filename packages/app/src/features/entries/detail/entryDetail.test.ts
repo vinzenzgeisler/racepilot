@@ -148,4 +148,24 @@ describe('entry detail model', () => {
     expect(statusMeaning('pending')).toBe('new');
     expect(JSON.stringify(custom)).toBe(before);
   });
+
+  it('tells the history reader when a shared vehicle was copied', () => {
+    const entry = {
+      createdAt: '2026-09-01T00:00:00.000Z',
+      adminHistory: [
+        {
+          id: 'c',
+          kind: 'entry',
+          label: 'data: vehicle (copy)',
+          actor: 'A. Beispiel',
+          occurredAt: '2026-09-02T00:00:00.000Z',
+          detail: 'ownerName,year',
+        },
+      ],
+    } as unknown as Entry;
+    const [copy] = timelineFor(entry, null, new Map());
+    expect(copy).toMatchObject({ title: 'Fahrzeugdaten geändert' });
+    expect(copy?.detail).toContain('Besitzer, Baujahr');
+    expect(copy?.detail).toContain('kopiert');
+  });
 });
