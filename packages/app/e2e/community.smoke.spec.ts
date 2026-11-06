@@ -228,10 +228,12 @@ test('Community registration and admin lifecycle with API setup', async ({
   await expect(page.getByText('Ada Lovelace', { exact: true })).toBeVisible();
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: 'Ada Lovelace' });
-  await row.locator('button[data-entry-action]').click();
-  // Enter opens the detail of the selected entry; wait until it is loaded.
-  await expect(row.locator('button[data-selected-entry]')).toBeVisible();
-  await page.keyboard.press('Enter');
+  await row.getByRole('button', { name: 'Ada Lovelace Lotus Seven' }).click();
+  const preview = page.getByRole('region', { name: 'Nennungsvorschau' });
+  await expect(preview).toContainText('Ada Lovelace');
+  await preview.getByRole('button', { name: 'Zulassen' }).click();
+  await expect(preview).toContainText('Zugelassen');
+  await preview.getByRole('button', { name: 'Vollständig öffnen' }).click();
   const entryDetail = page.getByRole('region', {
     name: 'Nennung im Detail',
     exact: true,
@@ -247,18 +249,13 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(download.suggestedFilename()).toMatch(/^registration-upload-/);
   expect(readFileSync(await download.path()!)).toEqual(uploadedPng);
   await shots('admin-entry-detail');
-  await entryDetail.getByRole('button', { name: 'Zulassen' }).click();
-  await page
-    .getByRole('dialog')
-    .getByLabel('Begründung (für das Protokoll erforderlich)')
-    .fill('Alpha E2E review');
-  await page
-    .getByRole('dialog')
-    .getByRole('button', { name: 'Status ändern' })
-    .click();
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
     /zugelassen|angenommen/i,
   );
+  await expect(entryDetail).toContainText('Zugelassen');
+  await expect(
+    entryDetail.getByRole('button', { name: 'Zulassen' }),
+  ).toHaveCount(0);
 
   const csvRequest = await api(
     `/admin/events/${event.id}/entries.csv`,

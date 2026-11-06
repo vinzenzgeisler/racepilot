@@ -255,6 +255,7 @@ export function AdminApplication() {
               setPreviewOpen(true);
             }}
             onSelectionChange={handleSelectionChange}
+            selectedEntry={selectedEntry}
           />
         ) : view === 'workflow' ? (
           <AdminWorkflow eventId={selectedEvent} events={events} />

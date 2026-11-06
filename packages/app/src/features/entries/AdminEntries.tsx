@@ -14,6 +14,7 @@ import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
 import { useAdminEntriesKeyboard } from './useAdminEntriesKeyboard.js';
 import { useOpenEntryDetail } from './useOpenEntryDetail.js';
+import { useSharedSelection } from './useSharedSelection.js';
 type AdminEntriesProps = {
   detailOpen?: boolean;
   preview?: ReactNode;
@@ -22,6 +23,7 @@ type AdminEntriesProps = {
   onOpenDetail?: () => void;
   onCloseDetail?: () => void;
   onSelectionChange?: (entry: Entry | null) => void;
+  selectedEntry?: Entry | null;
   onTotalChange?: (total: number) => void;
   eventId?: string;
   onEventChange?: (id: string) => void;
@@ -44,6 +46,7 @@ function AdminEntriesView({
   onOpenDetail,
   onCloseDetail,
   onSelectionChange,
+  selectedEntry: sharedSelectedEntry,
   onTotalChange,
   eventId: sharedEventId,
   onEventChange: onSharedEventChange,
@@ -62,11 +65,14 @@ function AdminEntriesView({
   const [localEventId, setLocalEventId] = useState('');
   const eventId = sharedEventId ?? localEventId;
   const [page, setPage] = useState(1);
-  const [pageSize] = useState(12);
+  const pageSize = 12;
   const [refreshRevision, setRefreshRevision] = useState(0);
   const [draft, setDraft] = useState<EntryQuery>(initialQuery);
   const [applied, setApplied] = useState<EntryQuery>(initialQuery);
-  const [selected, setSelected] = useState<Entry | null>(null);
+  const [selected, setSelected] = useSharedSelection(
+    sharedSelectedEntry,
+    onSelectionChange,
+  );
   const [actionError, setActionError] = useState('');
   const [counts, setCounts] = useState<Record<string, number>>({});
   useEffect(() => {
@@ -132,7 +138,6 @@ function AdminEntriesView({
     setRefreshRevision,
     setActionError,
   });
-  useEffect(() => onSelectionChange?.(selected), [onSelectionChange, selected]);
   const openEntryDetail = useOpenEntryDetail(selected, openEntry, openDetail);
   useEffect(() => {
     if (
