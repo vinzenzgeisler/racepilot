@@ -1,8 +1,49 @@
-import { Button, FormSection, Steps } from '@racepilot/ui';
+import {
+  Button,
+  FieldPreview,
+  FieldPreviewList,
+  FormSection,
+  Steps,
+} from '@racepilot/ui';
 import {
   deriveAccessibleBrandColors,
   type RegistrationFormConfig,
 } from '@racepilot/contracts';
+import { registrationFieldLabels } from './registrationFieldLabels.js';
+
+const driverPreviewFields = [
+  'phone',
+  'street',
+  'postalCode',
+  'city',
+  'emergencyContact',
+  'publicationPreference',
+] as const;
+const vehiclePreviewFields = [
+  'displacement',
+  'cylinders',
+  'owner',
+  'history',
+] as const;
+/** Hidden fields do not appear: the preview shows what the participant will see. */
+function previewRows(
+  config: RegistrationFormConfig,
+  keys: ReadonlyArray<keyof RegistrationFormConfig['fields']>,
+) {
+  return keys.flatMap((key) => {
+    const state = config.fields[key].state;
+    return state === 'hidden'
+      ? []
+      : [
+          <FieldPreview
+            key={key}
+            label={registrationFieldLabels[key] ?? key}
+            state={state}
+            stateLabel={state === 'required' ? 'Pflicht' : 'Freiwillig'}
+          />,
+        ];
+  });
+}
 
 export function RegistrationSettingsPreview({
   config,
@@ -65,6 +106,18 @@ export function RegistrationSettingsPreview({
           label="Anmeldeschritte"
           completedLabel="Abgeschlossen"
         />
+        <FieldPreviewList
+          title="Fahrerdaten · zusätzlich abgefragt"
+          empty="Keine zusätzlichen Fahrerfelder"
+        >
+          {previewRows(config, driverPreviewFields)}
+        </FieldPreviewList>
+        <FieldPreviewList
+          title="Je Fahrzeug · zusätzlich abgefragt"
+          empty="Keine zusätzlichen Fahrzeugfelder"
+        >
+          {previewRows(config, vehiclePreviewFields)}
+        </FieldPreviewList>
         <Button type="button" disabled>
           Weiter zu Startmeldungen
         </Button>

@@ -45,7 +45,41 @@ export type VehicleEntry = {
   year: string;
   registration: string;
   requestedStartNumber: string;
+  displacementCc: string;
+  cylinders: string;
+  ownerName: string;
+  history: string;
 };
+export const emptyVehicle = (): VehicleEntry => ({
+  classId: '',
+  make: '',
+  model: '',
+  year: '',
+  registration: '',
+  requestedStartNumber: '',
+  displacementCc: '',
+  cylinders: '',
+  ownerName: '',
+  history: '',
+});
+export type DriverContact = {
+  phone: string;
+  street: string;
+  postalCode: string;
+  city: string;
+  emergencyContactName: string;
+  emergencyContactPhone: string;
+  publicationPreference: '' | 'name_visible' | 'initials' | 'hidden';
+};
+export type FieldState = 'required' | 'optional' | 'hidden';
+/** The state the organization or event configured for a standard field. */
+export const fieldState = (
+  config: RegistrationFormConfig,
+  key: keyof RegistrationFormConfig['fields'],
+): FieldState => config.fields[key].state;
+export const nullIfEmpty = (value: string) => value.trim() || null;
+export const numberOrNull = (value: string) =>
+  value.trim() ? Number(value) : null;
 type PublicPriceRule = FormPayload['pricing'][number];
 export function estimateRegistrationTotal(
   vehicles: Array<{ classId: string }>,
@@ -103,6 +137,21 @@ export const translations = {
     registration: 'Kennzeichen',
     consent: 'Ich stimme zu',
     emailError: 'Bitte gib eine gültige E-Mail-Adresse ein.',
+    phone: 'Telefon',
+    street: 'Straße und Hausnummer',
+    postalCode: 'PLZ',
+    city: 'Ort',
+    emergencyContactName: 'Notfallkontakt · Name',
+    emergencyContactPhone: 'Notfallkontakt · Telefon',
+    publicationPreference: 'Veröffentlichung',
+    publicationNotGiven: 'Keine Angabe',
+    publicationNameVisible: 'Name sichtbar',
+    publicationInitials: 'Nur Initialen',
+    publicationHidden: 'Nicht veröffentlichen',
+    displacement: 'Hubraum (cm³)',
+    cylinders: 'Zylinder',
+    owner: 'Besitzer',
+    history: 'Fahrzeughistorie',
   },
   en: {
     loading: 'Loading registration form …',
@@ -129,6 +178,21 @@ export const translations = {
     registration: 'Registration',
     consent: 'I agree',
     emailError: 'Enter a valid email address.',
+    phone: 'Phone',
+    street: 'Street and number',
+    postalCode: 'Postal code',
+    city: 'City',
+    emergencyContactName: 'Emergency contact · name',
+    emergencyContactPhone: 'Emergency contact · phone',
+    publicationPreference: 'Publication',
+    publicationNotGiven: 'No preference',
+    publicationNameVisible: 'Name visible',
+    publicationInitials: 'Initials only',
+    publicationHidden: 'Do not publish',
+    displacement: 'Displacement (cc)',
+    cylinders: 'Cylinders',
+    owner: 'Owner',
+    history: 'Vehicle history',
   },
 } as const;
 

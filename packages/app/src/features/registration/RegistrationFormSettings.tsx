@@ -22,27 +22,7 @@ import {
   RegistrationFeatureOptions,
   RegistrationFormOptions,
 } from './RegistrationFormOptions.js';
-
-const fieldLabels: Record<string, string> = {
-  dateOfBirth: 'Geburtsdatum',
-  phone: 'Telefon',
-  street: 'Straße',
-  postalCode: 'PLZ',
-  city: 'Ort',
-  country: 'Land',
-  emergencyContact: 'Notfallkontakt',
-  biography: 'Sportlicher Werdegang',
-  organizerNotes: 'Hinweise an den Veranstalter',
-  requestedStartNumber: 'Wunsch-Startnummer',
-  make: 'Hersteller',
-  model: 'Modell',
-  year: 'Baujahr',
-  displacement: 'Hubraum',
-  cylinders: 'Zylinder',
-  owner: 'Besitzer',
-  history: 'Fahrzeughistorie',
-  vehicleImage: 'Fahrzeugbild',
-};
+import { registrationFieldLabels } from './registrationFieldLabels.js';
 
 export function RegistrationFormSettings({ eventId }: { eventId: string }) {
   const [config, setConfig] = useState<RegistrationFormConfig>(
@@ -231,7 +211,7 @@ export function RegistrationFormSettings({ eventId }: { eventId: string }) {
               <RegistrationFormOptions
                 config={activeConfig}
                 updateConfig={updateConfig}
-                fieldLabels={fieldLabels}
+                fieldLabels={registrationFieldLabels}
               />
               <RegistrationCustomFields
                 activeConfig={activeConfig}

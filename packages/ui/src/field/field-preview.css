@@ -1,0 +1,35 @@
+.nb-field-preview-group h4 {
+  margin: var(--space-3) 0 var(--space-1);
+  color: var(--color-graphite);
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.nb-field-preview-group ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.nb-field-preview-group p {
+  margin: 0;
+  color: var(--color-graphite);
+  font: var(--text-body);
+}
+.nb-field-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 36px;
+  border-bottom: 1px solid var(--color-line);
+  font: var(--text-body);
+}
+.nb-field-preview small {
+  color: var(--color-graphite);
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.nb-field-preview.is-required small {
+  color: var(--color-marshal-text);
+}
