@@ -43,3 +43,12 @@
   font: var(--text-label);
   cursor: pointer;
 }
+
+@media (width < 768px) {
+  .nb-filter-bar > div:first-child > .nb-text-input {
+    flex: 1 1 100%;
+  }
+  .nb-filter-bar > div:first-child > .nb-text-input input {
+    width: 100%;
+  }
+}

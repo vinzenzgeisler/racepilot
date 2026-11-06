@@ -62,11 +62,7 @@ export function EntryPreview({
       imageUrl={details?.vehicle.imageUrl ?? null}
       imageAlt="Fahrzeugbild"
       labels={status
-        ?.filter((item) =>
-          ['entry', 'payment', 'technical_inspection', 'waiver'].includes(
-            item.key,
-          ),
-        )
+        ?.filter((item) => ['entry', 'payment'].includes(item.key))
         .map((item) => (
           <StatusLabel
             key={item.key}
@@ -91,7 +87,7 @@ export function EntryPreview({
         title="Nächster Schritt"
         hint={
           missing.length
-            ? `Es fehlt noch ${missing.join(', ')}. Die Entscheidung wird protokolliert.`
+            ? `Es ${missing.length > 1 ? 'fehlen' : 'fehlt'} noch ${missing.join(', ')}. Die Entscheidung wird protokolliert.`
             : 'Die Entscheidung wird im Verlauf protokolliert.'
         }
         action={

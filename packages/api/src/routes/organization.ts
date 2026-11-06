@@ -11,6 +11,16 @@ import {
 
 export function registerOrganizationRoutes(context: ApiRoutesContext): void {
   const { app, deps, resolveMemberContext } = context;
+  app.get('/admin/session', async (c) => {
+    const member = await resolveMemberContext(c.req.raw);
+    if (!member) return c.json({ error: 'Unauthorized' }, 401);
+    const role = member.permissions.has('role:admin')
+      ? 'admin'
+      : member.permissions.has('role:member')
+        ? 'member'
+        : null;
+    return role ? c.json({ role }) : c.json({ error: 'Forbidden' }, 403);
+  });
   app.get('/admin/organization', async (c) => {
     const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);

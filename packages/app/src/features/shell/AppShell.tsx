@@ -128,6 +128,7 @@ export function AppShell({
       }
       header={
         <PageHeader
+          className={view === 'entries' ? 'nb-entry-page-header' : undefined}
           title={
             view === 'entries'
               ? detailOpen

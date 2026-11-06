@@ -82,6 +82,22 @@ function deps(): ApiDeps {
   };
 }
 describe('admin organization routes', () => {
+  it('reports the authenticated membership role without trusting token role claims', async () => {
+    for (const role of ['admin', 'member'] as const) {
+      const app = createApp({
+        ...deps(),
+        memberships: {
+          resolvePermissions: async () => new Set([`role:${role}`]),
+        },
+      });
+      const response = await app.request('/admin/session');
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ role });
+    }
+    const forbidden = await createApp(deps()).request('/admin/session');
+    expect(forbidden.status).toBe(403);
+  });
+
   it('bootstraps the configured Community tenant and ignores untrusted host/organization selectors', async () => {
     const response = await createApp(deps()).request(
       '/runtime/bootstrap?organizationId=foreign',

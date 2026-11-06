@@ -3,7 +3,7 @@
   display: grid;
   grid-template-rows: auto auto auto auto minmax(0, 1fr) auto;
   align-content: start;
-  min-height: calc(100vh - 120px);
+  min-height: calc(100vh - 250px);
   gap: var(--space-3);
 }
 .nb-preview-close {
@@ -30,7 +30,8 @@
   gap: var(--space-3);
 }
 .nb-preview-number {
-  font: var(--text-app-h1);
+  font: 800 42px/1 var(--font-archivo);
+  font-variation-settings: 'wdth' 75;
 }
 .nb-preview-panel h2 {
   margin: 0;
@@ -50,7 +51,8 @@
   display: grid;
   place-items: center;
   width: 100%;
-  aspect-ratio: 2 / 1;
+  aspect-ratio: 1.8 / 1;
+  margin-top: 20px;
   object-fit: cover;
   background: var(--color-line);
 }
@@ -71,4 +73,10 @@
 }
 .nb-preview-panel footer > * {
   flex: 1;
+}
+
+@media (width < 768px) {
+  .nb-preview-panel {
+    min-height: calc(100vh - 90px);
+  }
 }

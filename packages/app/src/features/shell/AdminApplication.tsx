@@ -61,6 +61,7 @@ export function AuthenticatedAdmin() {
 }
 
 function AdminApplication() {
+  const [identity, setIdentity] = useState(getAdminIdentity());
   const [events, setEvents] = useState<
     Array<{
       id: string;
@@ -77,6 +78,28 @@ function AdminApplication() {
   const [previewOpen, setPreviewOpen] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
   const closePreview = () => setPreviewOpen(false);
+  useEffect(() => {
+    let active = true;
+    void adminFetch('/admin/session', { cache: 'no-store' })
+      .then((response) =>
+        response.ok ? (response.json() as Promise<{ role: string }>) : null,
+      )
+      .then((session) => {
+        if (active && (session?.role === 'admin' || session?.role === 'member'))
+          setIdentity((current) =>
+            current
+              ? {
+                  ...current,
+                  role: session.role === 'admin' ? 'Admin' : 'Mitglied',
+                }
+              : null,
+          );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, []);
   const handleSelectionChange = useCallback((entry: Entry | null) => {
     setSelectedEntry(entry);
     if (entry) setPreviewOpen(true);
@@ -128,7 +151,7 @@ function AdminApplication() {
       onEventChange={setSelectedEvent}
       previewOpen={previewOpen && !detailOpen}
       detailOpen={detailOpen}
-      identity={getAdminIdentity()}
+      identity={identity}
       onClosePreview={closePreview}
       preview={
         selectedEntry ? (

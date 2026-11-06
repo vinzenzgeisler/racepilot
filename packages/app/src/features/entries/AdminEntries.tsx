@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { Button, SelectField } from '@racepilot/ui';
 import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
@@ -6,6 +6,7 @@ import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
 import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
+import { useAdminEntriesKeyboard } from './useAdminEntriesKeyboard.js';
 export function AdminEntries({
   detailOpen,
   autoPreview = false,
@@ -28,10 +29,14 @@ export function AdminEntries({
   const [internalDetailOpen, setInternalDetailOpen] = useState(false);
   const autoPreviewedEvent = useRef('');
   const isDetailOpen = detailOpen ?? internalDetailOpen;
-  const openDetail = () =>
-    onOpenDetail ? onOpenDetail() : setInternalDetailOpen(true);
-  const closeDetail = () =>
-    onCloseDetail ? onCloseDetail() : setInternalDetailOpen(false);
+  const openDetail = useCallback(() => {
+    if (onOpenDetail) onOpenDetail();
+    else setInternalDetailOpen(true);
+  }, [onOpenDetail]);
+  const closeDetail = useCallback(() => {
+    if (onCloseDetail) onCloseDetail();
+    else setInternalDetailOpen(false);
+  }, [onCloseDetail]);
   const [localEventId, setLocalEventId] = useState('');
   const eventId = sharedEventId ?? localEventId;
   const [page, setPage] = useState(1);
@@ -64,7 +69,10 @@ export function AdminEntries({
   }>({ eventId, ids: new Set() });
   const selectedIds =
     selection.eventId === eventId ? selection.ids : new Set<string>();
-  const clearSelection = () => setSelection({ eventId, ids: new Set() });
+  const clearSelection = useCallback(
+    () => setSelection({ eventId, ids: new Set() }),
+    [eventId],
+  );
   const {
     apiState,
     events,
@@ -126,47 +134,15 @@ export function AdminEntries({
     window.addEventListener('nennbox:entries-changed', refresh);
     return () => window.removeEventListener('nennbox:entries-changed', refresh);
   }, []);
-  useEffect(() => {
-    const handleKeys = (event: KeyboardEvent) => {
-      if (
-        !items.length ||
-        (event.target instanceof HTMLElement &&
-          ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName))
-      )
-        return;
-      const index = items.findIndex((item) => item.id === selected?.id);
-      if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-        event.preventDefault();
-        const next = Math.min(
-          items.length - 1,
-          Math.max(0, index + (event.key === 'ArrowDown' ? 1 : -1)),
-        );
-        document
-          .querySelector<HTMLButtonElement>(
-            `[data-entry-action="${items[next]!.id}"]`,
-          )
-          ?.click();
-      } else if (event.key === 'Escape' && isDetailOpen) {
-        closeDetail();
-      } else if (event.key === 'Escape' && selected) {
-        setSelected(null);
-      } else if (
-        event.key === 'Enter' &&
-        selected &&
-        !(
-          event.target instanceof HTMLElement &&
-          event.target.closest(
-            'a, [role=tab], summary, [role=menuitem], input, select, textarea',
-          )
-        )
-      ) {
-        event.preventDefault();
-        openDetail();
-      }
-    };
-    document.addEventListener('keydown', handleKeys);
-    return () => document.removeEventListener('keydown', handleKeys);
-  }, [items, selected, isDetailOpen, onOpenDetail, onCloseDetail]);
+  useAdminEntriesKeyboard({
+    items,
+    selected,
+    isDetailOpen,
+    openEntry,
+    openDetail,
+    closeDetail,
+    setSelected,
+  });
   useEffect(() => {
     const timeout = window.setTimeout(
       () => {
@@ -177,7 +153,7 @@ export function AdminEntries({
       draft.search ? 180 : 0,
     );
     return () => window.clearTimeout(timeout);
-  }, [draft]);
+  }, [draft, clearSelection]);
 
   function changeEvent(nextEventId: string) {
     resetData();

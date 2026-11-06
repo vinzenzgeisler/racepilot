@@ -9,7 +9,10 @@ export function AdminEntryListStatus({
 }) {
   return (
     <>
-      <p aria-live="polite">
+      <p
+        aria-live="polite"
+        className={apiState === 'ready' ? 'nb-visually-hidden' : undefined}
+      >
         {apiState === 'loading'
           ? 'Nennungen werden geladen …'
           : `${total} Nennungen`}
