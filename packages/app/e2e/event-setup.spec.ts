@@ -24,7 +24,7 @@ test('admin creates a class, terms and opens its public registration in the UI',
   await page.getByLabel('Beginn').fill('2027-06-01');
   await page.getByLabel('Ende').fill('2027-06-02');
   await page.getByLabel('Klassenname').fill('Motorrad');
-  await page.getByLabel('Kürzel').fill('MOTO');
+  await page.getByLabel('Kürzel', { exact: true }).fill('MOTO');
   await page.getByLabel('Fahrzeugtyp').selectOption('motorcycle');
   await page.getByLabel('Startgeld in Euro').fill('25,50');
   await page.getByLabel('Text der Bedingungen').fill(terms);
