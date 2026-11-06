@@ -34,7 +34,6 @@ export const EntryVehicleUpdateRequest = z
     model: z.string().trim().min(1).max(100),
     year: z.number().int().min(1886).max(2200).nullable(),
     registration: optionalText(64),
-    vehicleType: optionalText(60),
     displacementCc: z.number().int().min(1).max(20000).nullable(),
     cylinders: z.number().int().min(1).max(24).nullable(),
     ownerName: optionalText(200),

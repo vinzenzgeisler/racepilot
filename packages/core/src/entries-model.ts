@@ -80,7 +80,11 @@ export interface Entry {
     vehicle: AdminEntryVehicle;
     invoice?: AdminEntryInvoice | null;
     consents?: AdminEntryConsent[];
-    eventClass: { code: string; name: string };
+    eventClass: {
+      code: string;
+      name: string;
+      vehicleType?: 'car' | 'motorcycle' | 'kart' | 'other';
+    };
     startNumber: string | null;
     customAnswers: Array<{
       key: string;
