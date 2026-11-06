@@ -124,23 +124,23 @@ export function AppShell({
         />
       }
       header={
-        <PageHeader
-          className={view === 'entries' ? 'nb-entry-page-header' : undefined}
-          title={
-            view === 'entries'
-              ? detailOpen
-                ? 'Nennung im Detail'
-                : 'Nennungen'
-              : view === 'workflow'
-                ? 'Nennungsablauf'
-                : 'Einstellungen'
-          }
-          description={
-            view === 'entries' && closeDate
-              ? `Nennungsschluss  ${closeDate.replace(', ', ' · ')}`
-              : undefined
-          }
-        />
+        detailOpen && view === 'entries' ? null : (
+          <PageHeader
+            className={view === 'entries' ? 'nb-entry-page-header' : undefined}
+            title={
+              view === 'entries'
+                ? 'Nennungen'
+                : view === 'workflow'
+                  ? 'Nennungsablauf'
+                  : 'Einstellungen'
+            }
+            description={
+              view === 'entries' && closeDate
+                ? `Nennungsschluss  ${closeDate.replace(', ', ' · ')}`
+                : undefined
+            }
+          />
+        )
       }
       inset={view !== 'entries' || detailOpen}
     >

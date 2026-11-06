@@ -1,5 +1,42 @@
 import type { RequestContext } from './context.js';
 
+export interface AdminEntryDriver {
+  name: string;
+  dateOfBirth: string | null;
+  country: string | null;
+  email: string | null;
+  emailVerified: boolean;
+  phone?: string | null;
+  street?: string | null;
+  postalCode?: string | null;
+  city?: string | null;
+  emergencyContactName?: string | null;
+  emergencyContactPhone?: string | null;
+  publicationPreference?: 'name_visible' | 'initials' | 'hidden' | null;
+}
+
+export interface AdminEntryVehicle {
+  make: string;
+  model: string;
+  year: number | null;
+  registration?: string | null;
+  imageUrl?: string | null;
+  vehicleType?: string | null;
+  displacementCc?: number | null;
+  cylinders?: number | null;
+  ownerName?: string | null;
+  history?: string | null;
+}
+
+export interface AdminEntryInvoice {
+  id: string;
+  paymentReference: string;
+  currency: string;
+  totalCents: number;
+  paidCents: number;
+  status: 'open' | 'partially_paid' | 'paid' | 'cancelled';
+}
+
 export interface EntryDriverPatch {
   firstName?: string;
   lastName?: string;

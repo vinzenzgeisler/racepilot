@@ -6,7 +6,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import { Button, SelectField } from '@racepilot/ui';
+import { SelectField } from '@racepilot/ui';
 import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
@@ -101,7 +101,6 @@ export function AdminEntries({
     setActionError,
   });
   const {
-    reason,
     setReason,
     busy,
     setBusy,
@@ -272,21 +271,25 @@ export function AdminEntries({
       )}
       {isDetailOpen && selected && (
         <div className="admin-detail-view">
-          <Button variant="secondary" onClick={closeDetail}>
-            ← Zurück zur Liste
-          </Button>
           <AdminEntryDetail
             selected={selected}
-            classes={classes}
             workflow={workflow}
-            reason={reason}
-            setReason={setReason}
             busy={busy}
-            transition={transition}
+            error={actionError}
+            transition={(type, status, reasonText) =>
+              transition(type, status, reasonText, { advance: false })
+            }
+            onBack={closeDetail}
+            onUpdated={(entry) => {
+              setSelected(entry);
+              setRefreshRevision((value) => value + 1);
+            }}
           />
         </div>
       )}
-      {actionError && <p role="alert">{actionError}</p>}
+      {actionError && !(isDetailOpen && selected) && (
+        <p role="alert">{actionError}</p>
+      )}
     </section>
   );
 }

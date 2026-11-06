@@ -45,3 +45,19 @@
 .nb-field-item.is-wide {
   grid-column: 1 / -1;
 }
+
+.nb-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-4) var(--space-6);
+}
+.nb-form-wide {
+  grid-column: 1 / -1;
+}
+.nb-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}

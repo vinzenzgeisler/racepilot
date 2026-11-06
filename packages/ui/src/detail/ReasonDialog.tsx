@@ -25,7 +25,7 @@ export function ReasonDialog({
   cancelLabel: string;
   closeLabel: string;
   busy?: boolean;
-  error?: string;
+  error?: string | undefined;
   confirmDisabled?: boolean;
   onConfirm: (reason: string) => void;
   onClose: () => void;

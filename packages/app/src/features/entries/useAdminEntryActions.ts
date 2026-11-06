@@ -84,14 +84,18 @@ export function useAdminEntryActions({
     [eventId, setActionError, setSelected],
   );
 
+  /** Resolves true once the server accepted the change and the entry was refreshed. */
   async function transition(
     transitionType: 'acceptance' | 'verification',
     status: string,
-  ) {
+    reasonOverride?: string,
+    options: { advance?: boolean } = {},
+  ): Promise<boolean> {
     const current = selected;
-    if (!current || !reason.trim()) return;
+    const requestedReason = (reasonOverride ?? reason).trim();
+    if (!current || !requestedReason) return false;
     const requestedEventId = eventId;
-    const requestedReason = reason.trim();
+    let succeeded = false;
     const { generation, controller } = begin(transitionGate.current);
     setBusy(true);
     setActionError('');
@@ -108,7 +112,8 @@ export function useAdminEntryActions({
           }),
         },
       );
-      if (!isCurrent(transitionGate.current, generation, controller)) return;
+      if (!isCurrent(transitionGate.current, generation, controller))
+        return false;
       if (!response.ok) {
         setActionError(
           response.status === 401
@@ -117,7 +122,7 @@ export function useAdminEntryActions({
               ? 'Du darfst den Status dieser Nennung nicht ändern.'
               : 'Die Statusänderung wurde abgelehnt.',
         );
-        return;
+        return false;
       }
       const updated = EntryResponse.parse(await response.json());
       if (
@@ -127,14 +132,19 @@ export function useAdminEntryActions({
         updated.id !== current.id ||
         updated.eventId !== requestedEventId
       )
-        return;
+        return false;
+      succeeded = true;
       setSelected(updated);
       setReason('');
       setRefreshRevision((revision) => revision + 1);
       const acceptedCategory = workflow?.statuses.find(
         (item) => item.key === status && item.category === 'accepted',
       );
-      if (transitionType === 'acceptance' && acceptedCategory) {
+      if (
+        options.advance !== false &&
+        transitionType === 'acceptance' &&
+        acceptedCategory
+      ) {
         const currentIndex = items.findIndex((item) => item.id === current.id);
         const nextOpen = items
           .slice(Math.max(0, currentIndex + 1))
@@ -154,6 +164,7 @@ export function useAdminEntryActions({
     } catch {
       if (isCurrent(transitionGate.current, generation, controller))
         setActionError('Die Statusänderung konnte nicht abgeschlossen werden.');
+      return false;
     } finally {
       if (
         isCurrent(transitionGate.current, generation, controller) &&
@@ -164,6 +175,7 @@ export function useAdminEntryActions({
       if (transitionGate.current.controller === controller)
         transitionGate.current.controller = null;
     }
+    return succeeded;
   }
 
   const acceptedStatusKey = workflow?.statuses.find(

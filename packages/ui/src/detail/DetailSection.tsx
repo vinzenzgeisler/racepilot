@@ -39,3 +39,10 @@ export function FieldItem({
     </div>
   );
 }
+/** Same grid as FieldGrid for inputs; `wide` children span all columns. */
+export function FormGrid({ children }: { children: ReactNode }) {
+  return <div className="nb-form-grid">{children}</div>;
+}
+export function FormWide({ children }: { children: ReactNode }) {
+  return <div className="nb-form-wide">{children}</div>;
+}
