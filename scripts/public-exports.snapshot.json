@@ -180,6 +180,9 @@
     "validateMailConfig"
   ],
   "packages/core/src/index.ts": [
+    "AdminEntryDriver",
+    "AdminEntryInvoice",
+    "AdminEntryVehicle",
     "ArtifactJob",
     "ArtifactJobRepository",
     "ArtifactKind",
@@ -389,7 +392,9 @@
     "FileUpload",
     "FileUploadProps",
     "FilterBar",
+    "FormGrid",
     "FormSection",
+    "FormWide",
     "HintLabel",
     "HistoryTimeline",
     "HistoryTone",

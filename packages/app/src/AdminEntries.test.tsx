@@ -840,4 +840,85 @@ describe('AdminEntries', () => {
     expect(listCalls().at(-1)).toContain('page=1');
     expect(listCalls().at(-1)).toContain('sort=createdAt');
   });
+
+  it('edits driver data and records a payment from the detail, refreshing the entry', async () => {
+    const invoice = {
+      id: '90000000-0000-4000-8000-000000000001',
+      paymentReference: 'RF1',
+      currency: 'EUR',
+      totalCents: 12000,
+      paidCents: 0,
+      status: 'open',
+    };
+    const withInvoice = {
+      ...itemsA[0]!,
+      adminDetails: { ...itemsA[0]!.adminDetails, invoice },
+    };
+    const bodies: Record<string, unknown> = {};
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (
+        url === `/admin/entries/${entryA}/driver` &&
+        init?.method === 'PATCH'
+      ) {
+        bodies.driver = JSON.parse(String(init.body));
+        return Response.json({
+          ...withInvoice,
+          adminDetails: {
+            ...withInvoice.adminDetails,
+            driver: { ...withInvoice.adminDetails.driver, phone: '+49 1' },
+          },
+        });
+      }
+      if (url === `/admin/invoices/${invoice.id}/payments`) {
+        bodies.payment = JSON.parse(String(init?.body));
+        return Response.json({ id: 'p1' }, { status: 201 });
+      }
+      if (url === `/admin/entries/${entryA}`)
+        return Response.json(
+          bodies.payment
+            ? {
+                ...withInvoice,
+                adminDetails: {
+                  ...withInvoice.adminDetails,
+                  invoice: {
+                    ...invoice,
+                    paidCents: 5000,
+                    status: 'partially_paid',
+                  },
+                },
+              }
+            : withInvoice,
+        );
+      if (url === `/admin/entries/${entryA}/messages`)
+        return Response.json({ items: [] });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    expect(container.textContent).toContain('nicht angegeben');
+    await click('Bearbeiten');
+    await setInput('Telefon', ' +49 1 ');
+    await click('Speichern');
+    expect(bodies.driver).toMatchObject({ phone: '+49 1', firstName: 'Alex' });
+    expect(container.textContent).toContain('+49 1');
+    await click('Zahlung erfassen');
+    await setInput('Betrag', '50,00');
+    await setInput('Begründung', 'Überweisung');
+    const confirm = [
+      ...container.querySelectorAll<HTMLButtonElement>('dialog button'),
+    ].find((button) => button.textContent === 'Zahlung erfassen')!;
+    await act(async () => confirm.click());
+    await flush();
+    expect(bodies.payment).toEqual({
+      amountCents: 5000,
+      reason: 'Überweisung',
+    });
+    expect(container.querySelector('.nb-detail-rail')?.textContent).toContain(
+      'Zahlung erfassen',
+    );
+  });
 });
