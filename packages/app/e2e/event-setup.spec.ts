@@ -42,6 +42,17 @@ test('admin creates a class, terms and opens its public registration in the UI',
 
   await page.goto(url!);
   await expect(page.getByRole('heading', { name })).toBeVisible();
+  await page.getByLabel('Vorname').fill('Ada');
+  await page.getByLabel('Nachname').fill('Lovelace');
+  await page
+    .getByLabel('Kontakt-E-Mail')
+    .fill(`participant-${suffix}@example.test`);
+  await page.getByLabel('Geburtsdatum').fill('1990-12-10');
+  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await page.getByLabel('Klasse').selectOption({ label: 'Motorrad' });
+  await page.getByLabel('Hersteller').fill('Honda');
+  await page.getByLabel('Modell').fill('CB500');
+  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
   await expect(page.getByText(terms)).toBeVisible();
-  await expect(page.getByLabel('Klasse')).toContainText('Motorrad');
+  await expect(page.getByRole('checkbox')).toBeVisible();
 });
