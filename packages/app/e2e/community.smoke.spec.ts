@@ -1,7 +1,18 @@
 import { expect, test } from '@playwright/test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
-import { Client } from 'pg';
+
+// The payment test continues with the entry that the lifecycle test registered.
+test.describe.configure({ mode: 'serial' });
+const shared: { eventId: string; participant: string } = {
+  eventId: '',
+  participant: '',
+};
+const adminPassword = () => {
+  const password = process.env.COMMUNITY_ADMIN_PASSWORD;
+  if (!password) throw new Error('COMMUNITY_ADMIN_PASSWORD is required');
+  return password;
+};
 
 test('Community registration and admin lifecycle with API setup', async ({
   page,
@@ -127,6 +138,8 @@ test('Community registration and admin lifecycle with API setup', async ({
   });
 
   const participant = `alpha-${randomUUID().slice(0, 8)}@example.test`;
+  shared.eventId = event.id;
+  shared.participant = participant;
   mkdirSync('packages/app/test-results/alpha', { recursive: true });
   const shots = async (name: string) => {
     const viewport = page.viewportSize();
@@ -234,52 +247,18 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(download.suggestedFilename()).toMatch(/^registration-upload-/);
   expect(readFileSync(await download.path()!)).toEqual(uploadedPng);
   await shots('admin-entry-detail');
-  await entryDetail
+  await entryDetail.getByRole('button', { name: 'Zulassen' }).click();
+  await page
+    .getByRole('dialog')
     .getByLabel('Begründung (für das Protokoll erforderlich)')
     .fill('Alpha E2E review');
-  await entryDetail
-    .getByRole('button', { name: /Angenommen|Zugelassen|Annehmen/i })
+  await page
+    .getByRole('dialog')
+    .getByRole('button', { name: 'Status ändern' })
     .click();
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
     /zugelassen|angenommen/i,
   );
-
-  // Resolve the invoice id using the local Community DB; payment itself is exercised through the requested API.
-  const list = await api(`/admin/entries?eventId=${event.id}`);
-  expect(list.ok()).toBeTruthy();
-  const entries = (await list.json()).items as Array<{
-    id: string;
-    registrationGroupId: string;
-    adminDetails?: { driver?: { email?: string | null } };
-  }>;
-  const entry = entries.find(
-    (item) => item.adminDetails?.driver?.email === participant,
-  );
-  expect(entry, 'entry returned by admin list').toBeTruthy();
-  const db = new Client({
-    connectionString:
-      process.env.DATABASE_URL ??
-      'postgres://racepilot:racepilot-local@127.0.0.1:5433/racepilot',
-  });
-  await db.connect();
-  let invoiceId: string;
-  try {
-    const result = await db.query(
-      'select id from invoice where registration_group_id = $1 limit 1',
-      [entry.registrationGroupId],
-    );
-    invoiceId = result.rows[0]?.id;
-  } finally {
-    await db.end();
-  }
-  expect(invoiceId, 'invoice created for verified registration').toBeTruthy();
-  const invoice = await api(`/admin/invoices/${invoiceId}/payments`, 'POST', {
-    amountCents: 1000,
-    reason: 'Alpha E2E payment',
-  });
-  expect(invoice.status(), 'record payment through admin API').toBe(201);
-  const detail = await api(`/admin/entries/${entry.id}`);
-  expect(await detail.text()).toMatch(/payment|paid|settled/i);
 
   const csvRequest = await api(
     `/admin/events/${event.id}/entries.csv`,
@@ -312,8 +291,68 @@ test.fixme('participant uploads a PDF supporting document during registration', 
 test.fixme('admin reviews each uploaded document from entry detail', async () => {
   /* Uploaded images are downloadable from entry detail; per-document review status is absent. */
 });
-test.fixme('admin records payment from entry detail UI', async () => {
-  /* Payment recording is API-only; UI control absent. */
+test('admin records payment from entry detail UI', async ({
+  page,
+  request,
+}) => {
+  test.setTimeout(60_000);
+  let token = '';
+  page.on('request', (req) => {
+    const auth = req.headers().authorization;
+    if (auth?.startsWith('Bearer ')) token = auth.slice(7);
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.goto('/app');
+  await page.getByRole('button', { name: 'Anmelden' }).click();
+  await page
+    .locator('#username')
+    .fill(process.env.COMMUNITY_ADMIN_EMAIL ?? 'admin@nennbox.local');
+  await page.locator('#password').fill(adminPassword());
+  await page.locator('#kc-login').click();
+  await page
+    .getByRole('combobox', { name: 'Veranstaltung' })
+    .selectOption(shared.eventId);
+  await page
+    .getByRole('row')
+    .filter({ hasText: 'Ada Lovelace' })
+    .locator('button[data-entry-action]')
+    .click();
+  await expect(page.locator('button[data-selected-entry]')).toBeVisible();
+  await page.keyboard.press('Enter');
+  const entryDetail = page.getByRole('region', {
+    name: 'Nennung im Detail',
+    exact: true,
+  });
+  await expect(entryDetail).toContainText(shared.participant);
+
+  // The invoice is open until the payment is recorded in the UI.
+  await expect(entryDetail).toContainText('Startgeld');
+  await entryDetail
+    .getByRole('button', { name: 'Zahlung erfassen' })
+    .first()
+    .click();
+  const dialog = page.getByRole('dialog');
+  await expect(dialog.getByLabel(/Betrag/)).toHaveValue('10,00');
+  await dialog
+    .getByLabel('Begründung (für das Protokoll erforderlich)')
+    .fill('Alpha E2E payment');
+  await dialog.getByRole('button', { name: 'Zahlung erfassen' }).click();
+
+  await expect(entryDetail.locator('.nb-detail-labels')).toContainText(
+    /Zahlung · Bezahlt/i,
+  );
+  await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
+    'Zahlung eingegangen',
+  );
+  await expect(
+    entryDetail.getByRole('button', { name: 'Zahlung erfassen' }),
+  ).toHaveCount(0);
+  expect(token, 'bearer token captured from admin requests').not.toBe('');
+  const detail = await request.fetch(
+    `http://127.0.0.1:3000/admin/entries?eventId=${shared.eventId}`,
+    { headers: { authorization: ['Bearer', token].join(' ') } },
+  );
+  expect(await detail.text()).toMatch(/"paidCents":1000/);
 });
 test.fixme('admin starts CSV export from Nennungen screen', async () => {
   /* API/worker exist; export control absent. */

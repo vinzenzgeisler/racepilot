@@ -187,17 +187,20 @@ export function timelineFor(
     dimensionLabels.get(value) ??
     knownStatus[value] ??
     'Unbekannt';
-  const items = (entry.adminHistory ?? []).map((event): TimelineItem => {
-    const base = {
-      id: `${event.kind}-${event.id}`,
-      occurredAt: event.occurredAt,
-    };
-    return {
-      ...base,
-      ...describe(event, status),
-      actor: actorName(event.actor),
-    };
-  });
+  // Mails have their own section; the timeline lists decisions and changes.
+  const items = (entry.adminHistory ?? [])
+    .filter((event) => event.kind !== 'email')
+    .map((event): TimelineItem => {
+      const base = {
+        id: `${event.kind}-${event.id}`,
+        occurredAt: event.occurredAt,
+      };
+      return {
+        ...base,
+        ...describe(event, status),
+        actor: actorName(event.actor),
+      };
+    });
   items.push({
     id: 'submitted',
     title: 'Nennung eingereicht',

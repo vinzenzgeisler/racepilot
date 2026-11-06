@@ -45,7 +45,9 @@ export function statusSteps(
           target?.category === 'rejected' || target?.category === 'withdrawn',
       };
     });
-  const primary = steps.find((step) => step.to === nextKey) ?? null;
+  // A destructive outcome is never offered as the highlighted next step.
+  const candidate = steps.find((step) => step.to === nextKey) ?? null;
+  const primary = candidate && !candidate.danger ? candidate : null;
   return { primary, others: steps.filter((step) => step !== primary) };
 }
 
