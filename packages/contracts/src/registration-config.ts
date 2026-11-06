@@ -18,7 +18,7 @@ export const RegistrationFieldConfigSchema = z
     state: z.enum(['required', 'optional', 'hidden']),
   })
   .strict();
-const registrationFieldKeys = [
+export const registrationFieldKeys = [
   'dateOfBirth',
   'phone',
   'street',
@@ -26,6 +26,7 @@ const registrationFieldKeys = [
   'city',
   'country',
   'emergencyContact',
+  'publicationPreference',
   'biography',
   'organizerNotes',
   'requestedStartNumber',
@@ -107,15 +108,34 @@ export const RegistrationCustomFieldAnswersSchema = z.record(
       .strict(),
   ]),
 );
+const registrationFieldStateDefaults = (key: string) =>
+  ({ state: key === 'dateOfBirth' ? 'required' : 'optional' }) as const;
+/**
+ * Stored configurations predate newer standard fields: a missing key means the default
+ * state, so old organization and event configurations stay valid and keep working.
+ */
+const fieldsWithDefaults = z.preprocess(
+  (value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value))
+      return value;
+    return {
+      ...Object.fromEntries(
+        registrationFieldKeys.map((key) => [
+          key,
+          registrationFieldStateDefaults(key),
+        ]),
+      ),
+      ...value,
+    };
+  },
+  z.record(z.enum(registrationFieldKeys), RegistrationFieldConfigSchema),
+);
 const registrationFormConfigObject = z
   .object({
     branding: RegistrationBrandingSchema,
     welcomeText: z.string().max(4000),
     organizerNotice: z.string().max(10000),
-    fields: z.record(
-      z.enum(registrationFieldKeys),
-      RegistrationFieldConfigSchema,
-    ),
+    fields: fieldsWithDefaults,
     customFields: z.array(RegistrationCustomFieldSchema).max(30),
     features: z
       .object({
@@ -148,6 +168,15 @@ export type RegistrationFormConfig = z.infer<
 >;
 export const RegistrationFormConfigPatchSchema = registrationFormConfigObject
   .partial()
+  .extend({
+    // An event overrides single fields; keys it does not name fall back to the organization.
+    fields: z
+      .partialRecord(
+        z.enum(registrationFieldKeys),
+        RegistrationFieldConfigSchema,
+      )
+      .optional(),
+  })
   .strict()
   .superRefine((config, ctx) => {
     if (config.customFields) {
@@ -188,7 +217,7 @@ export const defaultRegistrationFormConfig: RegistrationFormConfig = {
   fields: Object.fromEntries(
     registrationFieldKeys.map((key) => [
       key,
-      { state: key === 'dateOfBirth' ? 'required' : 'optional' },
+      registrationFieldStateDefaults(key),
     ]),
   ) as RegistrationFormConfig['fields'],
   customFields: [],
