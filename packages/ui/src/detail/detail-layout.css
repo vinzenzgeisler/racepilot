@@ -7,13 +7,13 @@
 }
 .nb-detail-header {
   grid-area: header;
-  padding: var(--space-4) var(--space-4) var(--space-3);
+  padding: var(--space-6) var(--space-6) var(--space-4);
   border-bottom: 1px solid var(--color-line);
 }
 .nb-detail-main {
   grid-area: main;
   min-width: 0;
-  padding: 0 var(--space-4) var(--space-12);
+  padding: 0 var(--space-6) var(--space-12);
 }
 .nb-detail-rail {
   grid-area: rail;

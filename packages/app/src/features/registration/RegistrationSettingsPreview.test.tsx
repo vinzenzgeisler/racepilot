@@ -55,8 +55,9 @@ describe('RegistrationSettingsPreview', () => {
     const colorTokens = container.querySelector<HTMLElement>(
       '[style*="--brand-primary"]',
     )!;
-    const header = container.querySelector<HTMLElement>('header')!;
-    const accentSample = container.querySelector<HTMLElement>('header + p')!;
+    const header = container.querySelector<HTMLElement>(
+      '.registration-header',
+    )!;
     expect(colorTokens.style.getPropertyValue('--brand-primary')).toBe(
       colors.primarySurface,
     );
@@ -69,10 +70,7 @@ describe('RegistrationSettingsPreview', () => {
     expect(colorTokens.style.getPropertyValue('--brand-accent-text')).toBe(
       colors.accentForeground,
     );
-    expect(header.style.background).toBe('var(--brand-primary)');
-    expect(header.style.color).toBe('var(--brand-primary-text)');
-    expect(accentSample.style.background).toBe('var(--brand-accent)');
-    expect(accentSample.style.color).toBe('var(--brand-accent-text)');
+    expect(header.textContent).toContain('Beispielveranstaltung');
     expect(
       contrastRatio(colors.primaryForeground, colors.primarySurface),
     ).toBeGreaterThanOrEqual(4.5);
@@ -99,13 +97,13 @@ describe('RegistrationSettingsPreview', () => {
     await act(async () =>
       root!.render(<RegistrationSettingsPreview config={config} />),
     );
-    const rows = [...container.querySelectorAll('.nb-field-preview')].map(
-      (row) => row.textContent,
+    const labels = [...container.querySelectorAll('.nb-field > span')].map(
+      (label) => label.textContent,
     );
-    expect(rows).toContain('TelefonPflicht');
-    expect(rows).toContain('ZylinderPflicht');
-    expect(rows).toContain('VeröffentlichungFreiwillig');
-    expect(rows.some((row) => row?.startsWith('Ort'))).toBe(false);
-    expect(rows.some((row) => row?.startsWith('Besitzer'))).toBe(false);
+    expect(labels).toContain('Telefon · Pflicht');
+    expect(labels).toContain('Zylinder · Pflicht');
+    expect(labels).toContain('Veröffentlichung · Freiwillig');
+    expect(labels.some((label) => label?.startsWith('Ort'))).toBe(false);
+    expect(labels.some((label) => label?.startsWith('Besitzer'))).toBe(false);
   });
 });

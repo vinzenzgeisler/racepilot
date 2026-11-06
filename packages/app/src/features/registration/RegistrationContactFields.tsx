@@ -52,7 +52,9 @@ export function RegistrationContactFields({
         <>
           <Field
             label={t.emergencyContactName}
-            required={emergency === 'required'}
+            required={
+              emergency === 'required' || Boolean(values.emergencyContactPhone)
+            }
             maxLength={200}
             value={values.emergencyContactName}
             onChange={(event) =>

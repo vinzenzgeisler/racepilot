@@ -54,6 +54,12 @@ describe('registration field states', () => {
     ).toBe(false);
     expect(
       registrationContactMatches(
+        { emergencyContactPhone: '+49 1234' },
+        states(),
+      ),
+    ).toBe(false);
+    expect(
+      registrationContactMatches(
         { emergencyContactName: 'Anna', emergencyContactPhone: '+49 1234' },
         states({ emergencyContact: 'required' }),
       ),
