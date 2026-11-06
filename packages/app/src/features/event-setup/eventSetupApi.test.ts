@@ -37,6 +37,35 @@ describe('event setup writes', () => {
     });
   });
 
+  it('sends required default capacity settings when creating a new class', async () => {
+    vi.mocked(adminFetch).mockResolvedValue({
+      ok: true,
+      status: 201,
+      json: async () => ({}),
+    } as Response);
+
+    await saveClass(
+      'event-1',
+      {
+        name: 'Touring',
+        code: 'TOUR',
+        vehicleType: 'motorcycle',
+        fee: '125.50',
+      },
+      0,
+    );
+
+    const [, init] = vi.mocked(adminFetch).mock.calls[0]!;
+    expect(JSON.parse(String(init?.body))).toEqual({
+      name: 'Touring',
+      code: 'TOUR',
+      vehicleType: 'motorcycle',
+      sortOrder: 0,
+      maxParticipants: null,
+      closed: false,
+    });
+  });
+
   it('writes a changed base price without resetting its existing pricing rules', async () => {
     vi.mocked(adminFetch).mockResolvedValue({
       ok: true,

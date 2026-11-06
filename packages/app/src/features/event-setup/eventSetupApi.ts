@@ -131,6 +131,10 @@ export const saveClass = (
         code: item.code.trim(),
         vehicleType: item.vehicleType,
         sortOrder,
+        ...(!item.id && {
+          maxParticipants: item.maxParticipants ?? null,
+          closed: item.closed ?? false,
+        }),
       }),
     },
   );
