@@ -152,10 +152,12 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
         const ids: string[] = [];
         for (const [sortOrder, item] of draft.classes.entries()) {
           const matching =
-            existingClasses.find(
-              (current) =>
-                current.id === item.id || current.code === item.code.trim(),
-            ) ?? null;
+            existingClasses.find((current) => current.id === item.id) ??
+            (!item.id
+              ? (existingClasses.find(
+                  (current) => current.code === item.code.trim(),
+                ) ?? null)
+              : null);
           const saved = await saveClass(
             stored.id,
             { ...item, ...(matching ? { id: matching.id } : {}) },
@@ -200,8 +202,22 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
           }));
         setCurrentStep(4);
         let finalEvent = stored;
-        if (open && stored.status !== 'open')
-          finalEvent = await openEvent(stored.id);
+        if (open) {
+          const hasUsableParticipationTerms = Boolean(
+            draft.terms.trim() ||
+            (draft.consentTerms ?? []).some(
+              (term) =>
+                term.key === 'participation' &&
+                term.required &&
+                term.text.trim().length > 0,
+            ),
+          );
+          if (!hasUsableParticipationTerms)
+            throw new Error(
+              'Zum Öffnen der Nennung müssen verwendbare Teilnahmebedingungen hinterlegt sein.',
+            );
+          if (stored.status !== 'open') finalEvent = await openEvent(stored.id);
+        }
         const publicLink = `${window.location.origin}/events/${stored.slug}/register`;
         setLink(publicLink);
         setCurrentStep(4);

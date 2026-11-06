@@ -223,7 +223,7 @@ export function EventSetupForm({
             onChange={(event) =>
               setDraft((current) => ({ ...current, terms: event.target.value }))
             }
-            hint="Optional – kann auch später ergänzt werden."
+            hint="Für einen Entwurf optional. Vor dem Öffnen der Nennung müssen verwendbare Teilnahmebedingungen hinterlegt sein."
           />
         </FormSection>
         <div>
