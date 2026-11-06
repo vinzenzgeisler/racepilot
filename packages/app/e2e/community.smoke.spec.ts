@@ -225,7 +225,11 @@ test('Community registration and admin lifecycle with API setup', async ({
   await page
     .getByRole('combobox', { name: 'Veranstaltung' })
     .selectOption(event.id);
-  await expect(page.getByText('Ada Lovelace', { exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByRole('region', { name: 'Nennungsvorschau' })
+      .getByText('Ada Lovelace', { exact: true }),
+  ).toBeVisible();
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: 'Ada Lovelace' });
   await row.locator('button[data-entry-action]').click();
