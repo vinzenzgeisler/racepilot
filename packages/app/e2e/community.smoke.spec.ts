@@ -230,7 +230,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   ).toBeVisible();
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: 'Ada Lovelace' });
-  await row.locator('button[data-entry-action]').click();
+  await row.getByRole('button', { name: 'Ada Lovelace Lotus Seven' }).click();
   await expect(
     page
       .getByRole('region', { name: 'Nennungsvorschau' })
