@@ -1,10 +1,14 @@
 import { useState } from 'react';
 import {
+  Banner,
   Button,
   DateInput,
+  DetailNote,
   DetailSection,
   FieldGrid,
   FieldItem,
+  FieldValue,
+  FormActions,
   FormGrid,
   FormWide,
   SelectField,
@@ -19,15 +23,12 @@ import {
   countryName,
   formatBirthDate,
 } from './entryDetailModel.js';
-import type { Outcome } from './useEntryDetailApi.js';
+import type { Outcome } from '../AdminEntriesModel.js';
 
 type Driver = NonNullable<Entry['adminDetails']>['driver'];
-const Value = ({ children }: { children: string | null | undefined }) =>
-  children ? (
-    <>{children}</>
-  ) : (
-    <span className="nb-field-empty">{NOT_GIVEN}</span>
-  );
+const Value = ({ children }: { children: string | null | undefined }) => (
+  <FieldValue empty={NOT_GIVEN}>{children}</FieldValue>
+);
 
 export function EntryDriverSection({
   driver,
@@ -43,11 +44,10 @@ export function EntryDriverSection({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
-  const [first = '', ...rest] = driver.name.split(' ');
   const start = () => {
     setDraft({
-      firstName: first,
-      lastName: rest.join(' '),
+      firstName: driver.firstName,
+      lastName: driver.lastName,
       dateOfBirth: driver.dateOfBirth ?? '',
       country: driver.country ?? '',
       phone: driver.phone ?? '',
@@ -68,7 +68,7 @@ export function EntryDriverSection({
   });
   async function save() {
     const text = (key: string) => draft[key]?.trim() || null;
-    const result = await onSave({
+    const next: EntryDriverUpdateRequest = {
       firstName: draft.firstName?.trim() ?? '',
       lastName: draft.lastName?.trim() ?? '',
       dateOfBirth: text('dateOfBirth'),
@@ -82,7 +82,26 @@ export function EntryDriverSection({
       publicationPreference:
         (text('publicationPreference') as Driver['publicationPreference']) ??
         null,
-    });
+    };
+    // Only fields the admin changed are sent, so untouched values are never rewritten.
+    const current: Record<string, unknown> = {
+      firstName: driver.firstName,
+      lastName: driver.lastName,
+      dateOfBirth: driver.dateOfBirth ?? null,
+      country: driver.country ?? null,
+      phone: driver.phone ?? null,
+      street: driver.street ?? null,
+      postalCode: driver.postalCode ?? null,
+      city: driver.city ?? null,
+      emergencyContactName: driver.emergencyContactName ?? null,
+      emergencyContactPhone: driver.emergencyContactPhone ?? null,
+      publicationPreference: driver.publicationPreference ?? null,
+    };
+    const patch = Object.fromEntries(
+      Object.entries(next).filter(([key, value]) => current[key] !== value),
+    ) as EntryDriverUpdateRequest;
+    if (!Object.keys(patch).length) return setEditing(false);
+    const result = await onSave(patch);
     if (result.ok) setEditing(false);
     else setError(result.message);
   }
@@ -144,13 +163,15 @@ export function EntryDriverSection({
               ))}
             </SelectField>
             <FormWide>
-              <p className="nb-field-empty">
-                Die E-Mail-Adresse ist bestätigt und wird hier nicht geändert.
-              </p>
+              <DetailNote>
+                {driver.emailVerified
+                  ? 'Die E-Mail-Adresse ist bestätigt und wird hier nicht geändert.'
+                  : 'Die E-Mail-Adresse wird hier nicht geändert.'}
+              </DetailNote>
             </FormWide>
           </FormGrid>
-          {error && <p role="alert">{error}</p>}
-          <div className="nb-form-actions">
+          {error && <Banner tone="error">{error}</Banner>}
+          <FormActions>
             <Button
               type="submit"
               size={40}
@@ -167,7 +188,7 @@ export function EntryDriverSection({
             >
               Abbrechen
             </Button>
-          </div>
+          </FormActions>
         </form>
       ) : (
         <FieldGrid>

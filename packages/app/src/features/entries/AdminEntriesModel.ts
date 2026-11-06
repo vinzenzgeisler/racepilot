@@ -23,14 +23,11 @@ export const initialQuery: EntryQuery = {
   direction: 'desc',
 };
 export type Gate = { generation: number; controller: AbortController | null };
-type StatusMeaning =
-  'new' | 'in_progress' | 'missing' | 'done' | 'rejected' | 'not_relevant';
 export type WorkflowStatus = {
   key: string;
   labels: { de: string; en: string };
   color: string;
   category: string;
-  meaning?: StatusMeaning;
 };
 export type WorkflowView = {
   statuses: WorkflowStatus[];
@@ -78,3 +75,6 @@ export function isCurrent(
 ) {
   return gate.generation === generation && !controller.signal.aborted;
 }
+
+/** Result of a change request; `message` is meant for the dialog or form that started it. */
+export type Outcome = { ok: true } | { ok: false; message: string };

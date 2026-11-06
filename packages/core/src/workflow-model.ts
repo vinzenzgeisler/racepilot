@@ -167,8 +167,7 @@ export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
         labels: { de: 'Zurückgezogen', en: 'Withdrawn' },
         color: '#475569',
         category: 'withdrawn',
-        // A withdrawn entry is a closed negative outcome ("×"), not a field that does not apply.
-        meaning: 'rejected',
+        meaning: 'not_relevant',
       },
     ],
     transitions: [
@@ -196,7 +195,7 @@ const defaultMeaningByCategory: Readonly<
   accepted: 'done',
   rejected: 'rejected',
   waitlisted: 'in_progress',
-  withdrawn: 'rejected',
+  withdrawn: 'not_relevant',
 });
 
 /** Add stable semantics to legacy revisions while preserving their legacy color field. */

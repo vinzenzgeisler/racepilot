@@ -62,6 +62,8 @@ export const EntryResponse = z
         driver: z
           .object({
             name: z.string(),
+            firstName: z.string(),
+            lastName: z.string(),
             dateOfBirth: z.string().nullable(),
             country: z.string().nullable(),
             email: z.string().nullable(),

@@ -69,8 +69,8 @@ describe.skipIf(!url)('entry detail maintenance', () => {
           .insert(people)
           .values({
             organizationId: org!.id,
-            firstName: 'Tom',
-            lastName: 'Probe',
+            firstName: 'Hans Peter',
+            lastName: 'von Berg',
             email: `tom-${label}@example.test`,
           })
           .returning();
@@ -152,6 +152,9 @@ describe.skipIf(!url)('entry detail maintenance', () => {
       });
       const loaded = await entryRepo.getById(admin(a.org.id), a.entry.id);
       expect(loaded?.adminDetails?.driver).toMatchObject({
+        name: 'Hans Peter von Berg',
+        firstName: 'Hans Peter',
+        lastName: 'von Berg',
         phone: '+49 1',
         city: 'Dresden',
         publicationPreference: 'hidden',

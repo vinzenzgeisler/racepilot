@@ -3,6 +3,7 @@ import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { statusSteps } from './EntryActionRail.js';
 import { parseEuroToCents } from './EntryPaymentDialog.js';
 import { missingRequirements, timelineFor } from './entryDetailModel.js';
+import { statusMeaning } from '../EntryStatusBadge.js';
 
 const base = {
   createdAt: '2026-09-02T16:12:00.000Z',
@@ -130,5 +131,21 @@ describe('entry detail model', () => {
     expect(statusSteps(entry('pending'), workflow).primary?.label).toBe(
       'Zurück auf Offen',
     );
+  });
+
+  it('derives the withdrawn mark from the category and leaves stored revisions alone', () => {
+    // A custom revision may carry any stored meaning; the display never rewrites or reinterprets it.
+    const custom = {
+      key: 'zurueckgezogen',
+      category: 'withdrawn',
+      meaning: 'not_relevant',
+      labels: { de: 'Zurückgezogen', en: 'Withdrawn' },
+      color: '#123456',
+    };
+    const before = JSON.stringify(custom);
+    expect(statusMeaning(custom.category)).toBe('rejected');
+    expect(statusMeaning('accepted')).toBe('done');
+    expect(statusMeaning('pending')).toBe('new');
+    expect(JSON.stringify(custom)).toBe(before);
   });
 });

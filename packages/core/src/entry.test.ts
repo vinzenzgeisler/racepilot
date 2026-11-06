@@ -85,7 +85,7 @@ describe('entry domain rules', () => {
       'in_progress',
       'done',
       'rejected',
-      'rejected',
+      'not_relevant',
     ]);
     for (const status of normalized.statuses)
       expect(status.color).toBe('#010203');

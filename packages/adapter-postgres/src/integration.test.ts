@@ -1591,6 +1591,8 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       expect(pageA.items[0]?.adminDetails).toEqual({
         driver: {
           name: 'Same Name',
+          firstName: 'Same',
+          lastName: 'Name',
           dateOfBirth: '2000-01-01',
           country: null,
           email: 'same@example.test',

@@ -46,3 +46,25 @@ export function FormGrid({ children }: { children: ReactNode }) {
 export function FormWide({ children }: { children: ReactNode }) {
   return <div className="nb-form-wide">{children}</div>;
 }
+/** A field value, or the given placeholder when there is none; never invents a value. */
+export function FieldValue({
+  children,
+  empty,
+}: {
+  children: ReactNode;
+  empty: string;
+}) {
+  return children !== null && children !== undefined && children !== '' ? (
+    <>{children}</>
+  ) : (
+    <span className="nb-field-empty">{empty}</span>
+  );
+}
+/** Quiet explanatory sentence under a section. */
+export function DetailNote({ children }: { children: ReactNode }) {
+  return <p className="nb-detail-note">{children}</p>;
+}
+/** Save / cancel row below a form. */
+export function FormActions({ children }: { children: ReactNode }) {
+  return <div className="nb-form-actions">{children}</div>;
+}

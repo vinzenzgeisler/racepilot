@@ -38,9 +38,13 @@
   overflow-wrap: anywhere;
   font: 400 15px/1.4 var(--font-plex);
 }
-.nb-field-item dd.is-empty,
-.nb-field-item .nb-field-empty {
+.nb-field-empty {
   color: var(--color-graphite);
+}
+.nb-detail-note {
+  margin: var(--space-3) 0 0;
+  color: var(--color-graphite);
+  font: var(--text-body);
 }
 .nb-field-item.is-wide {
   grid-column: 1 / -1;

@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
+  Banner,
   DetailHeader,
   DetailLayout,
   HintLabel,
@@ -7,7 +8,8 @@ import {
   StatusLabel,
 } from '@racepilot/ui';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import type { WorkflowView } from './AdminEntriesModel.js';
+import type { Outcome, WorkflowView } from './AdminEntriesModel.js';
+import { statusMeaning } from './EntryStatusBadge.js';
 import { EntryActionRail, type StatusStep } from './detail/EntryActionRail.js';
 import {
   EntryDocumentsSection,
@@ -60,7 +62,7 @@ export function AdminEntryDetail({
     type: 'acceptance' | 'verification',
     status: string,
     reason: string,
-  ) => Promise<boolean>;
+  ) => Promise<Outcome>;
   onBack: () => void;
   onUpdated: (entry: Entry) => void;
 }) {
@@ -91,9 +93,14 @@ export function AdminEntryDetail({
       <StatusLabel
         key={item.key}
         status={
-          item.key === 'payment' && item.meaning === 'not_relevant'
-            ? 'empty'
-            : item.meaning
+          item.key === 'entry'
+            ? statusMeaning(
+                workflow?.statuses.find((status) => status.key === item.value)
+                  ?.category ?? '',
+              )
+            : item.key === 'payment' && item.meaning === 'not_relevant'
+              ? 'empty'
+              : item.meaning
         }
         label={dimensionLabel(item)}
       />
@@ -126,13 +133,14 @@ export function AdminEntryDetail({
       );
       return result.ok ? close() : setDialogError(result.message);
     }
-    const done =
+    const result =
       pending.kind === 'verify'
         ? await transition('verification', 'verified', reason)
         : pending.kind === 'status'
           ? await transition('acceptance', pending.step.to, reason)
-          : false;
-    if (done) close();
+          : null;
+    if (result?.ok) close();
+    else if (result) setDialogError(result.message);
   }
   const dialog =
     pending?.kind === 'status'
@@ -186,7 +194,7 @@ export function AdminEntryDetail({
           />
         }
       >
-        {error && <p role="alert">{error}</p>}
+        {error && !pending && <Banner tone="error">{error}</Banner>}
         <EntryDriverSection
           driver={details.driver}
           passenger={Boolean(

@@ -1,5 +1,6 @@
 import {
   Button,
+  DetailNote,
   DetailSection,
   DocumentList,
   StatusLabel,
@@ -106,16 +107,16 @@ export function EntryDocumentsSection({
         empty={<p>Für diese Nennung sind keine Unterlagen erforderlich.</p>}
       />
       {invoice && invoice.paidCents > 0 && (
-        <p className="nb-detail-note">
+        <DetailNote>
           Bezahlt: {formatMoney(invoice.paidCents, invoice.currency)} von{' '}
           {formatMoney(invoice.totalCents, invoice.currency)} · Verwendungszweck{' '}
           {invoice.paymentReference}
-        </p>
+        </DetailNote>
       )}
-      <p className="nb-detail-note">
+      <DetailNote>
         Eine Prüfung jedes hochgeladenen Dokuments (Freigabe, Nachfordern) ist
         noch nicht verfügbar.
-      </p>
+      </DetailNote>
     </DetailSection>
   );
 }

@@ -46,6 +46,8 @@ const entry = (id: string, eventId: string, classId: string) => ({
   adminDetails: {
     driver: {
       name: id === entryA ? 'Alex Driver' : 'Casey Driver',
+      firstName: id === entryA ? 'Alex' : 'Casey',
+      lastName: 'Driver',
       dateOfBirth: '1990-01-01',
       country: 'DE',
       email: 'family@example.test',
@@ -903,7 +905,7 @@ describe('AdminEntries', () => {
     await click('Bearbeiten');
     await setInput('Telefon', ' +49 1 ');
     await click('Speichern');
-    expect(bodies.driver).toMatchObject({ phone: '+49 1', firstName: 'Alex' });
+    expect(bodies.driver).toEqual({ phone: '+49 1' });
     expect(container.textContent).toContain('+49 1');
     await click('Zahlung erfassen');
     await setInput('Betrag', '50,00');
@@ -920,5 +922,112 @@ describe('AdminEntries', () => {
     expect(container.querySelector('.nb-detail-rail')?.textContent).toContain(
       'Zahlung erfassen',
     );
+  });
+
+  it('keeps multi-part names intact when only the phone number changes', async () => {
+    const hans = {
+      ...itemsA[0]!,
+      adminDetails: {
+        ...itemsA[0]!.adminDetails,
+        driver: {
+          ...itemsA[0]!.adminDetails.driver,
+          name: 'Hans Peter von Berg',
+          firstName: 'Hans Peter',
+          lastName: 'von Berg',
+        },
+      },
+    };
+    let body: unknown;
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse([hans]);
+      if (url === `/admin/entries/${entryA}/driver`) {
+        body = JSON.parse(String(init?.body));
+        return Response.json(hans);
+      }
+      if (url === `/admin/entries/${entryA}`) return Response.json(hans);
+      if (url.endsWith('/messages')) return Response.json({ items: [] });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    await click('Bearbeiten');
+    expect((labeled('Vorname', 'input') as HTMLInputElement).value).toBe(
+      'Hans Peter',
+    );
+    expect((labeled('Nachname', 'input') as HTMLInputElement).value).toBe(
+      'von Berg',
+    );
+    await setInput('Telefon', '+49 5');
+    await click('Speichern');
+    expect(body).toEqual({ phone: '+49 5' });
+  });
+
+  it('shows a rejected or failed status change inside the open dialog', async () => {
+    let status = 403;
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}`) return Response.json(itemsA[0]);
+      if (url.endsWith('/messages')) return Response.json({ items: [] });
+      if (
+        url === `/admin/entries/${entryA}/transitions` &&
+        init?.method === 'POST'
+      )
+        return new Response('{}', { status });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    await changeStatus('Zulassen');
+    const alerts = () =>
+      [...container.querySelectorAll('[role="alert"]')].map((node) => ({
+        text: node.textContent,
+        inDialog: node.closest('dialog') !== null,
+      }));
+    expect(alerts()).toEqual([
+      {
+        text: 'Du darfst den Status dieser Nennung nicht ändern.',
+        inDialog: true,
+      },
+    ]);
+    // A second attempt replaces the message instead of stacking another one behind the dialog.
+    status = 500;
+    await click('Status ändern');
+    expect(alerts()).toEqual([
+      { text: 'Die Statusänderung wurde abgelehnt.', inDialog: true },
+    ]);
+  });
+
+  it('drops a late edit response after the detail was left for another entry', async () => {
+    const slowSave = deferred<Response>();
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}/driver` && init?.method === 'PATCH')
+        return slowSave.promise;
+      if (url === `/admin/entries/${entryA}`) return Response.json(itemsA[0]);
+      if (url === `/admin/entries/${entryA2}`) return Response.json(itemsA[1]);
+      if (url.endsWith('/messages')) return Response.json({ items: [] });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    await click('Bearbeiten');
+    await setInput('Telefon', '+49 9');
+    await click('Speichern');
+    await closeDetail();
+    await click(entryA2);
+    await openDetail();
+    expect(detailEntryId()).toBe('Casey Driver');
+    await act(async () => slowSave.resolve(Response.json(itemsA[0])));
+    await flush();
+    expect(detailEntryId()).toBe('Casey Driver');
   });
 });

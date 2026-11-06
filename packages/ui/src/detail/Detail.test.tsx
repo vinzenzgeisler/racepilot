@@ -8,7 +8,15 @@ import {
 } from './ActionRail.js';
 import { DetailHeader } from './DetailHeader.js';
 import { DetailLayout } from './DetailLayout.js';
-import { DetailSection, FieldGrid, FieldItem } from './DetailSection.js';
+import {
+  DetailNote,
+  DetailSection,
+  FieldGrid,
+  FieldItem,
+  FieldValue,
+  FormActions,
+} from './DetailSection.js';
+import { MediaDetail } from './MediaDetail.js';
 import { MessageTable } from './MessageTable.js';
 import { ReasonDialog } from './ReasonDialog.js';
 import { DocumentList } from '../workspace/DocumentList.js';
@@ -189,4 +197,55 @@ it('keeps the confirmation disabled until a reason is typed', () => {
   );
   expect(html).toMatch(/nb-confirm-primary"[^>]*disabled/);
   expect(html).toContain('role="alert"');
+});
+
+it('shows a placeholder instead of an invented value', () => {
+  const html = renderToStaticMarkup(
+    <>
+      <FieldValue empty="nicht angegeben">{null}</FieldValue>
+      <FieldValue empty="nicht angegeben">{''}</FieldValue>
+      <FieldValue empty="nicht angegeben">{0}</FieldValue>
+      <FieldValue empty="nicht angegeben">Tom</FieldValue>
+    </>,
+  );
+  expect(html.match(/nb-field-empty/g)).toHaveLength(2);
+  expect(html).toContain('0');
+  expect(html).toContain('Tom');
+});
+
+it('places the picture next to its facts and a form below, with an empty state', () => {
+  const full = renderToStaticMarkup(
+    <MediaDetail
+      imageUrl="/a.png"
+      imageAlt="Bild"
+      caption="Upload"
+      emptyLabel="Kein Bild"
+      below={<form />}
+    >
+      <p>Fakten</p>
+    </MediaDetail>,
+  );
+  expect(full).toContain('<img src="/a.png" alt="Bild"/>');
+  expect(full).toContain('<figcaption>Upload</figcaption>');
+  expect(full.indexOf('Fakten')).toBeLessThan(
+    full.indexOf('nb-media-detail-below'),
+  );
+  const empty = renderToStaticMarkup(
+    <MediaDetail imageAlt="Bild" caption="Upload" emptyLabel="Kein Bild" />,
+  );
+  expect(empty).toContain('role="img" aria-label="Kein Bild"');
+  expect(empty).not.toContain('<img');
+});
+
+it('renders notes and form actions as library elements', () => {
+  const html = renderToStaticMarkup(
+    <>
+      <DetailNote>Hinweis</DetailNote>
+      <FormActions>
+        <button type="button">Speichern</button>
+      </FormActions>
+    </>,
+  );
+  expect(html).toContain('<p class="nb-detail-note">Hinweis</p>');
+  expect(html).toContain('<div class="nb-form-actions">');
 });

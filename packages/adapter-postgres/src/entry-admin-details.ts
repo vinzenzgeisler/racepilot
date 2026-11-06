@@ -241,6 +241,8 @@ export async function attachAdminEntryDetails(
       adminDetails: {
         driver: {
           name: [driver?.firstName, driver?.lastName].filter(Boolean).join(' '),
+          firstName: driver?.firstName ?? '',
+          lastName: driver?.lastName ?? '',
           dateOfBirth: driver?.dateOfBirth ?? null,
           country: driver?.country ?? null,
           email: driver?.email ?? null,

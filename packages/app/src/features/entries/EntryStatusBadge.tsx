@@ -19,10 +19,12 @@ const statusLabels: Record<string, string> = {
   not_required: 'Nicht erforderlich',
   not_relevant: 'Nicht relevant',
 };
-/** Status meaning from the workflow; the category only backs it up for older workflow revisions. */
-const statusMeaning = (status: WorkflowStatus) =>
-  status.meaning ?? categoryMeaning(status.category);
-const categoryMeaning = (category: string) => {
+/**
+ * Display meaning of an entry status, derived from its category only. The stored workflow
+ * revision is never rewritten: a withdrawn entry is a closed negative outcome and reads
+ * as "×", while "not relevant" stays reserved for fields that do not apply.
+ */
+export const statusMeaning = (category: string) => {
   switch (category) {
     case 'accepted':
       return 'done' as const;
@@ -45,7 +47,10 @@ export function EntryStatusBadge({
   fallback: string;
 }) {
   return status ? (
-    <StatusLabel status={statusMeaning(status)} label={status.labels.de} />
+    <StatusLabel
+      status={statusMeaning(status.category)}
+      label={status.labels.de}
+    />
   ) : (
     <StatusLabel
       status="new"

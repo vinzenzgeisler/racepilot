@@ -1,7 +1,10 @@
 import type { RequestContext } from './context.js';
 
 export interface AdminEntryDriver {
+  /** Display name; edit the structured parts below, never split this string. */
   name: string;
+  firstName: string;
+  lastName: string;
   dateOfBirth: string | null;
   country: string | null;
   email: string | null;

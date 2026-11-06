@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   EntryMessagesResponse,
   EntryResponse,
@@ -6,7 +6,7 @@ import {
   type EntryVehicleUpdateRequest,
 } from '@racepilot/contracts';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import { request } from '../AdminEntriesModel.js';
+import { request, type Outcome } from '../AdminEntriesModel.js';
 
 const failure = (status: number, action: string) =>
   status === 401
@@ -19,15 +19,29 @@ const failure = (status: number, action: string) =>
           ? 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
           : 'Der Server konnte die Anfrage nicht ausführen.';
 
-export type Outcome = { ok: true } | { ok: false; message: string };
+export type { Outcome };
 
-/** Admin calls of the entry detail; every successful change hands the fresh entry back. */
+/**
+ * Admin calls of the entry detail; every successful change hands the fresh entry back.
+ * Requests belong to the entry shown when they started: leaving or switching the entry aborts
+ * them, and a response that arrives late is dropped instead of selecting the old entry again.
+ */
 export function useEntryDetailApi(
   entry: Entry,
   onUpdated: (entry: Entry) => void,
 ) {
   const [busy, setBusy] = useState(false);
-  const entryPath = `/admin/entries/${encodeURIComponent(entry.id)}`;
+  const entryId = entry.id;
+  const entryPath = `/admin/entries/${encodeURIComponent(entryId)}`;
+  const scope = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    scope.current = controller;
+    return () => {
+      controller.abort();
+      if (scope.current === controller) scope.current = null;
+    };
+  }, [entryId]);
   const run = useCallback(
     async (
       path: string,
@@ -35,28 +49,40 @@ export function useEntryDetailApi(
       action: string,
       readEntry: boolean,
     ): Promise<Outcome> => {
+      const controller = scope.current;
+      const superseded: Outcome = { ok: false, message: '' };
+      if (!controller || controller.signal.aborted) return superseded;
+      const { signal } = controller;
       setBusy(true);
       try {
-        const response = await request(path, init);
+        const response = await request(path, { ...init, signal });
+        if (signal.aborted) return superseded;
         if (!response.ok)
           return { ok: false, message: failure(response.status, action) };
         const body: unknown = await response.json().catch(() => null);
-        const fresh = readEntry
-          ? EntryResponse.safeParse(body)
-          : EntryResponse.safeParse(
-              await (await request(entryPath)).json().catch(() => null),
-            );
-        if (!fresh.success)
+        const fresh = EntryResponse.safeParse(
+          readEntry
+            ? body
+            : await (
+                await request(entryPath, { signal })
+              )
+                .json()
+                .catch(() => null),
+        );
+        if (signal.aborted) return superseded;
+        if (!fresh.success || fresh.data.id !== entryId)
           return { ok: false, message: 'Die Antwort war unvollständig.' };
         onUpdated(fresh.data);
         return { ok: true };
       } catch {
-        return { ok: false, message: 'Keine Verbindung zum Server.' };
+        return signal.aborted
+          ? superseded
+          : { ok: false, message: 'Keine Verbindung zum Server.' };
       } finally {
-        setBusy(false);
+        if (!signal.aborted) setBusy(false);
       }
     },
-    [entryPath, onUpdated],
+    [entryId, entryPath, onUpdated],
   );
   return {
     busy,

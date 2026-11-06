@@ -271,6 +271,7 @@ export function AdminEntries({
       )}
       {isDetailOpen && selected && (
         <AdminEntryDetail
+          key={selected.id}
           selected={selected}
           workflow={workflow}
           busy={busy}
