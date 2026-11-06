@@ -8,6 +8,7 @@ import {
 } from './RegistrationChrome.js';
 import { RegistrationVehicleFields } from './RegistrationVehicleFields.js';
 import { RegistrationCustomAnswers } from './RegistrationCustomAnswers.js';
+import { RegistrationContactFields } from './RegistrationContactFields.js';
 export function RegistrationView({
   model,
   actions,
@@ -135,6 +136,14 @@ export function RegistrationView({
                 />
               );
             })}
+            {currentStep?.id === 'driver' && (
+              <RegistrationContactFields
+                config={payload.registrationFormConfig}
+                values={values}
+                onChange={(patch) => setValues((old) => ({ ...old, ...patch }))}
+                t={t}
+              />
+            )}
             <RegistrationCustomAnswers
               isDriver={currentStep?.id === 'driver'}
               fields={payload.registrationFormConfig.customFields}
