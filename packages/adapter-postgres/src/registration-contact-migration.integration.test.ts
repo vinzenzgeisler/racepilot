@@ -201,7 +201,17 @@ describe.skipIf(!url)('registration contact scope migration', () => {
       }
     } finally {
       await pool.end();
-      await admin.query(`drop database ${scratch} with (force)`);
+      // Wait for every connection (including ones other libraries close lazily) instead of
+      // terminating them, which would surface as unhandled connection errors.
+      for (let attempt = 0; attempt < 50; attempt += 1) {
+        const open = await admin.query(
+          'select count(*)::int as count from pg_stat_activity where datname = $1',
+          [scratch],
+        );
+        if (open.rows[0].count === 0) break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      await admin.query(`drop database ${scratch}`);
       await admin.end();
     }
   }, 60_000);
