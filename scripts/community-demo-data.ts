@@ -1,0 +1,263 @@
+const named = [
+  [
+    'Piet Voorbeeld',
+    'Yamaha',
+    'R1',
+    'M6',
+    '69',
+    'accepted',
+    'none',
+    'passed',
+    'f_signed',
+    '2HN8T',
+  ],
+  [
+    'Tom Probe',
+    'Honda',
+    'RS 250',
+    'M4',
+    '42',
+    'waitlisted',
+    'paid',
+    'pending',
+    'f_pending',
+    '4K7QZ',
+  ],
+  [
+    'Karel Ukázka',
+    'Škoda',
+    '130 RS',
+    'H1',
+    '199',
+    'withdrawn',
+    'cancelled',
+    'not_relevant',
+    'f_signed',
+    'D8R2M',
+  ],
+  [
+    'Anna Beispiel',
+    'BMW',
+    '2002 ti',
+    'H2',
+    '07',
+    'accepted',
+    'paid',
+    'passed',
+    'f_signed',
+    'X1A7P',
+  ],
+  [
+    'Marta Przykład',
+    'Yamaha',
+    'TZ 250',
+    'M4',
+    '23',
+    'pending',
+    'open',
+    'pending',
+    'f_pending',
+    'P3W9K',
+  ],
+  [
+    'Jonas Muster',
+    'Suzuki',
+    'GSX-R 750',
+    'M6',
+    '12',
+    'waitlisted',
+    'open',
+    'pending',
+    'f_pending',
+    'M5V1X',
+  ],
+  [
+    'Lena Muster',
+    'Opel',
+    'Kadett C',
+    'H2',
+    '31',
+    'rejected',
+    'cancelled',
+    'not_relevant',
+    'not_relevant',
+    'Q6T4N',
+  ],
+  [
+    'Eva Probst',
+    'Kawasaki',
+    'ZXR 400',
+    'M6',
+    '88',
+    'accepted',
+    'paid',
+    'reinspection',
+    'f_signed',
+    'H9C3L',
+  ],
+  [
+    'Milan Vzor',
+    'Jawa',
+    '350',
+    'M4',
+    '54',
+    'pending',
+    'open',
+    'pending',
+    'f_pending',
+    'K2D8E',
+  ],
+  [
+    'Sophie Exempel',
+    'Alpine',
+    'A110',
+    'H2',
+    '15',
+    'waitlisted',
+    'paid',
+    'pending',
+    'f_signed',
+    'R7N2B',
+  ],
+  [
+    'Ole Probe',
+    'NSU',
+    'TT',
+    'H1',
+    '101',
+    'pending',
+    'open',
+    'pending',
+    'f_pending',
+    'T5G1Y',
+  ],
+  [
+    'Mia Beispiel',
+    'Ducati',
+    '750 SS',
+    'M6',
+    '64',
+    'accepted',
+    'paid',
+    'passed',
+    'f_signed',
+    'W3Q6Z',
+  ],
+] as const;
+type Row = readonly [
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+  string,
+];
+const firstNames = [
+  'Alex',
+  'Ben',
+  'Clara',
+  'David',
+  'Ella',
+  'Felix',
+  'Greta',
+  'Hanno',
+  'Ida',
+  'Jan',
+];
+const lastNames = ['Demo', 'Testmann', 'Beispieler', 'Prober', 'Musterer'];
+const makes = [
+  ['BMW', '2002'],
+  ['Opel', 'Kadett C'],
+  ['Honda', 'RS 250'],
+  ['Yamaha', 'R1'],
+  ['NSU', 'TT'],
+] as const;
+const statuses = ['pending', 'waitlisted', 'accepted', 'rejected', 'withdrawn'];
+const generated: Row[] = Array.from({ length: 50 }, (_, i) => {
+  const [make, model] = makes[i % makes.length]!;
+  const status = statuses[i % statuses.length]!;
+  return [
+    `${firstNames[i % 10]} ${lastNames[Math.floor(i / 10)]}`,
+    make,
+    model,
+    ['H1', 'H2', 'M4', 'M6'][i % 4]!,
+    String(200 + i),
+    status,
+    status === 'accepted' ? 'paid' : 'open',
+    status === 'accepted' ? 'passed' : 'pending',
+    status === 'accepted' ? 'f_signed' : 'f_pending',
+    `D${String(i + 1).padStart(4, '0')}`,
+  ];
+});
+export const rows: Row[] = [...named, ...generated];
+export const classes = [
+  {
+    code: 'H1',
+    name: 'H1 · bis 1300',
+    vehicleType: 'car' as const,
+    sortOrder: 0,
+    fee: 12000,
+  },
+  {
+    code: 'H2',
+    name: 'H2 · bis 2000',
+    vehicleType: 'car' as const,
+    sortOrder: 1,
+    fee: 14000,
+  },
+  {
+    code: 'M4',
+    name: 'M4 · 250',
+    vehicleType: 'motorcycle' as const,
+    sortOrder: 2,
+    fee: 9000,
+  },
+  {
+    code: 'M6',
+    name: 'M6 · 500–1000',
+    vehicleType: 'motorcycle' as const,
+    sortOrder: 3,
+    fee: 11000,
+  },
+];
+
+export function gradientImage(index: number): string {
+  const palettes = [
+    ['#788479', '#333d38'],
+    ['#a59e83', '#46514a'],
+    ['#516b65', '#222d2b'],
+    ['#7d7772', '#3c3938'],
+  ];
+  const [top, bottom] = palettes[index % palettes.length]!;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="400"><defs><linearGradient id="g" x2="1" y2="1"><stop stop-color="${top}"/><stop offset="1" stop-color="${bottom}"/></linearGradient></defs><rect width="640" height="400" fill="url(#g)"/></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}
+export function demoCreatedAt(index: number): Date {
+  const day = index < 12 ? 4 : 3;
+  return new Date(Date.UTC(2026, 10, day, 12, 0) - index * 60_000);
+}
+
+import { defaultEntryWorkflow } from '@racepilot/core';
+export const demoWorkflow = {
+  ...defaultEntryWorkflow,
+  statuses: defaultEntryWorkflow.statuses.map((s) => ({
+    ...s,
+    labels: {
+      ...s.labels,
+      de:
+        (
+          {
+            pending: 'Offen',
+            accepted: 'Zugelassen',
+            waitlisted: 'Vorauswahl',
+            rejected: 'Abgelehnt',
+            withdrawn: 'Abgesagt',
+          } as Record<string, string>
+        )[s.key] ?? s.labels.de,
+    },
+  })),
+};

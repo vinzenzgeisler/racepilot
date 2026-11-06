@@ -134,6 +134,7 @@ export function createVehicleRepository(
           model: input.model.trim(),
           year: input.year ?? null,
           registration: input.registration?.trim() ?? null,
+          imageUrl: input.imageUrl ?? null,
         })
         .returning();
       return mapVehicle(row!);
