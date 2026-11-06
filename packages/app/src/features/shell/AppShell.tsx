@@ -3,7 +3,6 @@ import {
   AdminNavigation,
   AdminWorkspace,
   PageHeader,
-  PreviewPanel,
   Wordmark,
   type IconName,
 } from '@racepilot/ui';
@@ -41,7 +40,6 @@ export const APP_NAVIGATION_REGISTRY: Array<{
 ];
 export function AppShell({
   children,
-  preview,
   previewOpen = true,
   detailOpen = false,
   identity,
@@ -52,7 +50,6 @@ export function AppShell({
   onEventChange,
 }: {
   children: ReactNode | ((view: View) => ReactNode);
-  preview?: ReactNode;
   previewOpen?: boolean;
   detailOpen?: boolean;
   identity?: { name: string; role: string } | null;
@@ -145,15 +142,7 @@ export function AppShell({
           }
         />
       }
-      preview={
-        view === 'entries' && previewOpen
-          ? (preview ?? (
-              <PreviewPanel eyebrow="Vorschau" title="Nennung auswählen" />
-            ))
-          : undefined
-      }
-      previewLabel="Nennungsvorschau"
-      mobilePreviewOpen={view === 'entries' && previewOpen && Boolean(preview)}
+      inset={view !== 'entries' || detailOpen}
     >
       {typeof children === 'function' ? children(view) : children}
     </AdminWorkspace>

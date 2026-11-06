@@ -405,6 +405,7 @@
     "TextareaProps",
     "Toast",
     "Wordmark",
+    "WorkspaceSplit",
     "colors",
     "contrastPairs",
     "motion",

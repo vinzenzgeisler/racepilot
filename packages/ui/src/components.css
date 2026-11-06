@@ -30,6 +30,7 @@
 @import url('./layout/layout.css');
 @import url('./layout/split-pane.css');
 @import url('./workspace/admin-workspace.css');
+@import url('./workspace/workspace-split.css');
 @import url('./workspace/admin-navigation.css');
 @import url('./workspace/entry-list-row.css');
 @import url('./workspace/preview-panel.css');

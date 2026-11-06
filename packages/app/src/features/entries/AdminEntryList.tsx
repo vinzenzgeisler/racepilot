@@ -1,6 +1,6 @@
-import type { Dispatch, SetStateAction } from 'react';
+import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import { DataTable, SelectionBar, Tabs } from '@racepilot/ui';
+import { DataTable, SelectionBar, Tabs, WorkspaceSplit } from '@racepilot/ui';
 import type {
   ApiState,
   EntryQuery,
@@ -13,6 +13,8 @@ import { AdminEntryListStatus } from './AdminEntryListStatus.js';
 
 type Selection = { eventId: string; ids: Set<string> };
 type Props = {
+  preview?: ReactNode;
+  mobilePreviewOpen?: boolean | undefined;
   eventId: string;
   apiState: ApiState;
   draft: EntryQuery;
@@ -37,6 +39,8 @@ type Props = {
 };
 export function AdminEntryList(props: Props) {
   const {
+    preview,
+    mobilePreviewOpen,
     eventId,
     apiState,
     draft,
@@ -115,13 +119,19 @@ export function AdminEntryList(props: Props) {
     })),
   ];
   return (
-    <>
-      <AdminEntryFilters
-        draft={draft}
-        setDraft={setDraft}
-        changeSort={changeSort}
-        classes={classes}
-      />
+    <WorkspaceSplit
+      previewLabel="Nennungsvorschau"
+      preview={preview}
+      mobilePreviewOpen={mobilePreviewOpen}
+      filters={
+        <AdminEntryFilters
+          draft={draft}
+          setDraft={setDraft}
+          changeSort={changeSort}
+          classes={classes}
+        />
+      }
+    >
       <Tabs
         tabs={tabs}
         selected={draft.acceptanceStatus || 'all'}
@@ -144,6 +154,6 @@ export function AdminEntryList(props: Props) {
           onAction={() => void bulkAccept()}
         />
       )}
-    </>
+    </WorkspaceSplit>
   );
 }

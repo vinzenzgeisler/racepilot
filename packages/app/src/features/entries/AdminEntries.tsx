@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { Button, SelectField } from '@racepilot/ui';
 import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
@@ -9,6 +15,8 @@ import { useAdminEntriesData } from './useAdminEntriesData.js';
 import { useAdminEntriesKeyboard } from './useAdminEntriesKeyboard.js';
 export function AdminEntries({
   detailOpen,
+  preview,
+  mobilePreviewOpen,
   autoPreview = false,
   onOpenDetail,
   onCloseDetail,
@@ -18,6 +26,8 @@ export function AdminEntries({
   onEventChange: onSharedEventChange,
 }: {
   detailOpen?: boolean;
+  preview?: ReactNode;
+  mobilePreviewOpen?: boolean | undefined;
   autoPreview?: boolean;
   onOpenDetail?: () => void;
   onCloseDetail?: () => void;
@@ -235,6 +245,8 @@ export function AdminEntries({
       )}
       {!isDetailOpen && (
         <AdminEntryList
+          preview={preview}
+          mobilePreviewOpen={mobilePreviewOpen}
           eventId={eventId}
           apiState={apiState}
           draft={draft}

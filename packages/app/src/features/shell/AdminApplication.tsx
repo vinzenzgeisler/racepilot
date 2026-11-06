@@ -1,4 +1,4 @@
-import { Button } from '@racepilot/ui';
+import { Button, PreviewPanel } from '@racepilot/ui';
 import { useCallback, useEffect, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { AdminEntries } from '../entries/AdminEntries.js';
@@ -143,6 +143,42 @@ function AdminApplication() {
       active = false;
     };
   }, []);
+  const entryPreview = selectedEntry ? (
+    <EntryPreview
+      entry={selectedEntry}
+      busy={previewBusy}
+      onClose={closePreview}
+      onOpenDetail={() => {
+        setDetailOpen(true);
+        setPreviewOpen(false);
+      }}
+      onNextAction={async (status) => {
+        setPreviewBusy(true);
+        try {
+          const response = await adminFetch(
+            `/admin/entries/${selectedEntry.id}/transitions`,
+            {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({
+                transition: 'acceptance',
+                status,
+                reason: 'In der Nennungsvorschau entschieden',
+              }),
+            },
+          );
+          if (response.ok) {
+            setSelectedEntry((await response.json()) as Entry);
+            window.dispatchEvent(new Event('nennbox:entries-changed'));
+          }
+        } finally {
+          setPreviewBusy(false);
+        }
+      }}
+    />
+  ) : (
+    <PreviewPanel eyebrow="Vorschau" title="Nennung auswählen" />
+  );
   return (
     <AppShell
       events={events}
@@ -153,46 +189,14 @@ function AdminApplication() {
       detailOpen={detailOpen}
       identity={identity}
       onClosePreview={closePreview}
-      preview={
-        selectedEntry ? (
-          <EntryPreview
-            entry={selectedEntry}
-            busy={previewBusy}
-            onClose={closePreview}
-            onOpenDetail={() => {
-              setDetailOpen(true);
-              setPreviewOpen(false);
-            }}
-            onNextAction={async (status) => {
-              setPreviewBusy(true);
-              try {
-                const response = await adminFetch(
-                  `/admin/entries/${selectedEntry.id}/transitions`,
-                  {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify({
-                      transition: 'acceptance',
-                      status,
-                      reason: 'In der Nennungsvorschau entschieden',
-                    }),
-                  },
-                );
-                if (response.ok) {
-                  setSelectedEntry((await response.json()) as Entry);
-                  window.dispatchEvent(new Event('nennbox:entries-changed'));
-                }
-              } finally {
-                setPreviewBusy(false);
-              }
-            }}
-          />
-        ) : undefined
-      }
     >
       {(view) =>
         view === 'entries' ? (
           <AdminEntries
+            preview={previewOpen && !detailOpen ? entryPreview : undefined}
+            mobilePreviewOpen={
+              previewOpen && !detailOpen && Boolean(selectedEntry)
+            }
             eventId={selectedEvent}
             onEventChange={setSelectedEvent}
             onTotalChange={setEntryCount}
