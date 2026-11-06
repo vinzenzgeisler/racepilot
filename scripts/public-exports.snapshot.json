@@ -179,6 +179,7 @@
   ],
   "packages/core/src/index.ts": [
     "AdminEntryConsent",
+    "AdminEntryDetails",
     "AdminEntryDriver",
     "AdminEntryInvoice",
     "AdminEntryVehicle",
