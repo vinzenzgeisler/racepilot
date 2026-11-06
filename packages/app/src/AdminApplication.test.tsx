@@ -87,6 +87,26 @@ async function flush() {
     await new Promise((resolve) => setTimeout(resolve, 0));
   });
 }
+function acceptedAlex() {
+  return {
+    ...alex,
+    acceptanceStatus: 'accepted',
+    statusProjection: {
+      ...alex.statusProjection,
+      dimensions: alex.statusProjection.dimensions.map((dimension) =>
+        dimension.key === 'entry'
+          ? {
+              ...dimension,
+              value: 'accepted',
+              label: { de: 'Zugelassen', en: 'Accepted' },
+              meaning: 'done',
+              nextAction: null,
+            }
+          : dimension,
+      ),
+    },
+  };
+}
 function listFor(eventId: string, items: unknown[]) {
   return Response.json({
     items,
@@ -124,7 +144,7 @@ async function mount(slow: Array<'driver' | 'payment' | 'status'> = []) {
     if (url === `/admin/entries/${entryA}/transitions`)
       return slow.includes('status')
         ? deferred('status')
-        : Response.json({ ...alex, acceptanceStatus: 'accepted' });
+        : Response.json(acceptedAlex());
     if (url === `/admin/entries/${entryA}`) return Response.json(alex);
     if (url.endsWith('/messages')) return Response.json({ items: [] });
     return new Response('{}', { status: 404 });
@@ -290,6 +310,35 @@ describe('AdminApplication event switch and detail access', () => {
     await switchEvent(eventB);
     expectEmptyEventView();
     expect(container.querySelector('.is-mobile-open')).toBeNull();
+  });
+
+  it('carries a successful preview status into the detail record and actions', async () => {
+    await mount();
+    expect(container.querySelector('.nb-preview-panel')?.textContent).toContain(
+      'Offen',
+    );
+    await click(byText('Zulassen'));
+    await flush();
+    expect(container.querySelector('.nb-preview-panel')?.textContent).toContain(
+      'Zugelassen',
+    );
+    expect(container.querySelector('.nb-preview-panel')?.textContent).toContain(
+      'Keine weitere Statusaktion verfügbar.',
+    );
+    await click(byText('Vollständig öffnen'));
+    const detail = container.querySelector('.nb-detail')!;
+    expect(detail.textContent).toContain('Zugelassen');
+    expect(detail.textContent).not.toContain('Zulassen');
+  });
+
+  it('ignores a late preview action after switching events', async () => {
+    await mount(['status']);
+    await click(byText('Zulassen'));
+    expect(pending.status).toBeDefined();
+    await switchEvent(eventB);
+    await act(async () => pending.status!(Response.json(acceptedAlex())));
+    await flush();
+    expectEmptyEventView();
   });
 
   it('opens the preview on its own on a wide screen and offers both ways into the detail', async () => {
