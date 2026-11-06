@@ -96,7 +96,7 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
         try {
           stored = await saveEvent(draft);
         } catch (error) {
-          if (!draft.id) {
+          if (!draft.id && !(error instanceof Error && 'status' in error)) {
             const existing = (await listEvents()).find(
               (event) =>
                 event.slug === draft.slug.trim() &&

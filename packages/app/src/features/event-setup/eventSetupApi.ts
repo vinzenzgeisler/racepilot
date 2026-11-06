@@ -36,6 +36,15 @@ export type SetupDraft = {
 };
 export type EventOption = Pick<SetupEvent, 'id' | 'name' | 'slug' | 'status'>;
 
+class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+  }
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await adminFetch(url, {
     ...init,
@@ -48,8 +57,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     const body = (await response.json().catch(() => null)) as {
       error?: string;
     } | null;
-    throw new Error(
+    throw new HttpError(
       body?.error ?? `Speichern fehlgeschlagen (${response.status}).`,
+      response.status,
     );
   }
   return (await response.json()) as T;
