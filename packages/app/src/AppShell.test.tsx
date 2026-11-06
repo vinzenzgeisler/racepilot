@@ -31,6 +31,9 @@ describe('AppShell', () => {
       container.querySelector('[aria-label="Nennungsablauf"]'),
     ).toBeTruthy();
     const event = container.querySelector<HTMLSelectElement>('select')!;
+    expect(event.closest('label')?.querySelector('span')?.className).toBe(
+      'nb-visually-hidden',
+    );
     await act(async () => {
       event.value = '';
       event.dispatchEvent(new Event('change', { bubbles: true }));

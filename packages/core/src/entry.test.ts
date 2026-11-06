@@ -82,9 +82,9 @@ describe('entry domain rules', () => {
     const normalized = normalizeEntryWorkflow(legacy);
     expect(normalized.statuses.map(({ meaning }) => meaning)).toEqual([
       'new',
+      'in_progress',
       'done',
       'rejected',
-      'in_progress',
       'not_relevant',
     ]);
     for (const status of normalized.statuses)

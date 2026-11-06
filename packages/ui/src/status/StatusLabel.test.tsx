@@ -6,3 +6,11 @@ it('requires caller-supplied human text and preserves the status meaning', () =>
   expect(html).toContain('Offen');
   expect(html).not.toContain('pending');
 });
+
+it('renders an empty status value as a single dash', () => {
+  const html = renderToStaticMarkup(
+    <StatusLabel status="not_relevant" label="–" />,
+  );
+  expect(html).toContain('>–</span>');
+  expect(html).not.toContain('nb-status-mark-text');
+});

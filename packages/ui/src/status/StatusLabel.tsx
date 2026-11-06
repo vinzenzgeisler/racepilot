@@ -17,9 +17,10 @@ export function StatusLabel({
   label: string;
 }) {
   const mark = marks[status];
+  const showMark = !(status === 'not_relevant' && /^[–—-]$/.test(label.trim()));
   return (
     <span className={`nb-status nb-status-${status}`}>
-      {mark === 'square' ? (
+      {!showMark ? null : mark === 'square' ? (
         <i className="nb-status-mark" aria-hidden="true" />
       ) : (
         <span className="nb-status-mark-text" aria-hidden="true">

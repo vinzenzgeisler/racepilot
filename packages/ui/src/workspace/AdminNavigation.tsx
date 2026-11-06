@@ -57,7 +57,7 @@ export function AdminNavigation({
         <div className="nb-admin-nav-top">
           <div className="nb-admin-nav-brand">{brand}</div>
           <label className="nb-admin-event-picker">
-            <span>{eventLabel}</span>
+            <span className="nb-visually-hidden">{eventLabel}</span>
             <select
               value={selectedEvent}
               onChange={(event) => onEventChange(event.target.value)}

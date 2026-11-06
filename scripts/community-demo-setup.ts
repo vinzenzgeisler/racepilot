@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from 'node:util';
 import { defaultEntryStatusDimensionConfig } from '@racepilot/core';
 import { classes, demoWorkflow } from './community-demo-data.js';
 import {
@@ -70,6 +71,42 @@ export async function ensureDemoEvent(db: Db, ctx: DemoContext) {
       demoWorkflow,
       'demo-seed',
       'Designstatus für Beispieldaten',
+    );
+  }
+  // Migrate only the prior demo ordering; leave any custom ordering untouched.
+  const previousDemoStatusKeys = [
+    'pending',
+    'accepted',
+    'rejected',
+    'waitlisted',
+    'withdrawn',
+  ];
+  const workflowRepo = createEntryWorkflowRepository(db);
+  const currentWorkflow = await workflowRepo.getEffective(ctx, event.id);
+  if (
+    currentWorkflow?.eventId === event.id &&
+    isDeepStrictEqual(
+      currentWorkflow.workflow.statuses.map((status) => status.key),
+      previousDemoStatusKeys,
+    ) &&
+    isDeepStrictEqual(
+      currentWorkflow.workflow.transitions,
+      demoWorkflow.transitions,
+    ) &&
+    currentWorkflow.workflow.statuses.length === demoWorkflow.statuses.length &&
+    currentWorkflow.workflow.statuses.every((status) =>
+      demoWorkflow.statuses.some((expected) =>
+        isDeepStrictEqual(expected, status),
+      ),
+    ) &&
+    !isDeepStrictEqual(currentWorkflow.workflow.statuses, demoWorkflow.statuses)
+  ) {
+    await workflowRepo.setEvent(
+      ctx,
+      event.id,
+      demoWorkflow,
+      'demo-seed',
+      'Statusreihenfolge nach Design',
     );
   }
   const classRepo = createEventClassRepository(db);

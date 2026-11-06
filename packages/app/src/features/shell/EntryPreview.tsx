@@ -40,6 +40,10 @@ export function EntryPreview({
             ? 'die technische Abnahme'
             : 'der Haftverzicht',
       ) ?? [];
+  const missingText =
+    missing.length > 1
+      ? `${missing.slice(0, -1).join(', ')} und ${missing.at(-1)}`
+      : missing[0];
   const documents =
     details?.customAnswers
       .filter((answer) => answer.fileDownloadUrl)
@@ -87,7 +91,7 @@ export function EntryPreview({
         title="Nächster Schritt"
         hint={
           missing.length
-            ? `Es ${missing.length > 1 ? 'fehlen' : 'fehlt'} noch ${missing.join(', ')}. Die Entscheidung wird protokolliert.`
+            ? `Es ${missing.length > 1 ? 'fehlen' : 'fehlt'} noch ${missingText}. Die Entscheidung wird protokolliert.`
             : 'Die Entscheidung wird im Verlauf protokolliert.'
         }
         action={

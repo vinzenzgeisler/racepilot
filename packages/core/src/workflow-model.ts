@@ -142,6 +142,13 @@ export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
         meaning: 'new',
       },
       {
+        key: 'waitlisted',
+        labels: { de: 'Warteliste', en: 'Waitlisted' },
+        color: '#a16207',
+        category: 'waitlisted',
+        meaning: 'in_progress',
+      },
+      {
         key: 'accepted',
         labels: { de: 'Angenommen', en: 'Accepted' },
         color: '#15803d',
@@ -154,13 +161,6 @@ export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
         color: '#b91c1c',
         category: 'rejected',
         meaning: 'rejected',
-      },
-      {
-        key: 'waitlisted',
-        labels: { de: 'Warteliste', en: 'Waitlisted' },
-        color: '#a16207',
-        category: 'waitlisted',
-        meaning: 'in_progress',
       },
       {
         key: 'withdrawn',

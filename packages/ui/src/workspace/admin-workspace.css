@@ -25,13 +25,9 @@
 }
 .nb-admin-workspace-preview {
   display: none;
-  padding: calc(130px + var(--space-4)) var(--space-4) var(--space-4);
+  padding: var(--space-4);
   border-left: 1px solid var(--color-line);
-  background: linear-gradient(
-    to bottom,
-    var(--color-ivory) 0 130px,
-    var(--color-sage) 130px
-  );
+  background: var(--color-sage);
 }
 @media (width >= 1680px) {
   .nb-admin-workspace-main {
@@ -39,6 +35,7 @@
   }
   .nb-admin-workspace-preview {
     display: block;
+    margin-top: var(--nb-preview-offset, 0px);
   }
 }
 @media (width >= 2200px) {
