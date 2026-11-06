@@ -199,6 +199,9 @@ describe('public registration contact and vehicle fields', () => {
     );
     expect(control('Phone')).toBeTruthy();
     expect(control('Emergency contact · phone')?.required).toBe(false);
+    await fill('Emergency contact · phone', '+49 351 999');
+    expect(control('Emergency contact · name')?.required).toBe(true);
+    await fill('Emergency contact · phone', '');
     await fill('Emergency contact · name', 'Bernd');
     expect(control('Emergency contact · phone')?.required).toBe(true);
     expect(control('Publication')?.tagName).toBe('SELECT');
