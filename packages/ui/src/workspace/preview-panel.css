@@ -6,7 +6,7 @@
 }
 .nb-preview-close {
   position: absolute;
-  top: 0;
+  top: -4px;
   right: 0;
   min-width: 32px;
   min-height: 32px;
@@ -60,6 +60,9 @@
   gap: var(--space-4);
 }
 .nb-preview-panel footer {
-  display: grid;
+  display: flex;
   gap: var(--space-2);
+}
+.nb-preview-panel footer > * {
+  flex: 1;
 }

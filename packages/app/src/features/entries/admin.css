@@ -1,13 +1,9 @@
-.admin-entries label,
 .admin-detail label {
   display: grid;
   gap: var(--space-1);
   font: var(--text-label);
 }
 
-.admin-entries select,
-.admin-entries input,
-.admin-entries button,
 .admin-detail textarea,
 .admin-detail button {
   font: var(--text-body);

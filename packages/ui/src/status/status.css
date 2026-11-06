@@ -9,6 +9,9 @@
   font: 500 11px/1.3 var(--font-mono);
   letter-spacing: 0.02em;
 }
+.nb-status {
+  text-transform: uppercase;
+}
 .nb-status-new {
   color: var(--color-graphite);
   background: var(--color-white);
@@ -54,6 +57,9 @@
 }
 .nb-status-mark-text {
   line-height: 1;
+}
+.nb-status {
+  text-transform: uppercase;
 }
 .nb-status-new {
   color: var(--color-ink);

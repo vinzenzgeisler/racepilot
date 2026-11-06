@@ -55,6 +55,7 @@
   font: var(--text-body);
   text-align: start;
   cursor: pointer;
+  text-decoration: none;
 }
 .nb-admin-nav-item:hover {
   background: var(--overlay-sidebar-hover);

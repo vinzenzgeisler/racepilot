@@ -12,6 +12,7 @@
   color: var(--color-graphite);
   font: inherit;
   cursor: pointer;
+  text-decoration: none;
 }
 .nb-tabs [role='tab'][aria-selected='true'] {
   border-color: var(--color-green);
