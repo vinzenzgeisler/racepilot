@@ -196,7 +196,13 @@ describe.skipIf(!url)('registration contact and vehicle fields', () => {
         open.event.slug,
         request(open, {}, {}, 1) as never,
       );
-      const [first, second] = await detail(open.event.id);
+      const submittedEntries = await detail(open.event.id);
+      const first = submittedEntries.find(
+        (item) => item.adminDetails?.vehicle.model === 'TT 0',
+      );
+      const second = submittedEntries.find(
+        (item) => item.adminDetails?.vehicle.model === 'TT 1',
+      );
       expect(first?.adminDetails?.driver).toMatchObject({
         phone: '+49 351 123456',
         street: 'Musterweg 1',
