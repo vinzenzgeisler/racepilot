@@ -202,6 +202,7 @@ export async function attachAdminEntryDetails(
       entryId: entries.id,
       code: eventClasses.code,
       name: eventClasses.name,
+      vehicleType: eventClasses.vehicleType,
     })
     .from(entries)
     .innerJoin(
@@ -272,6 +273,12 @@ export async function attachAdminEntryDetails(
         eventClass: {
           code: eventClass?.code ?? '',
           name: eventClass?.name ?? '',
+          ...(eventClass
+            ? {
+                vehicleType: eventClass.vehicleType as
+                  'car' | 'motorcycle' | 'kart' | 'other',
+              }
+            : {}),
         },
         startNumber: item.requestedStartNumber,
         customAnswers: customAnswersFor(item),

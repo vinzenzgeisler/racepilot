@@ -81,4 +81,31 @@ describe('RegistrationSettingsPreview', () => {
     ).toBeGreaterThanOrEqual(4.5);
     expect(container.textContent).toContain('Beispielveranstaltung');
   });
+
+  it('previews exactly the fields the participant will meet, with their requirement', async () => {
+    const config = {
+      ...defaultRegistrationFormConfig,
+      fields: {
+        ...defaultRegistrationFormConfig.fields,
+        phone: { state: 'required' as const },
+        city: { state: 'hidden' as const },
+        owner: { state: 'hidden' as const },
+        cylinders: { state: 'required' as const },
+      },
+    };
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root!.render(<RegistrationSettingsPreview config={config} />),
+    );
+    const rows = [...container.querySelectorAll('.nb-field-preview')].map(
+      (row) => row.textContent,
+    );
+    expect(rows).toContain('TelefonPflicht');
+    expect(rows).toContain('ZylinderPflicht');
+    expect(rows).toContain('VeröffentlichungFreiwillig');
+    expect(rows.some((row) => row?.startsWith('Ort'))).toBe(false);
+    expect(rows.some((row) => row?.startsWith('Besitzer'))).toBe(false);
+  });
 });

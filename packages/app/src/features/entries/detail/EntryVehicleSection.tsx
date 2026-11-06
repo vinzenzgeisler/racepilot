@@ -15,10 +15,11 @@ import {
 } from '@racepilot/ui';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { EntryVehicleUpdateRequest } from '@racepilot/contracts';
-import { NOT_GIVEN } from './entryDetailModel.js';
+import { NOT_GIVEN, vehicleTypeLabel } from './entryDetailModel.js';
 import type { Outcome } from '../AdminEntriesModel.js';
 
 type Vehicle = NonNullable<Entry['adminDetails']>['vehicle'];
+type EventClass = NonNullable<Entry['adminDetails']>['eventClass'];
 const Value = ({
   children,
 }: {
@@ -27,10 +28,12 @@ const Value = ({
 
 export function EntryVehicleSection({
   vehicle,
+  eventClass,
   busy,
   onSave,
 }: {
   vehicle: Vehicle;
+  eventClass?: EventClass | undefined;
   busy: boolean;
   onSave: (patch: EntryVehicleUpdateRequest) => Promise<Outcome>;
 }) {
@@ -43,7 +46,6 @@ export function EntryVehicleSection({
       model: vehicle.model,
       year: vehicle.year?.toString() ?? '',
       registration: vehicle.registration ?? '',
-      vehicleType: vehicle.vehicleType ?? '',
       displacementCc: vehicle.displacementCc?.toString() ?? '',
       cylinders: vehicle.cylinders?.toString() ?? '',
       ownerName: vehicle.ownerName ?? '',
@@ -68,7 +70,6 @@ export function EntryVehicleSection({
       model: draft.model?.trim() ?? '',
       year: number('year'),
       registration: text('registration'),
-      vehicleType: text('vehicleType'),
       displacementCc: number('displacementCc'),
       cylinders: number('cylinders'),
       ownerName: text('ownerName'),
@@ -79,7 +80,6 @@ export function EntryVehicleSection({
       model: vehicle.model,
       year: vehicle.year ?? null,
       registration: vehicle.registration ?? null,
-      vehicleType: vehicle.vehicleType ?? null,
       displacementCc: vehicle.displacementCc ?? null,
       cylinders: vehicle.cylinders ?? null,
       ownerName: vehicle.ownerName ?? null,
@@ -126,7 +126,6 @@ export function EntryVehicleSection({
                   {...bind('year')}
                 />
                 <TextInput label="Kennzeichen" {...bind('registration')} />
-                <TextInput label="Fahrzeugtyp" {...bind('vehicleType')} />
                 <TextInput
                   label="Hubraum (cm³)"
                   inputMode="numeric"
@@ -176,7 +175,11 @@ export function EntryVehicleSection({
               <Value>{vehicle.year}</Value>
             </FieldItem>
             <FieldItem label="Fahrzeugtyp">
-              <Value>{vehicle.vehicleType}</Value>
+              <Value>
+                {vehicleTypeLabel(
+                  vehicle.vehicleType ?? eventClass?.vehicleType,
+                )}
+              </Value>
             </FieldItem>
             <FieldItem label="Hubraum">
               <Value>

@@ -396,6 +396,7 @@
     "EmptyState",
     "EntryListRow",
     "EventChoice",
+    "EvidenceList",
     "Field",
     "FieldGrid",
     "FieldItem",

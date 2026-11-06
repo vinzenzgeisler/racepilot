@@ -73,7 +73,6 @@ export interface EntryVehiclePatch {
   model?: string;
   year?: number | null;
   registration?: string | null;
-  vehicleType?: string | null;
   displacementCc?: number | null;
   cylinders?: number | null;
   ownerName?: string | null;

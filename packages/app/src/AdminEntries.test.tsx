@@ -1095,4 +1095,62 @@ describe('AdminEntries', () => {
       'Sie lassen sich hier nicht ändern',
     );
   });
+
+  it('shows the recorded consents with their wording and the class-derived vehicle type', async () => {
+    const withEvidence = {
+      ...itemsA[0]!,
+      adminDetails: {
+        ...itemsA[0]!.adminDetails,
+        eventClass: { code: 'M', name: 'Klasse M', vehicleType: 'motorcycle' },
+        consents: [
+          {
+            key: 'participation',
+            version: '1',
+            language: 'de',
+            acceptedAt: '2026-09-02T16:12:00.000Z',
+            text: 'Ich akzeptiere die Teilnahmebedingungen.',
+            required: true,
+          },
+          {
+            key: 'photos',
+            version: '2',
+            language: 'de',
+            acceptedAt: '2026-09-02T16:12:00.000Z',
+            text: null,
+            required: false,
+          },
+        ],
+      },
+    };
+    let current: typeof withEvidence = withEvidence;
+    await mount(async (url) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}`) return Response.json(current);
+      if (url.endsWith('/messages')) return Response.json({ items: [] });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    const text = container.textContent ?? '';
+    expect(text).toContain('Einwilligungen');
+    expect(text).toContain('participation');
+    expect(text).toContain('Version 1 · Deutsch · Erforderlich');
+    expect(text).toContain('Ich akzeptiere die Teilnahmebedingungen.');
+    expect(text).toContain('nicht mehr hinterlegt');
+    expect(text).toContain('Motorrad');
+    // Without stored evidence the detail says so instead of implying consent.
+    current = {
+      ...withEvidence,
+      adminDetails: { ...withEvidence.adminDetails, consents: [] },
+    };
+    await closeDetail();
+    await click(entryA);
+    await openDetail();
+    expect(container.textContent).toContain(
+      'kein Einwilligungsnachweis gespeichert',
+    );
+  });
 });

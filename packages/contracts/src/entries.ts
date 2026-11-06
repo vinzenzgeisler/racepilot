@@ -120,7 +120,15 @@ export const EntryResponse = z
           .strict()
           .nullable()
           .optional(),
-        eventClass: z.object({ code: z.string(), name: z.string() }).strict(),
+        eventClass: z
+          .object({
+            code: z.string(),
+            name: z.string(),
+            vehicleType: z
+              .enum(['car', 'motorcycle', 'kart', 'other'])
+              .optional(),
+          })
+          .strict(),
         startNumber: z.string().nullable(),
         customAnswers: z.array(
           z
