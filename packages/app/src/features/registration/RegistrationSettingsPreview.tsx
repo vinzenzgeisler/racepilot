@@ -94,20 +94,27 @@ export function RegistrationSettingsPreview({
           } as React.CSSProperties
         }
       >
-        <header className="registration-header">
-          {config.branding.logoLightObjectId && (
-            <span className="registration-preview-logo">NENNBOX</span>
-          )}
+        <header
+          className="registration-header"
+          style={{
+            background: 'var(--brand-primary)',
+            color: 'var(--brand-primary-text)',
+            borderRadius: 'var(--brand-radius)',
+            padding: 'var(--space-4)',
+          }}
+        >
           <p className="registration-event-date">
             12. Juni 2027 · Beispielveranstaltung
           </p>
-          <h2>{config.welcomeText || 'Beispiel-Bergpreis'}</h2>
+          <h2>Historischer Bergpreis 2027</h2>
+          {config.welcomeText && <p>{config.welcomeText}</p>}
         </header>
         <Steps
           steps={['Fahrer', 'Startmeldungen', 'Prüfen']}
           current={0}
           label="Anmeldeschritte"
           completedLabel="Abgeschlossen"
+          variant="registration"
         />
         <FormSection title="Fahrerdaten">
           <PreviewFields config={config} keys={driverPreviewFields} />

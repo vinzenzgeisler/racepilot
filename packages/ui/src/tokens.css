@@ -39,6 +39,7 @@
     var(--font-archivo);
   --text-app-h1: 800 var(--type-h1-size-app)/var(--type-h1-line)
     var(--font-archivo);
+  --text-registration-display: 800 60px/1 var(--font-archivo);
   --text-app-h2: 700 var(--type-h2-size-app)/var(--type-h2-line)
     var(--font-archivo);
   --radius: 0;
@@ -103,4 +104,10 @@
   --type-h3-stretch: 112%;
   --type-label-tracking: 0.08em;
   font-synthesis: none;
+}
+
+@media (width <= 720px) {
+  :root {
+    --text-registration-display: 800 36px/1 var(--font-archivo);
+  }
 }
