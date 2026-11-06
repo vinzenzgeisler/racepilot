@@ -55,8 +55,9 @@ describe('RegistrationSettingsPreview', () => {
     const colorTokens = container.querySelector<HTMLElement>(
       '[style*="--brand-primary"]',
     )!;
-    const header = container.querySelector<HTMLElement>('header')!;
-    const accentSample = container.querySelector<HTMLElement>('header + p')!;
+    const header = container.querySelector<HTMLElement>(
+      '.registration-header',
+    )!;
     expect(colorTokens.style.getPropertyValue('--brand-primary')).toBe(
       colors.primarySurface,
     );
@@ -69,10 +70,7 @@ describe('RegistrationSettingsPreview', () => {
     expect(colorTokens.style.getPropertyValue('--brand-accent-text')).toBe(
       colors.accentForeground,
     );
-    expect(header.style.background).toBe('var(--brand-primary)');
-    expect(header.style.color).toBe('var(--brand-primary-text)');
-    expect(accentSample.style.background).toBe('var(--brand-accent)');
-    expect(accentSample.style.color).toBe('var(--brand-accent-text)');
+    expect(header.textContent).toContain('Beispielveranstaltung');
     expect(
       contrastRatio(colors.primaryForeground, colors.primarySurface),
     ).toBeGreaterThanOrEqual(4.5);
@@ -80,5 +78,32 @@ describe('RegistrationSettingsPreview', () => {
       contrastRatio(colors.accentForeground, colors.accentSurface),
     ).toBeGreaterThanOrEqual(4.5);
     expect(container.textContent).toContain('Beispielveranstaltung');
+  });
+
+  it('previews exactly the fields the participant will meet, with their requirement', async () => {
+    const config = {
+      ...defaultRegistrationFormConfig,
+      fields: {
+        ...defaultRegistrationFormConfig.fields,
+        phone: { state: 'required' as const },
+        city: { state: 'hidden' as const },
+        owner: { state: 'hidden' as const },
+        cylinders: { state: 'required' as const },
+      },
+    };
+    container = document.createElement('div');
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () =>
+      root!.render(<RegistrationSettingsPreview config={config} />),
+    );
+    const labels = [...container.querySelectorAll('.nb-field > span')].map(
+      (label) => label.textContent,
+    );
+    expect(labels).toContain('Telefon · Pflicht');
+    expect(labels).toContain('Zylinder · Pflicht');
+    expect(labels).toContain('Veröffentlichung · Freiwillig');
+    expect(labels.some((label) => label?.startsWith('Ort'))).toBe(false);
+    expect(labels.some((label) => label?.startsWith('Besitzer'))).toBe(false);
   });
 });

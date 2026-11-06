@@ -1,8 +1,71 @@
-import { Button, FormSection, Steps } from '@racepilot/ui';
+import { Button, Field, FormGrid, FormSection, Steps } from '@racepilot/ui';
 import {
   deriveAccessibleBrandColors,
   type RegistrationFormConfig,
 } from '@racepilot/contracts';
+import { registrationFieldLabels } from './registrationFieldLabels.js';
+
+const driverPreviewFields = [
+  'phone',
+  'street',
+  'postalCode',
+  'city',
+  'emergencyContact',
+  'publicationPreference',
+] as const;
+const vehiclePreviewFields = [
+  'displacement',
+  'cylinders',
+  'owner',
+  'history',
+] as const;
+
+function PreviewFields({
+  config,
+  keys,
+}: {
+  config: RegistrationFormConfig;
+  keys: ReadonlyArray<keyof RegistrationFormConfig['fields']>;
+}) {
+  return (
+    <FormGrid>
+      {keys.flatMap((key) => {
+        const state = config.fields[key].state;
+        if (state === 'hidden') return [];
+        const required = state === 'required';
+        const label = registrationFieldLabels[key] ?? key;
+        if (key === 'emergencyContact')
+          return [
+            <Field
+              key="emergency-name"
+              label="Notfallkontakt · Name"
+              required={required}
+              value=""
+              readOnly
+            />,
+            <Field
+              key="emergency-phone"
+              label="Notfallkontakt · Telefon"
+              type="tel"
+              required={required}
+              value=""
+              readOnly
+            />,
+          ];
+        return [
+          <Field
+            key={key}
+            label={`${label}${required ? ' · Pflicht' : ' · Freiwillig'}`}
+            required={required}
+            type={key === 'phone' ? 'tel' : 'text'}
+            value=""
+            readOnly
+          />,
+        ];
+      })}
+    </FormGrid>
+  );
+}
 
 export function RegistrationSettingsPreview({
   config,
@@ -16,9 +79,10 @@ export function RegistrationSettingsPreview({
   return (
     <FormSection
       title="Vorschau"
-      description="Änderungen erscheinen hier sofort."
+      description="So erscheint das Formular für Teilnehmende."
     >
       <div
+        className="registration settings-registration-preview"
         style={
           {
             '--brand-primary': colors.primarySurface,
@@ -31,42 +95,35 @@ export function RegistrationSettingsPreview({
         }
       >
         <header
+          className="registration-header"
           style={{
             background: 'var(--brand-primary)',
-            borderRadius: 'var(--brand-radius)',
             color: 'var(--brand-primary-text)',
-            padding: 'var(--space-3)',
+            borderRadius: 'var(--brand-radius)',
+            padding: 'var(--space-4)',
           }}
         >
-          <p className="eyebrow">Beispielveranstaltung · 12.–13. Juni 2027</p>
-          <h3
-            style={{
-              color: 'inherit',
-              fontFamily: 'var(--font-archivo)',
-            }}
-          >
-            Beispiel-Bergpreis
-          </h3>
+          <p className="registration-event-date">
+            12. Juni 2027 · Beispielveranstaltung
+          </p>
+          <h2>Historischer Bergpreis 2027</h2>
           {config.welcomeText && <p>{config.welcomeText}</p>}
         </header>
-        <p
-          style={{
-            background: 'var(--brand-accent)',
-            borderRadius: 'var(--brand-radius)',
-            color: 'var(--brand-accent-text)',
-            padding: 'var(--space-2) var(--space-3)',
-          }}
-        >
-          Startgeld · Nennungsschluss
-        </p>
         <Steps
           steps={['Fahrer', 'Startmeldungen', 'Prüfen']}
           current={0}
           label="Anmeldeschritte"
           completedLabel="Abgeschlossen"
+          variant="registration"
         />
+        <FormSection title="Fahrerdaten">
+          <PreviewFields config={config} keys={driverPreviewFields} />
+        </FormSection>
+        <FormSection title="Startmeldung">
+          <PreviewFields config={config} keys={vehiclePreviewFields} />
+        </FormSection>
         <Button type="button" disabled>
-          Weiter zu Startmeldungen
+          Weiter
         </Button>
       </div>
     </FormSection>

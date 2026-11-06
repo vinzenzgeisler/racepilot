@@ -2,6 +2,16 @@ import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from '../AdminEntriesModel.js';
 
 export const NOT_GIVEN = 'nicht angegeben';
+
+const VEHICLE_TYPES: Record<string, string> = {
+  car: 'Auto',
+  motorcycle: 'Motorrad',
+  kart: 'Kart',
+  other: 'Sonstiges',
+};
+/** The vehicle type follows the class; an unknown stored value is shown as it is, never guessed. */
+export const vehicleTypeLabel = (type: string | null | undefined) =>
+  type ? (VEHICLE_TYPES[type] ?? type) : null;
 type Dimension = NonNullable<Entry['statusProjection']>['dimensions'][number];
 type History = NonNullable<Entry['adminHistory']>[number];
 

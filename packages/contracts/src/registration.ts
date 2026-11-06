@@ -1,5 +1,9 @@
 import { z } from 'zod';
 import { RegistrationCustomFieldAnswersSchema } from './registration-config.js';
+import {
+  registrationContactShape,
+  registrationVehicleDetailsShape,
+} from './registration-details.js';
 
 export const StandardRegistrationFormSchema = z
   .object({
@@ -94,6 +98,7 @@ export const PublicRegistrationRequestSchema = z
           .optional(),
         guardianName: z.string().trim().min(1).max(200).optional(),
         guardianEmail: z.string().email().max(254).optional(),
+        ...registrationContactShape,
       })
       .strict(),
     customAnswers: RegistrationCustomFieldAnswersSchema.optional(),
@@ -114,6 +119,7 @@ export const PublicRegistrationRequestSchema = z
                 model: z.string().trim().min(1).max(100),
                 year: z.number().int().min(1886).max(2200).nullable(),
                 registration: z.string().trim().max(64).nullable(),
+                ...registrationVehicleDetailsShape,
               })
               .strict(),
           })
@@ -147,6 +153,16 @@ export const RegistrationDraftSchema = z
     dateOfBirth: z.string().max(10),
     guardianName: z.string().max(200),
     guardianEmail: z.string().max(254),
+    // Added later: drafts saved before these fields existed still resume.
+    phone: z.string().max(40).default(''),
+    street: z.string().max(200).default(''),
+    postalCode: z.string().max(20).default(''),
+    city: z.string().max(100).default(''),
+    emergencyContactName: z.string().max(200).default(''),
+    emergencyContactPhone: z.string().max(40).default(''),
+    publicationPreference: z
+      .enum(['name_visible', 'initials', 'hidden', ''])
+      .default(''),
     vehicles: z
       .array(
         z
@@ -157,6 +173,10 @@ export const RegistrationDraftSchema = z
             year: z.string().max(4),
             registration: z.string().max(64),
             requestedStartNumber: z.string().max(64),
+            displacementCc: z.string().max(5).default(''),
+            cylinders: z.string().max(2).default(''),
+            ownerName: z.string().max(200).default(''),
+            history: z.string().max(4000).default(''),
           })
           .strict(),
       )

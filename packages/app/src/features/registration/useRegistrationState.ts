@@ -6,6 +6,7 @@ import {
   type RegistrationDraft,
 } from '@racepilot/contracts';
 import {
+  emptyVehicle,
   translations,
   type FormPayload,
   type VehicleEntry,
@@ -35,18 +36,16 @@ export function useRegistrationState({
     dateOfBirth: initialDraft?.dateOfBirth ?? '',
     guardianName: initialDraft?.guardianName ?? '',
     guardianEmail: initialDraft?.guardianEmail ?? '',
+    phone: initialDraft?.phone ?? '',
+    street: initialDraft?.street ?? '',
+    postalCode: initialDraft?.postalCode ?? '',
+    city: initialDraft?.city ?? '',
+    emergencyContactName: initialDraft?.emergencyContactName ?? '',
+    emergencyContactPhone: initialDraft?.emergencyContactPhone ?? '',
+    publicationPreference: initialDraft?.publicationPreference ?? '',
   });
   const [vehicles, setVehicles] = useState<VehicleEntry[]>(
-    initialDraft?.vehicles ?? [
-      {
-        classId: '',
-        make: '',
-        model: '',
-        year: '',
-        registration: '',
-        requestedStartNumber: '',
-      },
-    ],
+    initialDraft?.vehicles ?? [emptyVehicle()],
   );
   const [accepted, setAccepted] = useState<Record<string, boolean>>(
     initialDraft?.accepted ?? {},

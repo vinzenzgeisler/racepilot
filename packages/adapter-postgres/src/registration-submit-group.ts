@@ -88,6 +88,14 @@ export async function createRegistrationGroup(args: {
         ? payload.person.guardianEmail!.trim()
         : null,
       customAnswers: safeCustomAnswers,
+      // Contact data belongs to this registration, never to the organization-wide person.
+      phone: payload.person.phone ?? null,
+      street: payload.person.street ?? null,
+      postalCode: payload.person.postalCode ?? null,
+      city: payload.person.city ?? null,
+      emergencyContactName: payload.person.emergencyContactName ?? null,
+      emergencyContactPhone: payload.person.emergencyContactPhone ?? null,
+      publicationPreference: payload.person.publicationPreference ?? null,
     })
     .returning({ id: registrationGroups.id });
   for (const upload of customFileUploads) {

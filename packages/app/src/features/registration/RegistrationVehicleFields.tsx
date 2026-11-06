@@ -1,7 +1,8 @@
 import { Button, Field, SelectField } from '@racepilot/ui';
 import type { Dispatch, SetStateAction } from 'react';
 import type { FormPayload, VehicleEntry } from './RegistrationDomain.js';
-import { translations } from './RegistrationDomain.js';
+import { emptyVehicle, translations } from './RegistrationDomain.js';
+import { RegistrationVehicleDetailFields } from './RegistrationVehicleDetailFields.js';
 
 type Locale = 'de' | 'en';
 type VehicleField = { key: string; label: { de: string; en: string } };
@@ -144,6 +145,12 @@ export function RegistrationVehicleFields({
               }}
             />
           )}
+          <RegistrationVehicleDetailFields
+            config={payload.registrationFormConfig}
+            vehicle={item}
+            onChange={(patch) => setVehicle(index, patch)}
+            t={t}
+          />
           {vehicles.length > 1 && (
             <Button
               type="button"
@@ -161,19 +168,7 @@ export function RegistrationVehicleFields({
         <Button
           type="button"
           variant="secondary"
-          onClick={() =>
-            setVehicles((old) => [
-              ...old,
-              {
-                classId: '',
-                make: '',
-                model: '',
-                year: '',
-                registration: '',
-                requestedStartNumber: '',
-              },
-            ])
-          }
+          onClick={() => setVehicles((old) => [...old, emptyVehicle()])}
         >
           {t.addVehicle}
         </Button>

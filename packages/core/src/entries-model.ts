@@ -7,11 +7,7 @@ import { OrganizationId } from './context.js';
 import { PriceSnapshot } from './pricing.js';
 import { RequestContext } from './context.js';
 import { StoredObjectRef } from './providers.js';
-import type {
-  AdminEntryDriver,
-  AdminEntryInvoice,
-  AdminEntryVehicle,
-} from './entry-detail.js';
+import type { AdminEntryDetails } from './entry-detail.js';
 
 export interface Person {
   id: string;
@@ -74,19 +70,7 @@ export interface Entry {
     occurredAt: string;
     detail: string;
   }>;
-  adminDetails?: {
-    driver: AdminEntryDriver;
-    vehicle: AdminEntryVehicle;
-    invoice?: AdminEntryInvoice | null;
-    eventClass: { code: string; name: string };
-    startNumber: string | null;
-    customAnswers: Array<{
-      key: string;
-      label: string;
-      value: string | boolean | null;
-      fileDownloadUrl: string | null;
-    }>;
-  };
+  adminDetails?: AdminEntryDetails;
   statusProjection?: EntryStatusProjection;
 }
 

@@ -16,6 +16,7 @@ import {
   FieldValue,
   FormActions,
 } from './DetailSection.js';
+import { EvidenceList } from './EvidenceList.js';
 import { MediaDetail } from './MediaDetail.js';
 import { MessageTable } from './MessageTable.js';
 import { ReasonDialog } from './ReasonDialog.js';
@@ -248,4 +249,38 @@ it('renders notes and form actions as library elements', () => {
   );
   expect(html).toContain('<p class="nb-detail-note">Hinweis</p>');
   expect(html).toContain('<div class="nb-form-actions">');
+});
+
+it('lists recorded acceptances with their wording on request and flags a missing wording', () => {
+  const html = renderToStaticMarkup(
+    <EvidenceList
+      items={[
+        {
+          id: 'a',
+          title: 'participation',
+          meta: 'Version 1 · Deutsch',
+          time: '02.09.2026 18:12',
+          dateTime: '2026-09-02T16:12:00Z',
+          textLabel: 'Wortlaut anzeigen',
+          text: 'Ich akzeptiere.',
+          missingTextLabel: 'Wortlaut nicht mehr hinterlegt',
+        },
+        {
+          id: 'b',
+          title: 'photos',
+          time: '02.09.2026 18:12',
+          textLabel: 'Wortlaut anzeigen',
+          text: null,
+          missingTextLabel: 'Wortlaut nicht mehr hinterlegt',
+        },
+      ]}
+      empty={<p>Keine</p>}
+    />,
+  );
+  expect(html).toContain('<summary>Wortlaut anzeigen</summary>');
+  expect(html).toContain('Ich akzeptiere.');
+  expect(html.match(/Wortlaut nicht mehr hinterlegt/g)).toHaveLength(1);
+  expect(
+    renderToStaticMarkup(<EvidenceList items={[]} empty={<p>Keine</p>} />),
+  ).toBe('<p>Keine</p>');
 });

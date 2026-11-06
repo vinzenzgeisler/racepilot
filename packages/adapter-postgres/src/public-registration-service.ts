@@ -10,7 +10,12 @@ import type { RequestContext } from '@racepilot/core';
 import type { PublicRegistrationPayload } from './registration-settings.js';
 import { organizations, events } from './schema/organization.js';
 import { eq, and } from 'drizzle-orm';
-import { ProviderError } from '@racepilot/core';
+import {
+  ProviderError,
+  registrationContactMatches,
+  registrationVehicleDetailsMatch,
+  resolveRegistrationFieldStates,
+} from '@racepilot/core';
 import { publicEntrySubmissions } from './schema/public-registration.js';
 import { sql } from 'drizzle-orm';
 import { validateRegistrationCustomAnswers } from './registration-submit-answers.js';
@@ -151,6 +156,19 @@ export function createPublicRegistrationService(
         if (
           (eventNumberState ?? orgNumberState) === 'hidden' &&
           payload.entries.some((entry) => entry.requestedStartNumber)
+        )
+          throw unavailable();
+        // The server checks exactly the fields the delivered form asks for.
+        const fieldStates = resolveRegistrationFieldStates(
+          orgFormConfig,
+          formConfig,
+        );
+        if (
+          !registrationContactMatches(payload.person, fieldStates) ||
+          payload.entries.some(
+            (entry) =>
+              !registrationVehicleDetailsMatch(entry.vehicle, fieldStates),
+          )
         )
           throw unavailable();
         if (!existingSubmission) {
