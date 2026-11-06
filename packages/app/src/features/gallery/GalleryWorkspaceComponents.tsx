@@ -106,8 +106,19 @@ export function GalleryWorkspaceComponents() {
       <HistoryTimeline
         title="Verlauf"
         items={[
-          { id: '1', time: '05.11.2026', content: 'Nennung eingegangen' },
-          { id: '2', time: '06.11.2026', content: 'Vorauswahl gesetzt' },
+          {
+            id: '1',
+            time: '05.11. 08:40',
+            title: 'Nennung eingegangen',
+            actor: 'Teilnehmer',
+            tone: 'open',
+          },
+          {
+            id: '2',
+            time: '06.11. 09:15',
+            title: 'Vorauswahl gesetzt',
+            actor: 'A. Beispiel',
+          },
         ]}
       />
     </PreviewPanel>
