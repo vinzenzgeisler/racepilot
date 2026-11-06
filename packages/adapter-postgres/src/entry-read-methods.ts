@@ -59,19 +59,21 @@ export function createEntryReadMethods(
         );
       const search = query.search?.trim();
       if (search) {
-        const pattern = `%${search.replace(/[\\%_]/g, '\\$&')}%`;
-        predicates.push(
-          or(
-            ilike(entries.requestedStartNumber, pattern),
-            sql`${entries.id}::text ilike ${pattern}`,
-            ilike(people.firstName, pattern),
-            ilike(people.lastName, pattern),
-            ilike(vehicles.make, pattern),
-            ilike(vehicles.model, pattern),
-            ilike(vehicles.registration, pattern),
-            ilike(eventClasses.name, pattern),
-          )!,
-        );
+        for (const token of search.split(/\s+/)) {
+          const pattern = `%${token.replace(/[\\%_]/g, '\\$&')}%`;
+          predicates.push(
+            or(
+              ilike(entries.requestedStartNumber, pattern),
+              sql`${entries.id}::text ilike ${pattern}`,
+              ilike(people.firstName, pattern),
+              ilike(people.lastName, pattern),
+              ilike(vehicles.make, pattern),
+              ilike(vehicles.model, pattern),
+              ilike(vehicles.registration, pattern),
+              ilike(eventClasses.name, pattern),
+            )!,
+          );
+        }
       }
       const where = and(...predicates);
       const sortColumns = {

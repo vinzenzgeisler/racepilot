@@ -1,5 +1,5 @@
 import { Button } from '@racepilot/ui';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { AdminEntries } from '../entries/AdminEntries.js';
 import { AppShell } from './AppShell.js';
@@ -77,6 +77,10 @@ function AdminApplication() {
   const [previewOpen, setPreviewOpen] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
   const closePreview = () => setPreviewOpen(false);
+  const handleSelectionChange = useCallback((entry: Entry | null) => {
+    setSelectedEntry(entry);
+    if (entry) setPreviewOpen(true);
+  }, []);
   useEffect(() => {
     let active = true;
     void adminFetch('/admin/events', {
@@ -179,10 +183,7 @@ function AdminApplication() {
               setDetailOpen(false);
               setPreviewOpen(true);
             }}
-            onSelectionChange={(entry) => {
-              setSelectedEntry(entry);
-              if (entry && !detailOpen) setPreviewOpen(true);
-            }}
+            onSelectionChange={handleSelectionChange}
           />
         ) : view === 'workflow' ? (
           <AdminWorkflow eventId={selectedEvent} events={events} />

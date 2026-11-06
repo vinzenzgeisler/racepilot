@@ -1617,6 +1617,14 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       });
       expect(byDriverName.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       expect(byDriverName.total).toBe(1);
+      const byFullName = await adminEntries.listAdmin!(ctxA, {
+        page: 1,
+        pageSize: 100,
+        search: 'Same Name',
+        sort: 'createdAt',
+        direction: 'desc',
+      });
+      expect(byFullName.items.map((entry) => entry.id)).toEqual([entryA!.id]);
       const byEntryId = await adminEntries.listAdmin!(ctxA, {
         page: 1,
         pageSize: 100,

@@ -117,7 +117,7 @@ export function AdminEntries({
     const firstPending = items.find(
       (item) =>
         workflow.statuses.find((status) => status.key === item.acceptanceStatus)
-          ?.category === 'pending',
+          ?.category === 'waitlisted',
     );
     void openEntry((firstPending ?? items[0]!).id);
   }, [autoPreview, eventId, items, workflow, openEntry]);
