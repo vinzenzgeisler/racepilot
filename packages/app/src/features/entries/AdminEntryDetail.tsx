@@ -1,203 +1,251 @@
-import { AdminFileDownload } from './AdminFileDownload.js';
-import { Button, Textarea } from '@racepilot/ui';
-import type { EntryResponse as Entry } from '@racepilot/contracts';
-import type { WorkflowView } from './AdminEntriesModel.js';
-import { EntryStatusBadge } from './EntryStatusBadge.js';
+import { useMemo, useState } from 'react';
 import {
-  formatEntryHistoryActor,
-  formatEntryHistoryLabel,
-} from './EntryHistoryLabel.js';
+  Banner,
+  DetailHeader,
+  DetailLayout,
+  HintLabel,
+  ReasonDialog,
+  StatusLabel,
+} from '@racepilot/ui';
+import type { EntryResponse as Entry } from '@racepilot/contracts';
+import type { Outcome, WorkflowView } from './AdminEntriesModel.js';
+import { statusMeaning } from './EntryStatusBadge.js';
+import { EntryActionRail, type StatusStep } from './detail/EntryActionRail.js';
+import {
+  EntryDocumentsSection,
+  type DimensionAction,
+} from './detail/EntryDocumentsSection.js';
+import { EntryCustomAnswers } from './detail/EntryCustomAnswers.js';
+import { EntryDriverSection } from './detail/EntryDriverSection.js';
+import { EntryHistorySection } from './detail/EntryHistorySection.js';
+import { EntryMessagesSection } from './detail/EntryMessagesSection.js';
+import { EntryPaymentDialog } from './detail/EntryPaymentDialog.js';
+import { EntryVehicleSection } from './detail/EntryVehicleSection.js';
+import {
+  dimensionLabel,
+  formatDateTime,
+  lastChangeAt,
+  timelineFor,
+} from './detail/entryDetailModel.js';
+import {
+  useDimensionLabels,
+  useEntryDetailApi,
+  useEntryMessages,
+} from './detail/useEntryDetailApi.js';
+
+type Pending =
+  | { kind: 'status'; step: StatusStep }
+  | { kind: 'verify' }
+  | { kind: 'dimension'; action: DimensionAction }
+  | { kind: 'payment' };
+
+const HINT_NAMES = {
+  double_starter: 'Doppelstarter',
+  passenger: 'Beifahrer',
+  late_entry: 'Nachnennung',
+} as const;
 
 export function AdminEntryDetail({
   selected,
-  classes,
   workflow,
-  reason,
-  setReason,
   busy,
+  error,
   transition,
+  onBack,
+  onUpdated,
 }: {
   selected: Entry;
-  classes: Array<{ id: string; name: string }>;
   workflow: WorkflowView | null;
-  reason: string;
-  setReason: (reason: string) => void;
   busy: boolean;
+  error: string;
   transition: (
     type: 'acceptance' | 'verification',
     status: string,
-  ) => Promise<void>;
+    reason: string,
+  ) => Promise<Outcome>;
+  onBack: () => void;
+  onUpdated: (entry: Entry) => void;
 }) {
-  return (
-    <section className="admin-detail" aria-labelledby="entry-detail-title">
-      <h3 id="entry-detail-title">Nennung im Detail</h3>
-      <dl>
-        <dt>Klasse</dt>
-        <dd>
-          {selected.adminDetails?.eventClass.name ??
-            classes.find((item) => item.id === selected.classId)?.name ??
-            '—'}
-        </dd>
-        <dt>Fahrer</dt>
-        <dd>{selected.adminDetails?.driver.name ?? '—'}</dd>
-        <dt>Geburtsdatum</dt>
-        <dd>
-          {selected.adminDetails?.driver.dateOfBirth
-            ? new Intl.DateTimeFormat('de-DE', {
-                dateStyle: 'medium',
-                timeZone: 'Europe/Berlin',
-              }).format(
-                new Date(
-                  `${selected.adminDetails.driver.dateOfBirth}T12:00:00`,
-                ),
+  const api = useEntryDetailApi(selected, onUpdated);
+  const messages = useEntryMessages(selected);
+  const dimensionLabels = useDimensionLabels(selected.eventId);
+  const [pending, setPending] = useState<Pending | null>(null);
+  const [dialogError, setDialogError] = useState('');
+  const details = selected.adminDetails;
+  const timeline = useMemo(
+    () => timelineFor(selected, workflow, dimensionLabels),
+    [selected, workflow, dimensionLabels],
+  );
+  if (!details)
+    return <p role="alert">Die Details dieser Nennung sind nicht verfügbar.</p>;
+  const projection = selected.statusProjection;
+  const changed = lastChangeAt(selected);
+  const order = [
+    'email_verification',
+    'entry',
+    'payment',
+    'technical_inspection',
+    'waiver',
+  ];
+  const labels = [...(projection?.dimensions ?? [])]
+    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key))
+    .map((item) => (
+      <StatusLabel
+        key={item.key}
+        status={
+          item.key === 'entry'
+            ? statusMeaning(
+                workflow?.statuses.find((status) => status.key === item.value)
+                  ?.category ?? '',
               )
-            : '—'}
-        </dd>
-        <dt>Land</dt>
-        <dd>{selected.adminDetails?.driver.country ?? '—'}</dd>
-        <dt>E-Mail</dt>
-        <dd>
-          {selected.adminDetails?.driver.email ?? '—'}{' '}
-          {selected.adminDetails?.driver.emailVerified ? '✓' : ''}
-        </dd>
-        <dt>Fahrzeug</dt>
-        <dd>
-          {selected.adminDetails
-            ? `${selected.adminDetails.vehicle.make} ${selected.adminDetails.vehicle.model}${selected.adminDetails.vehicle.year ? ` · ${selected.adminDetails.vehicle.year}` : ''}`
-            : '—'}
-        </dd>
-        <dt>Startnummer</dt>
-        <dd>{selected.adminDetails?.startNumber ?? '—'}</dd>
-        <dt>Eigene Angaben</dt>
-        <dd>
-          {selected.adminDetails?.customAnswers.length ? (
-            <ul className="admin-custom-answers">
-              {selected.adminDetails.customAnswers.map((answer) => (
-                <li key={answer.key}>
-                  <strong>{answer.label}</strong>:{' '}
-                  {answer.fileDownloadUrl ? (
-                    <AdminFileDownload url={answer.fileDownloadUrl} />
-                  ) : answer.value === null ? (
-                    '—'
-                  ) : typeof answer.value === 'boolean' ? (
-                    answer.value ? (
-                      'Ja'
-                    ) : (
-                      'Nein'
-                    )
-                  ) : (
-                    answer.value
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            'Keine eigenen Angaben'
-          )}
-        </dd>
-        <dt>Nennung</dt>
-        <dd>
-          <EntryStatusBadge
-            status={workflow?.statuses.find(
-              (item) => item.key === selected.acceptanceStatus,
-            )}
-            fallback={selected.acceptanceStatus}
-          />
-        </dd>
-        <dt>E-Mail-Prüfung</dt>
-        <dd>
-          {selected.verificationStatus === 'verified'
-            ? 'Verifiziert'
-            : 'Unbestätigt'}
-        </dd>
-        <dt>Startgeld gesamt</dt>
-        <dd>
-          {selected.priceSnapshot
-            ? new Intl.NumberFormat('de-DE', {
-                style: 'currency',
-                currency: selected.priceSnapshot.currency,
-              }).format(selected.priceSnapshot.totalCents / 100)
-            : 'Nicht verfügbar'}
-        </dd>
-      </dl>
-      <Textarea
-        label="Begründung (für das Protokoll erforderlich)"
-        value={reason}
-        maxLength={1000}
-        onChange={(e) => setReason(e.target.value)}
+            : item.key === 'payment' && item.meaning === 'not_relevant'
+              ? 'empty'
+              : item.meaning
+        }
+        label={dimensionLabel(item)}
       />
-      <div className="admin-actions">
-        {(workflow?.transitions ?? [])
-          .filter((edge) => edge.from === selected.acceptanceStatus)
-          .map((edge) => {
-            const status = workflow?.statuses.find(
-              (item) => item.key === edge.to,
-            );
-            return (
-              <Button
-                key={edge.to}
-                variant="secondary"
-                size={40}
-                disabled={busy || !reason.trim()}
-                onClick={() => void transition('acceptance', edge.to)}
-              >
-                <EntryStatusBadge status={status} fallback={edge.to} />
-              </Button>
-            );
-          })}
-        {selected.verificationStatus !== 'verified' && (
-          <Button
-            variant="secondary"
-            size={40}
-            disabled={busy || !reason.trim()}
-            onClick={() => void transition('verification', 'verified')}
-          >
-            E-Mail verifizieren
-          </Button>
-        )}
-      </div>
-      <section className="admin-documents" aria-label="Prüfstatus">
-        <h4>Prüfstatus</h4>
-        <p>
-          Echte Nennungsunterlagen und Upload-Zähler sind noch nicht verfügbar.
-        </p>
-        <ul>
-          {selected.statusProjection?.dimensions
-            .filter((item) =>
-              ['technical_inspection', 'waiver'].includes(item.key),
-            )
-            .map((item) => (
-              <li key={item.key}>
-                <span>{item.label.de}</span>
-                <EntryStatusBadge
-                  status={workflow?.statuses.find(
-                    (status) => status.key === item.value,
-                  )}
-                  fallback={item.value}
-                />
-              </li>
-            ))}
-        </ul>
-      </section>
-      <section aria-label="Verlauf">
-        <h4>Verlauf</h4>
-        <ol>
-          {(selected.adminHistory ?? []).map((event) => (
-            <li key={`${event.kind}-${event.id}`}>
-              <time dateTime={event.occurredAt}>
-                {new Intl.DateTimeFormat('de-DE', {
-                  dateStyle: 'medium',
-                  timeStyle: 'short',
-                  timeZone: 'Europe/Berlin',
-                }).format(new Date(event.occurredAt))}
-              </time>{' '}
-              · {formatEntryHistoryLabel(event.kind, event.label, workflow)} ·{' '}
-              {formatEntryHistoryActor(event.actor)}
-              {event.detail ? ` — ${event.detail}` : ''}
-            </li>
-          ))}
-        </ol>
-      </section>
+    ));
+  const hints = (projection?.hints ?? [])
+    .filter((hint) => hint.present)
+    .map((hint) => (
+      <HintLabel key={hint.key}>{HINT_NAMES[hint.key]}</HintLabel>
+    ));
+  const close = () => {
+    setPending(null);
+    setDialogError('');
+  };
+  async function confirm(reason: string, amountCents?: number) {
+    if (!pending) return;
+    setDialogError('');
+    if (pending.kind === 'payment' && amountCents !== undefined) {
+      const result = await api.recordPayment(
+        details!.invoice!.id,
+        amountCents,
+        reason,
+      );
+      return result.ok ? close() : setDialogError(result.message);
+    }
+    if (pending.kind === 'dimension') {
+      const result = await api.transitionDimension(
+        pending.action.dimension,
+        pending.action.status,
+        reason,
+      );
+      return result.ok ? close() : setDialogError(result.message);
+    }
+    const result =
+      pending.kind === 'verify'
+        ? await transition('verification', 'verified', reason)
+        : pending.kind === 'status'
+          ? await transition('acceptance', pending.step.to, reason)
+          : null;
+    if (result?.ok) close();
+    else if (result) setDialogError(result.message);
+  }
+  const dialog =
+    pending?.kind === 'status'
+      ? {
+          title: pending.step.label.replace(/ …$/, ''),
+          message: `Die Nennung wird auf „${workflow?.statuses.find((item) => item.key === pending.step.to)?.labels.de ?? pending.step.to}“ gesetzt. Die Entscheidung wird im Verlauf protokolliert.`,
+          confirm: 'Status ändern',
+        }
+      : pending?.kind === 'verify'
+        ? {
+            title: 'E-Mail verifizieren',
+            message: 'Die E-Mail-Adresse wird als bestätigt markiert.',
+            confirm: 'Verifizieren',
+          }
+        : pending?.kind === 'dimension'
+          ? {
+              title: pending.action.label,
+              message: 'Die Änderung wird im Verlauf protokolliert.',
+              confirm: 'Speichern',
+            }
+          : null;
+  return (
+    <section aria-label="Nennung im Detail" className="admin-detail-view">
+      <DetailLayout
+        railLabel="Aktionen"
+        header={
+          <DetailHeader
+            backLabel="Nennungen"
+            onBack={onBack}
+            number={selected.requestedStartNumber ?? details.startNumber}
+            title={`${details.driver.name} · ${details.vehicle.make} ${details.vehicle.model}`}
+            subtitle={`Klasse ${details.eventClass.name}`}
+            meta={
+              <>
+                Eingang {formatDateTime(selected.createdAt)}
+                {changed && <> · Geändert {formatDateTime(changed)}</>}
+              </>
+            }
+            labels={[...labels, ...hints]}
+          />
+        }
+        rail={
+          <EntryActionRail
+            entry={selected}
+            workflow={workflow}
+            busy={busy || api.busy}
+            onStatus={(step) => setPending({ kind: 'status', step })}
+            onVerify={() => setPending({ kind: 'verify' })}
+            onPayment={() => setPending({ kind: 'payment' })}
+            onDimension={(action) => setPending({ kind: 'dimension', action })}
+          />
+        }
+      >
+        {error && !pending && <Banner tone="error">{error}</Banner>}
+        <EntryDriverSection
+          driver={details.driver}
+          passenger={Boolean(
+            projection?.hints.find((h) => h.key === 'passenger')?.present,
+          )}
+          busy={api.busy}
+          onSave={api.saveDriver}
+        />
+        <EntryVehicleSection
+          vehicle={details.vehicle}
+          busy={api.busy}
+          onSave={api.saveVehicle}
+        />
+        <EntryCustomAnswers answers={details.customAnswers} />
+        <EntryDocumentsSection
+          entry={selected}
+          onDimensionAction={(action) =>
+            setPending({ kind: 'dimension', action })
+          }
+          onRecordPayment={() => setPending({ kind: 'payment' })}
+        />
+        <EntryMessagesSection
+          messages={messages.items}
+          failed={messages.failed}
+        />
+        <EntryHistorySection items={timeline} />
+      </DetailLayout>
+      {dialog && (
+        <ReasonDialog
+          open
+          title={dialog.title}
+          message={dialog.message}
+          reasonLabel="Begründung (für das Protokoll erforderlich)"
+          confirmLabel={dialog.confirm}
+          cancelLabel="Abbrechen"
+          closeLabel="Dialog schließen"
+          busy={busy || api.busy}
+          error={dialogError}
+          onConfirm={(reason) => void confirm(reason)}
+          onClose={close}
+        />
+      )}
+      {pending?.kind === 'payment' && details.invoice && (
+        <EntryPaymentDialog
+          invoice={details.invoice}
+          busy={api.busy}
+          error={dialogError}
+          onConfirm={(cents, reason) => void confirm(reason, cents)}
+          onClose={close}
+        />
+      )}
     </section>
   );
 }

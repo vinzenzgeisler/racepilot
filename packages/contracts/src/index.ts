@@ -37,7 +37,13 @@ export {
   EntryStatusMeaningSchema,
   EntryStatusDimensionConfigSchema,
   AdminEntryListResponse,
+  PublicationPreferenceSchema,
 } from './entries.js';
+export {
+  EntryDriverUpdateRequest,
+  EntryVehicleUpdateRequest,
+  EntryMessagesResponse,
+} from './entry-detail.js';
 export type { EntryStatusDimensionConfig } from './entries.js';
 export {
   OrganizationResponse,

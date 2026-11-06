@@ -75,3 +75,6 @@ export function isCurrent(
 ) {
   return gate.generation === generation && !controller.signal.aborted;
 }
+
+/** Result of a change request; `message` is meant for the dialog or form that started it. */
+export type Outcome = { ok: true } | { ok: false; message: string };

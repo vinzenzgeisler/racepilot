@@ -10,7 +10,8 @@ import { organizations, events, eventClasses } from './schema/organization.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { registrationFormUploads } from './schema/forms.js';
 import { sql } from 'drizzle-orm';
-import {} from './schema/billing.js';
+import { loadDriverContexts } from './entry-admin-driver-context.js';
+import { loadInvoiceSummaries } from './entry-admin-invoice.js';
 import { loadEntryAdminHistory } from './entry-admin-history.js';
 
 export async function attachAdminEntryDetails(
@@ -175,6 +176,11 @@ export async function attachAdminEntryDetails(
       year: vehicles.year,
       imageUrl: vehicles.imageUrl,
       registration: vehicles.registration,
+      vehicleType: vehicles.vehicleType,
+      displacementCc: vehicles.displacementCc,
+      cylinders: vehicles.cylinders,
+      ownerName: vehicles.ownerName,
+      history: vehicles.history,
     })
     .from(entries)
     .innerJoin(
@@ -211,12 +217,15 @@ export async function attachAdminEntryDetails(
         inArray(entries.id, ids),
       ),
     );
+  const invoiceByGroup = await loadInvoiceSummaries(db, ctx, groupIds);
+  const driverContexts = await loadDriverContexts(db, ctx, ids);
   const historyByEntry = await loadEntryAdminHistory(db, ctx, ids);
   const drivers = new Map(peopleRows.map((row) => [row.entryId, row]));
   const vehiclesByEntry = new Map(vehicleRows.map((row) => [row.entryId, row]));
   const classesByEntry = new Map(classRows.map((row) => [row.entryId, row]));
   return items.map((item) => {
     const driver = drivers.get(item.id);
+    const context = driverContexts.get(item.id);
     const vehicle = vehiclesByEntry.get(item.id);
     const eventClass = classesByEntry.get(item.id);
     const adminHistory = (historyByEntry.get(item.id) ?? []).sort((a, b) =>
@@ -228,10 +237,21 @@ export async function attachAdminEntryDetails(
       adminDetails: {
         driver: {
           name: [driver?.firstName, driver?.lastName].filter(Boolean).join(' '),
+          firstName: driver?.firstName ?? '',
+          lastName: driver?.lastName ?? '',
           dateOfBirth: driver?.dateOfBirth ?? null,
           country: driver?.country ?? null,
           email: driver?.email ?? null,
           emailVerified: driver?.emailVerified === 'verified',
+          phone: context?.phone ?? null,
+          street: context?.street ?? null,
+          postalCode: context?.postalCode ?? null,
+          city: context?.city ?? null,
+          emergencyContactName: context?.emergencyContactName ?? null,
+          emergencyContactPhone: context?.emergencyContactPhone ?? null,
+          publicationPreference: context?.publicationPreference ?? null,
+          identityShared: context?.identityShared ?? false,
+          registrationEntryCount: context?.registrationEntryCount ?? 1,
         },
         vehicle: {
           make: vehicle?.make ?? '',
@@ -239,7 +259,13 @@ export async function attachAdminEntryDetails(
           year: vehicle?.year ?? null,
           imageUrl: vehicle?.imageUrl ?? null,
           registration: vehicle?.registration ?? null,
+          vehicleType: vehicle?.vehicleType ?? null,
+          displacementCc: vehicle?.displacementCc ?? null,
+          cylinders: vehicle?.cylinders ?? null,
+          ownerName: vehicle?.ownerName ?? null,
+          history: vehicle?.history ?? null,
         },
+        invoice: invoiceByGroup.get(item.registrationGroupId) ?? null,
         eventClass: {
           code: eventClass?.code ?? '',
           name: eventClass?.name ?? '',

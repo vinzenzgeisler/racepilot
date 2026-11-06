@@ -29,6 +29,7 @@ type Props = {
   selectedIds: Set<string>;
   setSelection: Dispatch<SetStateAction<Selection>>;
   openEntry: (id: string) => Promise<void>;
+  openEntryDetail: (id: string) => Promise<void>;
   eligibleSelectedItems: Entry[];
   busy: boolean;
   clearSelection: () => void;
@@ -55,6 +56,7 @@ export function AdminEntryList(props: Props) {
     selectedIds,
     setSelection,
     openEntry,
+    openEntryDetail,
     eligibleSelectedItems,
     busy,
     clearSelection,
@@ -93,6 +95,7 @@ export function AdminEntryList(props: Props) {
               classes={classes}
               workflow={workflow}
               openEntry={openEntry}
+              openEntryDetail={openEntryDetail}
             />
           ))}
         {apiState === 'ready' && !items.length && (

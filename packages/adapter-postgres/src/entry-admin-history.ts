@@ -2,8 +2,13 @@ import {
   registrationGroups,
   entries,
   entryAuditEvents,
+  entryDataAuditEvents,
 } from './schema/entries.js';
 import { eq, and, inArray } from 'drizzle-orm';
+import {
+  organizationMemberships,
+  userIdentities,
+} from './schema/organization.js';
 import { entryStatusDimensionAudit } from './schema/status.js';
 import {
   invoices,
@@ -19,7 +24,7 @@ export async function loadEntryAdminHistory(
   ctx: RequestContext,
   ids: string[],
 ) {
-  const [entryAudits, dimensionAudits, paymentAudits, mailRows] =
+  const [entryAudits, dimensionAudits, paymentAudits, mailRows, dataAudits] =
     await Promise.all([
       db
         .select()
@@ -116,6 +121,15 @@ export async function loadEntryAdminHistory(
             inArray(entries.id, ids),
           ),
         ),
+      db
+        .select()
+        .from(entryDataAuditEvents)
+        .where(
+          and(
+            eq(entryDataAuditEvents.organizationId, ctx.organizationId),
+            inArray(entryDataAuditEvents.entryId, ids),
+          ),
+        ),
     ]);
   const historyByEntry = new Map<
     string,
@@ -152,6 +166,15 @@ export async function loadEntryAdminHistory(
       occurredAt: row.occurredAt,
       detail: row.reason,
     });
+  for (const row of dataAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'entry',
+      label: `data: ${row.subject}${row.copiedFromId ? ' (copy)' : ''}`,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: Object.keys(row.changes).join(','),
+    });
   for (const row of dimensionAudits)
     appendHistory(row.entryId, {
       id: row.id,
@@ -179,5 +202,52 @@ export async function loadEntryAdminHistory(
       occurredAt: row.sentAt ?? row.createdAt,
       detail: row.recipient,
     });
+  await resolveActorNames(db, ctx, historyByEntry);
   return historyByEntry;
+}
+
+const actorPattern = /^(.+)[#|]([^#|]+)$/;
+
+/** Replaces stored `issuer#subject` actors with the member's display name when one is known. */
+async function resolveActorNames(
+  db: Pick<Database, 'select'>,
+  ctx: RequestContext,
+  history: Map<string, Array<{ actor: string }>>,
+) {
+  const subjects = new Set<string>();
+  for (const list of history.values())
+    for (const item of list) {
+      const match = actorPattern.exec(item.actor);
+      if (match) subjects.add(match[2]!);
+    }
+  if (!subjects.size) return;
+  const members = await db
+    .select({
+      issuer: userIdentities.issuer,
+      subject: userIdentities.subject,
+      displayName: userIdentities.displayName,
+      email: userIdentities.email,
+    })
+    .from(userIdentities)
+    .innerJoin(
+      organizationMemberships,
+      and(
+        eq(organizationMemberships.userIdentityId, userIdentities.id),
+        eq(organizationMemberships.organizationId, ctx.organizationId),
+      ),
+    )
+    .where(inArray(userIdentities.subject, [...subjects]));
+  const names = new Map<string, string>(
+    members.flatMap((member) => {
+      const name = member.displayName?.trim() || member.email?.trim();
+      return name
+        ? [
+            [`${member.issuer}#${member.subject}`, name] as const,
+            [`${member.issuer}|${member.subject}`, name] as const,
+          ]
+        : [];
+    }),
+  );
+  for (const list of history.values())
+    for (const item of list) item.actor = names.get(item.actor) ?? item.actor;
 }

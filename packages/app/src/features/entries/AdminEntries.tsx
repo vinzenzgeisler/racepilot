@@ -6,25 +6,15 @@ import {
   type ReactNode,
 } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import { Button, SelectField } from '@racepilot/ui';
+import { SelectField } from '@racepilot/ui';
 import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
 import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
 import { useAdminEntriesKeyboard } from './useAdminEntriesKeyboard.js';
-export function AdminEntries({
-  detailOpen,
-  preview,
-  mobilePreviewOpen,
-  autoPreview = false,
-  onOpenDetail,
-  onCloseDetail,
-  onSelectionChange,
-  onTotalChange,
-  eventId: sharedEventId,
-  onEventChange: onSharedEventChange,
-}: {
+import { useOpenEntryDetail } from './useOpenEntryDetail.js';
+type AdminEntriesProps = {
   detailOpen?: boolean;
   preview?: ReactNode;
   mobilePreviewOpen?: boolean | undefined;
@@ -35,7 +25,29 @@ export function AdminEntries({
   onTotalChange?: (total: number) => void;
   eventId?: string;
   onEventChange?: (id: string) => void;
-} = {}) {
+};
+
+/**
+ * Everything the view holds belongs to one event: selection, filters, page, open detail,
+ * requests in flight. A different shared event therefore mounts a fresh view, which aborts
+ * the old requests and cannot show or update the previous event's entries.
+ */
+export function AdminEntries(props: AdminEntriesProps = {}) {
+  return <AdminEntriesView key={props.eventId ?? 'standalone'} {...props} />;
+}
+
+function AdminEntriesView({
+  detailOpen,
+  preview,
+  mobilePreviewOpen,
+  autoPreview = false,
+  onOpenDetail,
+  onCloseDetail,
+  onSelectionChange,
+  onTotalChange,
+  eventId: sharedEventId,
+  onEventChange: onSharedEventChange,
+}: AdminEntriesProps) {
   const [internalDetailOpen, setInternalDetailOpen] = useState(false);
   const autoPreviewedEvent = useRef('');
   const isDetailOpen = detailOpen ?? internalDetailOpen;
@@ -101,7 +113,6 @@ export function AdminEntries({
     setActionError,
   });
   const {
-    reason,
     setReason,
     busy,
     setBusy,
@@ -122,6 +133,7 @@ export function AdminEntries({
     setActionError,
   });
   useEffect(() => onSelectionChange?.(selected), [onSelectionChange, selected]);
+  const openEntryDetail = useOpenEntryDetail(selected, openEntry, openDetail);
   useEffect(() => {
     if (
       !autoPreview ||
@@ -243,7 +255,7 @@ export function AdminEntries({
           ))}
         </SelectField>
       )}
-      {!isDetailOpen && (
+      {!(isDetailOpen && selected) && (
         <AdminEntryList
           preview={preview}
           mobilePreviewOpen={mobilePreviewOpen}
@@ -261,6 +273,7 @@ export function AdminEntries({
           selectedIds={selectedIds}
           setSelection={setSelection}
           openEntry={openEntry}
+          openEntryDetail={openEntryDetail}
           eligibleSelectedItems={eligibleSelectedItems}
           busy={busy}
           clearSelection={clearSelection}
@@ -271,22 +284,23 @@ export function AdminEntries({
         />
       )}
       {isDetailOpen && selected && (
-        <div className="admin-detail-view">
-          <Button variant="secondary" onClick={closeDetail}>
-            ← Zurück zur Liste
-          </Button>
-          <AdminEntryDetail
-            selected={selected}
-            classes={classes}
-            workflow={workflow}
-            reason={reason}
-            setReason={setReason}
-            busy={busy}
-            transition={transition}
-          />
-        </div>
+        <AdminEntryDetail
+          key={selected.id}
+          selected={selected}
+          workflow={workflow}
+          busy={busy}
+          error={actionError}
+          transition={transition}
+          onBack={closeDetail}
+          onUpdated={(entry) => {
+            setSelected(entry);
+            setRefreshRevision((value) => value + 1);
+          }}
+        />
       )}
-      {actionError && <p role="alert">{actionError}</p>}
+      {actionError && !(isDetailOpen && selected) && (
+        <p role="alert">{actionError}</p>
+      )}
     </section>
   );
 }

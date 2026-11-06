@@ -19,7 +19,12 @@ const statusLabels: Record<string, string> = {
   not_required: 'Nicht erforderlich',
   not_relevant: 'Nicht relevant',
 };
-const statusMeaning = (category: string) => {
+/**
+ * Display meaning of an entry status, derived from its category only. The stored workflow
+ * revision is never rewritten: a withdrawn entry is a closed negative outcome and reads
+ * as "×", while "not relevant" stays reserved for fields that do not apply.
+ */
+export const statusMeaning = (category: string) => {
   switch (category) {
     case 'accepted':
       return 'done' as const;
@@ -28,7 +33,7 @@ const statusMeaning = (category: string) => {
     case 'waitlisted':
       return 'in_progress' as const;
     case 'withdrawn':
-      return 'not_relevant' as const;
+      return 'rejected' as const;
     default:
       return 'new' as const;
   }

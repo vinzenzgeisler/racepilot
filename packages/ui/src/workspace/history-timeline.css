@@ -1,11 +1,47 @@
-.nb-history-timeline li {
-  display: grid;
-  grid-template-columns: 110px 1fr;
-  gap: var(--space-3);
-  padding: var(--space-2) 0;
-  border-bottom: 1px solid var(--color-line);
+.nb-history-timeline ol {
+  position: relative;
 }
-.nb-history-timeline time {
+.nb-history-timeline ol::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: 2px;
+  background: var(--color-ink);
+}
+.nb-history-timeline li {
+  position: relative;
+  padding: 0 0 var(--space-4) var(--space-6);
+}
+.nb-history-timeline li::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  background: var(--color-ink);
+}
+.nb-history-timeline li.is-accent::before {
+  background: var(--color-signal);
+}
+.nb-history-timeline li.is-open::before {
+  border: 2px solid var(--color-ink);
+  background: var(--color-white);
+}
+.nb-history-timeline strong {
+  font: 600 15px/1.35 var(--font-plex);
+}
+.nb-history-timeline p {
+  margin: 2px 0 0;
   color: var(--color-graphite);
   font: var(--text-label);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.nb-history-timeline li > div {
+  margin-top: var(--space-1);
+  color: var(--color-graphite);
+  font: 400 13px/1.45 var(--font-plex);
 }

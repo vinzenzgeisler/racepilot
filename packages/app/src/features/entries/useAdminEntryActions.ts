@@ -8,7 +8,7 @@ import {
 } from 'react';
 import { EntryResponse } from '@racepilot/contracts';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import type { WorkflowView, Gate } from './AdminEntriesModel.js';
+import type { WorkflowView, Gate, Outcome } from './AdminEntriesModel.js';
 import { begin, invalidate, isCurrent, request } from './AdminEntriesModel.js';
 
 export function useAdminEntryActions({
@@ -84,14 +84,21 @@ export function useAdminEntryActions({
     [eventId, setActionError, setSelected],
   );
 
+  /**
+   * Changes the status of the selected entry. The outcome carries the failure text so the
+   * dialog that started the change can show it; superseded requests resolve without a message.
+   */
   async function transition(
     transitionType: 'acceptance' | 'verification',
     status: string,
-  ) {
+    reasonOverride?: string,
+  ): Promise<Outcome> {
     const current = selected;
-    if (!current || !reason.trim()) return;
+    const requestedReason = (reasonOverride ?? reason).trim();
+    const ignored: Outcome = { ok: false, message: '' };
+    if (!current || !requestedReason) return ignored;
     const requestedEventId = eventId;
-    const requestedReason = reason.trim();
+    let outcome: Outcome = ignored;
     const { generation, controller } = begin(transitionGate.current);
     setBusy(true);
     setActionError('');
@@ -108,17 +115,18 @@ export function useAdminEntryActions({
           }),
         },
       );
-      if (!isCurrent(transitionGate.current, generation, controller)) return;
-      if (!response.ok) {
-        setActionError(
-          response.status === 401
-            ? 'Deine Anmeldung ist abgelaufen.'
-            : response.status === 403
-              ? 'Du darfst den Status dieser Nennung nicht ändern.'
-              : 'Die Statusänderung wurde abgelehnt.',
-        );
-        return;
-      }
+      if (!isCurrent(transitionGate.current, generation, controller))
+        return ignored;
+      if (!response.ok)
+        return (outcome = {
+          ok: false,
+          message:
+            response.status === 401
+              ? 'Deine Anmeldung ist abgelaufen. Bitte melde dich erneut an.'
+              : response.status === 403
+                ? 'Du darfst den Status dieser Nennung nicht ändern.'
+                : 'Die Statusänderung wurde abgelehnt.',
+        });
       const updated = EntryResponse.parse(await response.json());
       if (
         !isCurrent(transitionGate.current, generation, controller) ||
@@ -127,33 +135,17 @@ export function useAdminEntryActions({
         updated.id !== current.id ||
         updated.eventId !== requestedEventId
       )
-        return;
+        return ignored;
+      outcome = { ok: true };
       setSelected(updated);
       setReason('');
       setRefreshRevision((revision) => revision + 1);
-      const acceptedCategory = workflow?.statuses.find(
-        (item) => item.key === status && item.category === 'accepted',
-      );
-      if (transitionType === 'acceptance' && acceptedCategory) {
-        const currentIndex = items.findIndex((item) => item.id === current.id);
-        const nextOpen = items
-          .slice(Math.max(0, currentIndex + 1))
-          .find(
-            (item) =>
-              workflow?.statuses.find(
-                (candidate) => candidate.key === item.acceptanceStatus,
-              )?.category === 'pending' &&
-              workflow.transitions.some(
-                (edge) =>
-                  edge.from === item.acceptanceStatus &&
-                  edge.to === acceptedCategory.key,
-              ),
-          );
-        if (nextOpen) void openEntry(nextOpen.id);
-      }
     } catch {
       if (isCurrent(transitionGate.current, generation, controller))
-        setActionError('Die Statusänderung konnte nicht abgeschlossen werden.');
+        outcome = {
+          ok: false,
+          message: 'Die Statusänderung konnte nicht abgeschlossen werden.',
+        };
     } finally {
       if (
         isCurrent(transitionGate.current, generation, controller) &&
@@ -164,6 +156,7 @@ export function useAdminEntryActions({
       if (transitionGate.current.controller === controller)
         transitionGate.current.controller = null;
     }
+    return outcome;
   }
 
   const acceptedStatusKey = workflow?.statuses.find(

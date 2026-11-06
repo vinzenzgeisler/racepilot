@@ -63,3 +63,4 @@ export { createPublicRegistrationRateLimitSettingsRepository } from './registrat
 /** Tenant-scoped immutable workflow revisions with organization defaults and event overrides. */
 
 /** Event-scoped status dimensions and audited per-entry status markers. */
+export { createEntryDetailRepository } from './entry-detail.js';

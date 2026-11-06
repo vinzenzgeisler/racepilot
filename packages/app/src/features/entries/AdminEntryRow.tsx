@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import {
+  Button,
   EntryListRow,
   HintLabel,
   Menu,
@@ -40,6 +41,7 @@ export function AdminEntryRow({
   classes,
   workflow,
   openEntry,
+  openEntryDetail,
 }: {
   entry: Entry;
   eventId: string;
@@ -49,6 +51,7 @@ export function AdminEntryRow({
   classes: Array<{ id: string; name: string }>;
   workflow: WorkflowView | null;
   openEntry: (id: string) => Promise<void>;
+  openEntryDetail: (id: string) => Promise<void>;
 }) {
   const details = entry.adminDetails;
   const name = details?.driver.name ?? 'Name nicht verfügbar';
@@ -101,6 +104,16 @@ export function AdminEntryRow({
       payment={<Dimension entry={entry} keyName="payment" />}
       inspection={<Dimension entry={entry} keyName="technical_inspection" />}
       waiver={<Dimension entry={entry} keyName="waiver" />}
+      nextAction={
+        <Button
+          variant="text"
+          size={32}
+          aria-label={`${name} vollständig öffnen`}
+          onClick={() => void openEntryDetail(entry.id)}
+        >
+          Öffnen
+        </Button>
+      }
       openActionId={entry.id}
       menu={
         <Menu label={`Weitere Aktionen für ${name}`}>

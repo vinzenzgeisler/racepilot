@@ -46,6 +46,8 @@ const entry = (id: string, eventId: string, classId: string) => ({
   adminDetails: {
     driver: {
       name: id === entryA ? 'Alex Driver' : 'Casey Driver',
+      firstName: id === entryA ? 'Alex' : 'Casey',
+      lastName: 'Driver',
       dateOfBirth: '1990-01-01',
       country: 'DE',
       email: 'family@example.test',
@@ -225,16 +227,26 @@ async function openDetail() {
     ),
   );
   await flush();
-  expect(container.querySelector('.admin-detail')).not.toBeNull();
+  expect(container.querySelector('.admin-detail-view')).not.toBeNull();
 }
 async function closeDetail() {
-  await click('Zurück zur Liste');
-  expect(container.querySelector('.admin-detail')).toBeNull();
+  await act(async () =>
+    container.querySelector<HTMLButtonElement>('.nb-detail-back')!.click(),
+  );
+  await flush();
+  expect(container.querySelector('.admin-detail-view')).toBeNull();
 }
 function detailEntryId() {
   return container
-    .querySelector('.admin-detail dl dd:nth-of-type(2)')
-    ?.textContent?.trim();
+    .querySelector('.nb-detail-head-title h2')
+    ?.textContent?.split(' · ')[0]
+    ?.trim();
+}
+/** Status changes go through the reason dialog of the action rail. */
+async function changeStatus(action: string, reason = 'Reviewed') {
+  await click(action);
+  await setInput('Begründung', reason);
+  await click('Status ändern');
 }
 
 beforeEach(() => {
@@ -368,7 +380,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventB);
     expect((labeled('Klasse', 'select') as HTMLSelectElement).value).toBe('');
     expect(detailEntryId()).toBeUndefined();
-    expect(container.querySelector('.admin-detail textarea')).toBeNull();
+    expect(container.querySelector('.admin-detail-view textarea')).toBeNull();
     await flush();
     expect(listCalls().at(-1)).toContain(`eventId=${eventB}`);
     expect(listCalls().at(-1)).not.toContain('classId=');
@@ -401,8 +413,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Angenommen');
+    await changeStatus('Zulassen');
     await chooseEvent(eventB);
     expect(visibleEntryIds()).toEqual([entryB]);
     await act(async () =>
@@ -433,8 +444,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Angenommen');
+    await changeStatus('Zulassen');
     await closeDetail();
     await click(entryA2);
     await openDetail();
@@ -468,8 +478,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Angenommen');
+    await changeStatus('Zulassen');
     await closeDetail();
     await setSelect('Klasse', classA);
     await submitFilters();
@@ -545,27 +554,27 @@ describe('AdminEntries', () => {
       ),
     );
     await flush();
-    expect(container.querySelector('.admin-detail')).not.toBeNull();
-    expect(container.querySelector('.admin-detail')?.textContent).toContain(
-      'Verein: MSC Beispielstadt',
-    );
+    expect(container.querySelector('.admin-detail-view')).not.toBeNull();
+    expect(
+      container.querySelector('.admin-detail-view')?.textContent,
+    ).toContain('MSC Beispielstadt');
     const download = container.querySelector(
-      '.admin-detail a[href*="registration-form-uploads"]',
+      '.admin-detail-view a[href*="registration-form-uploads"]',
     ) as HTMLAnchorElement | null;
     expect(download?.textContent).toBe('Datei herunterladen');
     expect(download?.getAttribute('href')).toContain(eventA);
-    expect(container.querySelector('.admin-detail')?.textContent).not.toContain(
-      'uploadToken',
-    );
     expect(
-      container.querySelector('.admin-detail')?.getAttribute('aria-labelledby'),
-    ).toBe('entry-detail-title');
+      container.querySelector('.admin-detail-view')?.textContent,
+    ).not.toContain('uploadToken');
+    expect(
+      container.querySelector('.admin-detail-view')?.getAttribute('aria-label'),
+    ).toBe('Nennung im Detail');
     await act(async () =>
       document.dispatchEvent(
         new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }),
       ),
     );
-    expect(container.querySelector('.admin-detail')).toBeNull();
+    expect(container.querySelector('.admin-detail-view')).toBeNull();
   });
 
   it('uses the configured accepted status key for bulk acceptance', async () => {
@@ -615,7 +624,7 @@ describe('AdminEntries', () => {
     expect(transitionBodies[0]?.status).toBe('confirmed');
   });
 
-  it('opens the next pending entry after acceptance using the configured accepted key', async () => {
+  it('keeps the changed entry open after acceptance using the configured accepted key', async () => {
     vi.spyOn(window, 'prompt').mockReturnValue('Reviewed');
     const second = entry(entryA2, eventA, classA);
     const updatedFirst = { ...itemsA[0]!, acceptanceStatus: 'confirmed' };
@@ -657,9 +666,10 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Bestätigt');
-    expect(detailEntryId()).toBe('Casey Driver');
+    await changeStatus('Zulassen');
+    // The detail stays on the changed entry so its history can be checked.
+    expect(detailEntryId()).toBe('Alex Driver');
+    expect(second.id).toBe(entryA2);
   });
 
   it('keeps the accepted entry selected when no next pending entry exists', async () => {
@@ -706,8 +716,7 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await openDetail();
-    await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
-    await click('Bestätigt');
+    await changeStatus('Zulassen');
     expect(detailEntryId()).toBe('Alex Driver');
   });
 
@@ -791,10 +800,12 @@ describe('AdminEntries', () => {
     await flush();
     await openDetail();
     const actions = [
-      ...container.querySelectorAll<HTMLButtonElement>('.admin-actions button'),
+      ...container.querySelectorAll<HTMLButtonElement>(
+        '.nb-detail-rail button',
+      ),
     ];
     expect(actions).toHaveLength(1);
-    expect(actions[0]?.textContent).toContain('Angenommen');
+    expect(actions[0]?.textContent).toContain('Zulassen');
     expect(
       actions.some((button) =>
         button.textContent?.includes('E-Mail verifizieren'),
@@ -830,5 +841,258 @@ describe('AdminEntries', () => {
     await setSelect('Sort', 'createdAt');
     expect(listCalls().at(-1)).toContain('page=1');
     expect(listCalls().at(-1)).toContain('sort=createdAt');
+  });
+
+  it('edits driver data and records a payment from the detail, refreshing the entry', async () => {
+    const invoice = {
+      id: '90000000-0000-4000-8000-000000000001',
+      paymentReference: 'RF1',
+      currency: 'EUR',
+      totalCents: 12000,
+      paidCents: 0,
+      status: 'open',
+    };
+    const withInvoice = {
+      ...itemsA[0]!,
+      adminDetails: { ...itemsA[0]!.adminDetails, invoice },
+    };
+    const bodies: Record<string, unknown> = {};
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (
+        url === `/admin/entries/${entryA}/driver` &&
+        init?.method === 'PATCH'
+      ) {
+        bodies.driver = JSON.parse(String(init.body));
+        return Response.json({
+          ...withInvoice,
+          adminDetails: {
+            ...withInvoice.adminDetails,
+            driver: { ...withInvoice.adminDetails.driver, phone: '+49 1' },
+          },
+        });
+      }
+      if (url === `/admin/invoices/${invoice.id}/payments`) {
+        bodies.payment = JSON.parse(String(init?.body));
+        return Response.json({ id: 'p1' }, { status: 201 });
+      }
+      if (url === `/admin/entries/${entryA}`)
+        return Response.json(
+          bodies.payment
+            ? {
+                ...withInvoice,
+                adminDetails: {
+                  ...withInvoice.adminDetails,
+                  invoice: {
+                    ...invoice,
+                    paidCents: 5000,
+                    status: 'partially_paid',
+                  },
+                },
+              }
+            : withInvoice,
+        );
+      if (url === `/admin/entries/${entryA}/messages`)
+        return Response.json({ items: [] });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    expect(container.textContent).toContain('nicht angegeben');
+    await click('Bearbeiten');
+    await setInput('Telefon', ' +49 1 ');
+    await click('Speichern');
+    expect(bodies.driver).toEqual({ phone: '+49 1' });
+    expect(container.textContent).toContain('+49 1');
+    await click('Zahlung erfassen');
+    await setInput('Betrag', '50,00');
+    await setInput('Begründung', 'Überweisung');
+    const confirm = [
+      ...container.querySelectorAll<HTMLButtonElement>('dialog button'),
+    ].find((button) => button.textContent === 'Zahlung erfassen')!;
+    await act(async () => confirm.click());
+    await flush();
+    expect(bodies.payment).toEqual({
+      amountCents: 5000,
+      reason: 'Überweisung',
+    });
+    expect(container.querySelector('.nb-detail-rail')?.textContent).toContain(
+      'Zahlung erfassen',
+    );
+  });
+
+  it('keeps multi-part names intact when only the phone number changes', async () => {
+    const hans = {
+      ...itemsA[0]!,
+      adminDetails: {
+        ...itemsA[0]!.adminDetails,
+        driver: {
+          ...itemsA[0]!.adminDetails.driver,
+          name: 'Hans Peter von Berg',
+          firstName: 'Hans Peter',
+          lastName: 'von Berg',
+        },
+      },
+    };
+    let body: unknown;
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse([hans]);
+      if (url === `/admin/entries/${entryA}/driver`) {
+        body = JSON.parse(String(init?.body));
+        return Response.json(hans);
+      }
+      if (url === `/admin/entries/${entryA}`) return Response.json(hans);
+      if (url.endsWith('/messages')) return Response.json({ items: [] });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    await click('Bearbeiten');
+    expect((labeled('Vorname', 'input') as HTMLInputElement).value).toBe(
+      'Hans Peter',
+    );
+    expect((labeled('Nachname', 'input') as HTMLInputElement).value).toBe(
+      'von Berg',
+    );
+    await setInput('Telefon', '+49 5');
+    await click('Speichern');
+    expect(body).toEqual({ phone: '+49 5' });
+  });
+
+  it('shows a rejected or failed status change inside the open dialog', async () => {
+    let status = 403;
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}`) return Response.json(itemsA[0]);
+      if (url.endsWith('/messages')) return Response.json({ items: [] });
+      if (
+        url === `/admin/entries/${entryA}/transitions` &&
+        init?.method === 'POST'
+      )
+        return new Response('{}', { status });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    await changeStatus('Zulassen');
+    const alerts = () =>
+      [...container.querySelectorAll('[role="alert"]')].map((node) => ({
+        text: node.textContent,
+        inDialog: node.closest('dialog') !== null,
+      }));
+    expect(alerts()).toEqual([
+      {
+        text: 'Du darfst den Status dieser Nennung nicht ändern.',
+        inDialog: true,
+      },
+    ]);
+    // A second attempt replaces the message instead of stacking another one behind the dialog.
+    status = 500;
+    await click('Status ändern');
+    expect(alerts()).toEqual([
+      { text: 'Die Statusänderung wurde abgelehnt.', inDialog: true },
+    ]);
+  });
+
+  it('drops a late edit response after the detail was left for another entry', async () => {
+    const slowSave = deferred<Response>();
+    await mount(async (url, init) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}/driver` && init?.method === 'PATCH')
+        return slowSave.promise;
+      if (url === `/admin/entries/${entryA}`) return Response.json(itemsA[0]);
+      if (url === `/admin/entries/${entryA2}`) return Response.json(itemsA[1]);
+      if (url.endsWith('/messages')) return Response.json({ items: [] });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    await click('Bearbeiten');
+    await setInput('Telefon', '+49 9');
+    await click('Speichern');
+    await closeDetail();
+    await click(entryA2);
+    await openDetail();
+    expect(detailEntryId()).toBe('Casey Driver');
+    await act(async () => slowSave.resolve(Response.json(itemsA[0])));
+    await flush();
+    expect(detailEntryId()).toBe('Casey Driver');
+  });
+
+  it('locks identity fields of a shared person, explains the scope and reports a 409', async () => {
+    const shared = {
+      ...itemsA[0]!,
+      adminDetails: {
+        ...itemsA[0]!.adminDetails,
+        driver: {
+          ...itemsA[0]!.adminDetails.driver,
+          identityShared: true,
+          registrationEntryCount: 2,
+        },
+      },
+    };
+    let calls = 0;
+    await mount(async (url) => {
+      if (url === '/admin/events') return eventList();
+      if (url.endsWith('/classes')) return classesFor(classA);
+      if (url.startsWith('/admin/entries?')) return listResponse(itemsA);
+      if (url === `/admin/entries/${entryA}/driver`) {
+        calls += 1;
+        return new Response('{}', { status: 409 });
+      }
+      if (url === `/admin/entries/${entryA}`) return Response.json(shared);
+      if (url.endsWith('/messages'))
+        return Response.json({
+          items: [
+            {
+              id: '55555555-5555-4555-8555-555555555555',
+              status: 'sent',
+              subject: 'Nennung eingegangen',
+              templateKey: 'entry-received',
+              recipient: 'family@example.test',
+              createdAt: '2026-01-01T00:00:00.000Z',
+              sentAt: '2026-01-01T00:00:05.000Z',
+            },
+          ],
+        });
+      return new Response('{}', { status: 404 });
+    });
+    await chooseEvent(eventA);
+    await click(entryA);
+    await openDetail();
+    // A sent mail is not a delivery receipt.
+    expect(container.textContent).toContain('Gesendet');
+    expect(container.textContent).not.toContain('Zugestellt');
+    await click('Bearbeiten');
+    for (const label of ['Vorname', 'Nachname', 'Geburtsdatum', 'Land'])
+      expect(
+        (labeled(label, 'input,select') as HTMLInputElement | HTMLSelectElement)
+          .disabled,
+      ).toBe(true);
+    expect((labeled('Telefon', 'input') as HTMLInputElement).disabled).toBe(
+      false,
+    );
+    expect(container.textContent).toContain(
+      'gelten auch für ihre Nennungen in anderen Veranstaltungen',
+    );
+    expect(container.textContent).toContain('alle 2 Nennungen darin');
+    await setInput('Telefon', '+49 3');
+    await click('Speichern');
+    expect(calls).toBe(1);
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain(
+      'Sie lassen sich hier nicht ändern',
+    );
   });
 });

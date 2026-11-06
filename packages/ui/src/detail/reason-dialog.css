@@ -1,0 +1,20 @@
+.nb-dialog footer .nb-confirm-primary {
+  background: var(--color-green);
+  color: var(--color-ivory);
+}
+.nb-dialog footer .nb-confirm-primary:disabled {
+  border-color: var(--color-line);
+  background: var(--color-sage);
+  color: var(--color-graphite);
+  cursor: not-allowed;
+}
+.nb-reason-body {
+  display: grid;
+  gap: var(--space-3);
+}
+.nb-reason-body p {
+  margin: 0;
+}
+.nb-reason-error {
+  color: var(--color-marshal-text);
+}

@@ -26,6 +26,12 @@ export function useAdminEntriesKeyboard({
           ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target.tagName))
       )
         return;
+      if (isDetailOpen) {
+        // The detail view scrolls and has its own dialogs; only Escape leaves it.
+        if (event.key === 'Escape' && !document.querySelector('dialog[open]'))
+          closeDetail();
+        return;
+      }
       const index = items.findIndex((item) => item.id === selected?.id);
       if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
         event.preventDefault();
@@ -38,8 +44,6 @@ export function useAdminEntriesKeyboard({
             `[data-entry-action="${items[next]!.id}"]`,
           )
           ?.click();
-      } else if (event.key === 'Escape' && isDetailOpen) {
-        closeDetail();
       } else if (event.key === 'Escape' && selected) {
         setSelected(null);
       } else if (

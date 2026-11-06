@@ -20,6 +20,11 @@ export const PriceSnapshotSchema = z
     ),
   })
   .strict();
+export const PublicationPreferenceSchema = z.enum([
+  'name_visible',
+  'initials',
+  'hidden',
+]);
 export const EntryResponse = z
   .object({
     id: z.string().uuid(),
@@ -57,10 +62,22 @@ export const EntryResponse = z
         driver: z
           .object({
             name: z.string(),
+            firstName: z.string(),
+            lastName: z.string(),
             dateOfBirth: z.string().nullable(),
             country: z.string().nullable(),
             email: z.string().nullable(),
             emailVerified: z.boolean(),
+            phone: z.string().nullable().optional(),
+            street: z.string().nullable().optional(),
+            postalCode: z.string().nullable().optional(),
+            city: z.string().nullable().optional(),
+            emergencyContactName: z.string().nullable().optional(),
+            emergencyContactPhone: z.string().nullable().optional(),
+            publicationPreference:
+              PublicationPreferenceSchema.nullable().optional(),
+            identityShared: z.boolean().optional(),
+            registrationEntryCount: z.number().int().optional(),
           })
           .strict(),
         vehicle: z
@@ -70,8 +87,25 @@ export const EntryResponse = z
             year: z.number().int().nullable(),
             imageUrl: z.string().nullable().optional(),
             registration: z.string().nullable().optional(),
+            vehicleType: z.string().nullable().optional(),
+            displacementCc: z.number().int().nullable().optional(),
+            cylinders: z.number().int().nullable().optional(),
+            ownerName: z.string().nullable().optional(),
+            history: z.string().nullable().optional(),
           })
           .strict(),
+        invoice: z
+          .object({
+            id: z.string().uuid(),
+            paymentReference: z.string(),
+            currency: z.string(),
+            totalCents: z.number().int().nonnegative(),
+            paidCents: z.number().int(),
+            status: z.enum(['open', 'partially_paid', 'paid', 'cancelled']),
+          })
+          .strict()
+          .nullable()
+          .optional(),
         eventClass: z.object({ code: z.string(), name: z.string() }).strict(),
         startNumber: z.string().nullable(),
         customAnswers: z.array(

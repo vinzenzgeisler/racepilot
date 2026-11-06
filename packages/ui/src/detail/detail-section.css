@@ -1,0 +1,67 @@
+.nb-detail-section {
+  padding: var(--space-6) 0;
+  border-top: 1px solid var(--color-ink);
+}
+.nb-detail-section:first-child {
+  border-top: 0;
+}
+.nb-detail-section > header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.nb-detail-section h3 {
+  margin: 0;
+  font: var(--text-app-h2);
+  letter-spacing: -0.01em;
+}
+.nb-field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-4) var(--space-6);
+  margin: 0;
+}
+.nb-field-item {
+  min-width: 0;
+}
+.nb-field-item dt {
+  margin-bottom: var(--space-1);
+  color: var(--color-graphite);
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.nb-field-item dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font: 400 15px/1.4 var(--font-plex);
+}
+.nb-field-empty {
+  color: var(--color-graphite);
+}
+.nb-detail-note {
+  margin: var(--space-3) 0 0;
+  color: var(--color-graphite);
+  font: var(--text-body);
+}
+.nb-field-item.is-wide {
+  grid-column: 1 / -1;
+}
+
+.nb-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: var(--space-4) var(--space-6);
+}
+.nb-form-wide {
+  grid-column: 1 / -1;
+}
+.nb-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+}

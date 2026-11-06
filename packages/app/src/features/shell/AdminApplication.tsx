@@ -1,5 +1,11 @@
 import { Button, PreviewPanel } from '@racepilot/ui';
-import { useCallback, useEffect, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { AdminEntries } from '../entries/AdminEntries.js';
 import { AppShell } from './AppShell.js';
@@ -60,7 +66,25 @@ export function AuthenticatedAdmin() {
   );
 }
 
-function AdminApplication() {
+const narrowQuery = '(width < 768px)';
+/** Below 768px the list is the start view; a preview would cover it. */
+function useNarrowViewport() {
+  return useSyncExternalStore(
+    (notify) => {
+      if (typeof window.matchMedia !== 'function') return () => undefined;
+      const query = window.matchMedia(narrowQuery);
+      query.addEventListener('change', notify);
+      return () => query.removeEventListener('change', notify);
+    },
+    () =>
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia(narrowQuery).matches,
+    () => false,
+  );
+}
+
+export function AdminApplication() {
+  const narrow = useNarrowViewport();
   const [identity, setIdentity] = useState(getAdminIdentity());
   const [events, setEvents] = useState<
     Array<{
@@ -78,6 +102,16 @@ function AdminApplication() {
   const [previewOpen, setPreviewOpen] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
   const closePreview = () => setPreviewOpen(false);
+  const activeEvent = useRef('');
+  /** One place for leaving an event: nothing of the old one may stay selected, open or busy. */
+  const changeEvent = useCallback((id: string) => {
+    activeEvent.current = id;
+    setSelectedEvent(id);
+    setSelectedEntry(null);
+    setDetailOpen(false);
+    setPreviewOpen(true);
+    setPreviewBusy(false);
+  }, []);
   useEffect(() => {
     let active = true;
     void adminFetch('/admin/session', { cache: 'no-store' })
@@ -103,6 +137,7 @@ function AdminApplication() {
   const handleSelectionChange = useCallback((entry: Entry | null) => {
     setSelectedEntry(entry);
     if (entry) setPreviewOpen(true);
+    else setDetailOpen(false);
   }, []);
   useEffect(() => {
     let active = true;
@@ -136,7 +171,9 @@ function AdminApplication() {
             : [];
         });
         setEvents(parsed);
-        setSelectedEvent((current) => current || parsed[0]?.id || '');
+        const first = parsed[0]?.id ?? '';
+        setSelectedEvent((current) => current || first);
+        activeEvent.current = activeEvent.current || first;
       })
       .catch(() => undefined);
     return () => {
@@ -153,6 +190,8 @@ function AdminApplication() {
         setPreviewOpen(false);
       }}
       onNextAction={async (status) => {
+        const requestedEvent = activeEvent.current;
+        const requestedEntry = selectedEntry.id;
         setPreviewBusy(true);
         try {
           const response = await adminFetch(
@@ -168,11 +207,16 @@ function AdminApplication() {
             },
           );
           if (response.ok) {
-            setSelectedEntry((await response.json()) as Entry);
+            const updated = (await response.json()) as Entry;
+            // The answer may only update the entry that is still open in the same event.
+            if (activeEvent.current === requestedEvent)
+              setSelectedEntry((current) =>
+                current?.id === requestedEntry ? updated : current,
+              );
             window.dispatchEvent(new Event('nennbox:entries-changed'));
           }
         } finally {
-          setPreviewBusy(false);
+          if (activeEvent.current === requestedEvent) setPreviewBusy(false);
         }
       }}
     />
@@ -184,7 +228,7 @@ function AdminApplication() {
       events={events}
       activeEvent={selectedEvent}
       entryCount={entryCount}
-      onEventChange={setSelectedEvent}
+      onEventChange={changeEvent}
       previewOpen={previewOpen && !detailOpen}
       detailOpen={detailOpen}
       identity={identity}
@@ -198,10 +242,10 @@ function AdminApplication() {
               previewOpen && !detailOpen && Boolean(selectedEntry)
             }
             eventId={selectedEvent}
-            onEventChange={setSelectedEvent}
+            onEventChange={changeEvent}
             onTotalChange={setEntryCount}
             detailOpen={detailOpen}
-            autoPreview
+            autoPreview={!narrow}
             onOpenDetail={() => {
               setDetailOpen(true);
               setPreviewOpen(false);

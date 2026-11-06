@@ -8,6 +8,7 @@ import {
   type PaymentRecipientRepository,
   type InvoicePaymentRepository,
   type EntryRepository,
+  type EntryDetailRepository,
   type EntryWorkflowRepository,
   type EntryStatusDimensionRepository,
   type EntryExportRepository,
@@ -39,6 +40,7 @@ export interface ApiDeps {
   events: EventRepository;
   classes?: EventClassRepository;
   entries?: EntryRepository;
+  entryDetails?: EntryDetailRepository;
   entryExports?: EntryExportRepository;
   entryConfirmations?: EntryConfirmationRepository;
   artifactJobs?: ArtifactJobRepository;
