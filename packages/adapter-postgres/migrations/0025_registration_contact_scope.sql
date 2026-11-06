@@ -1,7 +1,8 @@
 -- Contact, emergency and publication data belong to one registration (event context), not to the
 -- organization-wide person: a returning driver must not change other events' data silently.
--- Columns introduced in 0024 move over; values are carried only where the person has exactly one
--- registration, so nothing is copied into another event's registration.
+-- Columns introduced in 0024 move over without loss: every registration of a person receives the
+-- value that registration showed before (the person-level one), so the view stays the same;
+-- from here on changes are made per registration.
 ALTER TABLE registration_group
   ADD COLUMN phone text,
   ADD COLUMN street text,
@@ -25,9 +26,22 @@ WHERE p.organization_id = g.organization_id
   AND p.id = g.person_id
   AND (p.phone IS NOT NULL OR p.street IS NOT NULL OR p.postal_code IS NOT NULL OR p.city IS NOT NULL
        OR p.emergency_contact_name IS NOT NULL OR p.emergency_contact_phone IS NOT NULL
-       OR p.publication_preference IS NOT NULL)
-  AND (SELECT count(*) FROM registration_group other
-       WHERE other.organization_id = p.organization_id AND other.person_id = p.id) = 1;
+       OR p.publication_preference IS NOT NULL);
+-- Refuse to drop anything that could not be carried over (data of a person without registration).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM person p
+    WHERE (p.phone IS NOT NULL OR p.street IS NOT NULL OR p.postal_code IS NOT NULL OR p.city IS NOT NULL
+           OR p.emergency_contact_name IS NOT NULL OR p.emergency_contact_phone IS NOT NULL
+           OR p.publication_preference IS NOT NULL)
+      AND NOT EXISTS (
+        SELECT 1 FROM registration_group g
+        WHERE g.organization_id = p.organization_id AND g.person_id = p.id)
+  ) THEN
+    RAISE EXCEPTION 'person contact data without a registration cannot be migrated';
+  END IF;
+END $$;
 ALTER TABLE person DROP CONSTRAINT person_publication_preference_check;
 ALTER TABLE person
   DROP COLUMN phone,
