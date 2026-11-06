@@ -216,6 +216,8 @@ test('Community registration and admin lifecycle with API setup', async ({
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: 'Ada Lovelace' });
   await row.locator('button[data-entry-action]').click();
+  // Enter opens the detail of the selected entry; wait until it is loaded.
+  await expect(row.locator('button[data-selected-entry]')).toBeVisible();
   await page.keyboard.press('Enter');
   const entryDetail = page.getByRole('region', {
     name: 'Nennung im Detail',
