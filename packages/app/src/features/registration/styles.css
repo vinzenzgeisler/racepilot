@@ -1,7 +1,14 @@
+.registration-shell {
+  max-width: none;
+  padding: 0;
+}
+
 .registration {
-  max-width: 76rem;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 75rem;
   margin: var(--space-8) auto;
-  padding: 0 var(--space-6);
+  padding: 0 var(--space-10);
 
   --brand-radius: 0;
 }
@@ -14,6 +21,7 @@
 
 .registration-header h2 {
   max-width: 42rem;
+  font: var(--text-registration-display);
   margin-block: var(--space-2);
 }
 
@@ -53,6 +61,16 @@
 .registration-contrast-note {
   border-left: 3px solid var(--brand-accent);
   padding: var(--space-3) var(--space-4);
+}
+
+.registration .nb-form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-registration-preview {
+  max-width: none;
+  margin: 0;
+  padding: 0;
 }
 
 .registration-layout {
@@ -101,6 +119,16 @@
 @media (width <= 720px) {
   .registration {
     padding-inline: var(--space-4);
+  }
+
+  .registration .nb-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-registration-preview {
+    max-width: none;
+    margin: 0;
+    padding: 0;
   }
 
   .registration-layout {

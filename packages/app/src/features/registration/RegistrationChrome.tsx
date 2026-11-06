@@ -79,6 +79,7 @@ export function RegistrationHeader({
         current={step}
         label={locale === 'de' ? 'Anmeldeschritte' : 'Registration steps'}
         completedLabel={locale === 'de' ? 'Abgeschlossen' : 'Completed'}
+        variant="registration"
       />
     </>
   );
