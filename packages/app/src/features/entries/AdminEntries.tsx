@@ -13,18 +13,8 @@ import { AdminEntryList } from './AdminEntryList.js';
 import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
 import { useAdminEntriesKeyboard } from './useAdminEntriesKeyboard.js';
-export function AdminEntries({
-  detailOpen,
-  preview,
-  mobilePreviewOpen,
-  autoPreview = false,
-  onOpenDetail,
-  onCloseDetail,
-  onSelectionChange,
-  onTotalChange,
-  eventId: sharedEventId,
-  onEventChange: onSharedEventChange,
-}: {
+import { useOpenEntryDetail } from './useOpenEntryDetail.js';
+type AdminEntriesProps = {
   detailOpen?: boolean;
   preview?: ReactNode;
   mobilePreviewOpen?: boolean | undefined;
@@ -35,7 +25,29 @@ export function AdminEntries({
   onTotalChange?: (total: number) => void;
   eventId?: string;
   onEventChange?: (id: string) => void;
-} = {}) {
+};
+
+/**
+ * Everything the view holds belongs to one event: selection, filters, page, open detail,
+ * requests in flight. A different shared event therefore mounts a fresh view, which aborts
+ * the old requests and cannot show or update the previous event's entries.
+ */
+export function AdminEntries(props: AdminEntriesProps = {}) {
+  return <AdminEntriesView key={props.eventId ?? 'standalone'} {...props} />;
+}
+
+function AdminEntriesView({
+  detailOpen,
+  preview,
+  mobilePreviewOpen,
+  autoPreview = false,
+  onOpenDetail,
+  onCloseDetail,
+  onSelectionChange,
+  onTotalChange,
+  eventId: sharedEventId,
+  onEventChange: onSharedEventChange,
+}: AdminEntriesProps) {
   const [internalDetailOpen, setInternalDetailOpen] = useState(false);
   const autoPreviewedEvent = useRef('');
   const isDetailOpen = detailOpen ?? internalDetailOpen;
@@ -121,6 +133,7 @@ export function AdminEntries({
     setActionError,
   });
   useEffect(() => onSelectionChange?.(selected), [onSelectionChange, selected]);
+  const openEntryDetail = useOpenEntryDetail(selected, openEntry, openDetail);
   useEffect(() => {
     if (
       !autoPreview ||
@@ -242,7 +255,7 @@ export function AdminEntries({
           ))}
         </SelectField>
       )}
-      {!isDetailOpen && (
+      {!(isDetailOpen && selected) && (
         <AdminEntryList
           preview={preview}
           mobilePreviewOpen={mobilePreviewOpen}
@@ -260,6 +273,7 @@ export function AdminEntries({
           selectedIds={selectedIds}
           setSelection={setSelection}
           openEntry={openEntry}
+          openEntryDetail={openEntryDetail}
           eligibleSelectedItems={eligibleSelectedItems}
           busy={busy}
           clearSelection={clearSelection}
