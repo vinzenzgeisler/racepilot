@@ -12,3 +12,4 @@ export * from './payments.js';
 export * from './exports.js';
 export * from './modules.js';
 export * from './timing.js';
+export * from './entry-detail.js';

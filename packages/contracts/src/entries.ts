@@ -20,6 +20,11 @@ export const PriceSnapshotSchema = z
     ),
   })
   .strict();
+export const PublicationPreferenceSchema = z.enum([
+  'name_visible',
+  'initials',
+  'hidden',
+]);
 export const EntryResponse = z
   .object({
     id: z.string().uuid(),
@@ -61,6 +66,14 @@ export const EntryResponse = z
             country: z.string().nullable(),
             email: z.string().nullable(),
             emailVerified: z.boolean(),
+            phone: z.string().nullable().optional(),
+            street: z.string().nullable().optional(),
+            postalCode: z.string().nullable().optional(),
+            city: z.string().nullable().optional(),
+            emergencyContactName: z.string().nullable().optional(),
+            emergencyContactPhone: z.string().nullable().optional(),
+            publicationPreference:
+              PublicationPreferenceSchema.nullable().optional(),
           })
           .strict(),
         vehicle: z
@@ -70,8 +83,25 @@ export const EntryResponse = z
             year: z.number().int().nullable(),
             imageUrl: z.string().nullable().optional(),
             registration: z.string().nullable().optional(),
+            vehicleType: z.string().nullable().optional(),
+            displacementCc: z.number().int().nullable().optional(),
+            cylinders: z.number().int().nullable().optional(),
+            ownerName: z.string().nullable().optional(),
+            history: z.string().nullable().optional(),
           })
           .strict(),
+        invoice: z
+          .object({
+            id: z.string().uuid(),
+            paymentReference: z.string(),
+            currency: z.string(),
+            totalCents: z.number().int().nonnegative(),
+            paidCents: z.number().int(),
+            status: z.enum(['open', 'partially_paid', 'paid', 'cancelled']),
+          })
+          .strict()
+          .nullable()
+          .optional(),
         eventClass: z.object({ code: z.string(), name: z.string() }).strict(),
         startNumber: z.string().nullable(),
         customAnswers: z.array(
@@ -240,3 +270,67 @@ export const AdminEntryListResponse = z
   .strict();
 export type EntryResponse = z.infer<typeof EntryResponse>;
 export type AdminEntryListResponse = z.infer<typeof AdminEntryListResponse>;
+const optionalText = (max: number) =>
+  z
+    .string()
+    .trim()
+    .max(max)
+    .transform((value) => (value === '' ? null : value))
+    .nullable();
+export const EntryDriverUpdateRequest = z
+  .object({
+    firstName: z.string().trim().min(1).max(100),
+    lastName: z.string().trim().min(1).max(100),
+    dateOfBirth: z.string().date().nullable(),
+    country: z
+      .string()
+      .regex(/^[A-Z]{2}$/)
+      .nullable(),
+    phone: optionalText(40),
+    street: optionalText(200),
+    postalCode: optionalText(20),
+    city: optionalText(100),
+    emergencyContactName: optionalText(200),
+    emergencyContactPhone: optionalText(40),
+    publicationPreference: PublicationPreferenceSchema.nullable(),
+  })
+  .partial()
+  .strict()
+  .refine((value) => Object.keys(value).length > 0);
+export const EntryVehicleUpdateRequest = z
+  .object({
+    make: z.string().trim().min(1).max(100),
+    model: z.string().trim().min(1).max(100),
+    year: z.number().int().min(1886).max(2200).nullable(),
+    registration: optionalText(64),
+    vehicleType: optionalText(60),
+    displacementCc: z.number().int().min(1).max(20000).nullable(),
+    cylinders: z.number().int().min(1).max(24).nullable(),
+    ownerName: optionalText(200),
+    history: optionalText(4000),
+  })
+  .partial()
+  .strict()
+  .refine((value) => Object.keys(value).length > 0);
+export type EntryDriverUpdateRequest = z.infer<typeof EntryDriverUpdateRequest>;
+export type EntryVehicleUpdateRequest = z.infer<
+  typeof EntryVehicleUpdateRequest
+>;
+export const EntryMessagesResponse = z
+  .object({
+    items: z.array(
+      z
+        .object({
+          id: z.string().uuid(),
+          status: z.enum(['pending', 'sending', 'sent', 'failed']),
+          subject: z.string(),
+          templateKey: z.string(),
+          recipient: z.string(),
+          createdAt: z.string().datetime({ offset: true }),
+          sentAt: z.string().datetime({ offset: true }).nullable(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+export type EntryMessagesResponse = z.infer<typeof EntryMessagesResponse>;

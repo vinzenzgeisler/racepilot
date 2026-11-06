@@ -10,7 +10,7 @@ import { organizations, events, eventClasses } from './schema/organization.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { registrationFormUploads } from './schema/forms.js';
 import { sql } from 'drizzle-orm';
-import {} from './schema/billing.js';
+import { invoices } from './schema/billing.js';
 import { loadEntryAdminHistory } from './entry-admin-history.js';
 
 export async function attachAdminEntryDetails(
@@ -151,6 +151,13 @@ export async function attachAdminEntryDetails(
       dateOfBirth: people.dateOfBirth,
       country: people.country,
       email: people.email,
+      phone: people.phone,
+      street: people.street,
+      postalCode: people.postalCode,
+      city: people.city,
+      emergencyContactName: people.emergencyContactName,
+      emergencyContactPhone: people.emergencyContactPhone,
+      publicationPreference: people.publicationPreference,
       emailVerified: entries.verificationStatus,
     })
     .from(entries)
@@ -175,6 +182,11 @@ export async function attachAdminEntryDetails(
       year: vehicles.year,
       imageUrl: vehicles.imageUrl,
       registration: vehicles.registration,
+      vehicleType: vehicles.vehicleType,
+      displacementCc: vehicles.displacementCc,
+      cylinders: vehicles.cylinders,
+      ownerName: vehicles.ownerName,
+      history: vehicles.history,
     })
     .from(entries)
     .innerJoin(
@@ -211,6 +223,24 @@ export async function attachAdminEntryDetails(
         inArray(entries.id, ids),
       ),
     );
+  const invoiceRows = await db
+    .select({
+      groupId: invoices.registrationGroupId,
+      id: invoices.id,
+      paymentReference: invoices.paymentReference,
+      currency: invoices.currency,
+      totalCents: invoices.totalCents,
+      status: invoices.status,
+      paidCents: sql<number>`coalesce((select sum(p.amount_cents) from invoice_payment p where p.organization_id = invoice.organization_id and p.invoice_id = invoice.id), 0)::int`,
+    })
+    .from(invoices)
+    .where(
+      and(
+        eq(invoices.organizationId, ctx.organizationId),
+        inArray(invoices.registrationGroupId, groupIds),
+      ),
+    );
+  const invoiceByGroup = new Map(invoiceRows.map((row) => [row.groupId, row]));
   const historyByEntry = await loadEntryAdminHistory(db, ctx, ids);
   const drivers = new Map(peopleRows.map((row) => [row.entryId, row]));
   const vehiclesByEntry = new Map(vehicleRows.map((row) => [row.entryId, row]));
@@ -232,6 +262,16 @@ export async function attachAdminEntryDetails(
           country: driver?.country ?? null,
           email: driver?.email ?? null,
           emailVerified: driver?.emailVerified === 'verified',
+          phone: driver?.phone ?? null,
+          street: driver?.street ?? null,
+          postalCode: driver?.postalCode ?? null,
+          city: driver?.city ?? null,
+          emergencyContactName: driver?.emergencyContactName ?? null,
+          emergencyContactPhone: driver?.emergencyContactPhone ?? null,
+          publicationPreference:
+            (driver?.publicationPreference as
+              'name_visible' | 'initials' | 'hidden' | null | undefined) ??
+            null,
         },
         vehicle: {
           make: vehicle?.make ?? '',
@@ -239,7 +279,26 @@ export async function attachAdminEntryDetails(
           year: vehicle?.year ?? null,
           imageUrl: vehicle?.imageUrl ?? null,
           registration: vehicle?.registration ?? null,
+          vehicleType: vehicle?.vehicleType ?? null,
+          displacementCc: vehicle?.displacementCc ?? null,
+          cylinders: vehicle?.cylinders ?? null,
+          ownerName: vehicle?.ownerName ?? null,
+          history: vehicle?.history ?? null,
         },
+        invoice: (() => {
+          const invoice = invoiceByGroup.get(item.registrationGroupId);
+          return invoice
+            ? {
+                id: invoice.id,
+                paymentReference: invoice.paymentReference,
+                currency: invoice.currency,
+                totalCents: invoice.totalCents,
+                paidCents: invoice.paidCents,
+                status: invoice.status as
+                  'open' | 'partially_paid' | 'paid' | 'cancelled',
+              }
+            : null;
+        })(),
         eventClass: {
           code: eventClass?.code ?? '',
           name: eventClass?.name ?? '',

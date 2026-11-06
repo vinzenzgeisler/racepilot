@@ -2,6 +2,10 @@ import type { ApiRoutesContext } from './context.js';
 import { registerArtifactRoutes } from './artifact.js';
 import { z } from 'zod';
 import {
+  EntryDriverUpdateRequest,
+  EntryVehicleUpdateRequest,
+} from '@racepilot/contracts';
+import {
   transitionEntry,
   type EntryListQuery,
   type EntryStatusHintKey,
@@ -214,4 +218,54 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
       ? c.json({ updated: true })
       : c.json({ error: 'Not found' }, 404);
   });
+  app.get('/admin/entries/:entryId/messages', async (c) => {
+    const context = await resolveMemberContext(c.req.raw);
+    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    if (!context.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.entryDetails) return c.json({ error: 'Not found' }, 404);
+    const entryId = z.string().uuid().safeParse(c.req.param('entryId'));
+    if (!entryId.success) return c.json({ error: 'Invalid entry' }, 400);
+    const items = await deps.entryDetails.listMessages(context, entryId.data);
+    return items ? c.json({ items }) : c.json({ error: 'Not found' }, 404);
+  });
+  for (const subject of ['driver', 'vehicle'] as const) {
+    app.patch(`/admin/entries/:entryId/${subject}`, async (c) => {
+      const context = await resolveMemberContext(c.req.raw);
+      if (!context) return c.json({ error: 'Unauthorized' }, 401);
+      if (!context.permissions.has('entry:write'))
+        return c.json({ error: 'Forbidden' }, 403);
+      if (!deps.entryDetails || !deps.entries)
+        return c.json({ error: 'Not found' }, 404);
+      const entryId = z.string().uuid().safeParse(c.req.param('entryId'));
+      const body = await c.req.json().catch(() => null);
+      const parsed = (
+        subject === 'driver'
+          ? EntryDriverUpdateRequest
+          : EntryVehicleUpdateRequest
+      ).safeParse(body);
+      if (!entryId.success || !parsed.success)
+        return c.json({ error: 'Invalid request' }, 400);
+      const actor = context.subject
+        ? `${context.subject.issuer}#${context.subject.subject}`
+        : context.correlationId;
+      const found =
+        subject === 'driver'
+          ? await deps.entryDetails.updateDriver(
+              context,
+              entryId.data,
+              parsed.data as import('@racepilot/core').EntryDriverPatch,
+              actor,
+            )
+          : await deps.entryDetails.updateVehicle(
+              context,
+              entryId.data,
+              parsed.data as import('@racepilot/core').EntryVehiclePatch,
+              actor,
+            );
+      if (!found) return c.json({ error: 'Not found' }, 404);
+      const entry = await deps.entries.getById(context, entryId.data);
+      return entry ? c.json(entry) : c.json({ error: 'Not found' }, 404);
+    });
+  }
 }

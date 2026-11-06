@@ -2,6 +2,7 @@ import {
   registrationGroups,
   entries,
   entryAuditEvents,
+  entryDataAuditEvents,
 } from './schema/entries.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import { entryStatusDimensionAudit } from './schema/status.js';
@@ -19,7 +20,7 @@ export async function loadEntryAdminHistory(
   ctx: RequestContext,
   ids: string[],
 ) {
-  const [entryAudits, dimensionAudits, paymentAudits, mailRows] =
+  const [entryAudits, dimensionAudits, paymentAudits, mailRows, dataAudits] =
     await Promise.all([
       db
         .select()
@@ -116,6 +117,15 @@ export async function loadEntryAdminHistory(
             inArray(entries.id, ids),
           ),
         ),
+      db
+        .select()
+        .from(entryDataAuditEvents)
+        .where(
+          and(
+            eq(entryDataAuditEvents.organizationId, ctx.organizationId),
+            inArray(entryDataAuditEvents.entryId, ids),
+          ),
+        ),
     ]);
   const historyByEntry = new Map<
     string,
@@ -151,6 +161,15 @@ export async function loadEntryAdminHistory(
       actor: row.actor,
       occurredAt: row.occurredAt,
       detail: row.reason,
+    });
+  for (const row of dataAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'entry',
+      label: `data: ${row.subject}`,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: Object.keys(row.changes).join(','),
     });
   for (const row of dimensionAudits)
     appendHistory(row.entryId, {
