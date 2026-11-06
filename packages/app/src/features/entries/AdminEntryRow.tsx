@@ -21,7 +21,12 @@ function Dimension({
     (item) => item.key === keyName,
   );
   return dimension ? (
-    <StatusLabel status={dimension.meaning} label={dimension.label.de} />
+    <StatusLabel
+      status={
+        dimension.meaning === 'not_relevant' ? 'empty' : dimension.meaning
+      }
+      label={dimension.label.de}
+    />
   ) : (
     <span>—</span>
   );

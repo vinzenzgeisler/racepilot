@@ -70,7 +70,11 @@ export function EntryPreview({
         .map((item) => (
           <StatusLabel
             key={item.key}
-            status={item.meaning}
+            status={
+              item.key === 'payment' && item.meaning === 'not_relevant'
+                ? 'empty'
+                : item.meaning
+            }
             label={item.label.de}
           />
         ))}

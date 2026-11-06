@@ -100,3 +100,8 @@
   box-shadow: inset 0 0 0 1px var(--color-line);
   border-style: dashed;
 }
+.nb-status-empty {
+  color: var(--color-graphite);
+  box-shadow: inset 0 0 0 1px var(--color-line);
+  background: transparent;
+}
