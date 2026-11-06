@@ -54,6 +54,26 @@ export interface AdminEntryInvoice {
   status: 'open' | 'partially_paid' | 'paid' | 'cancelled';
 }
 
+/** Everything the admin detail shows about one entry beyond the entry record itself. */
+export interface AdminEntryDetails {
+  driver: AdminEntryDriver;
+  vehicle: AdminEntryVehicle;
+  invoice?: AdminEntryInvoice | null;
+  consents?: AdminEntryConsent[];
+  eventClass: {
+    code: string;
+    name: string;
+    vehicleType?: 'car' | 'motorcycle' | 'kart' | 'other';
+  };
+  startNumber: string | null;
+  customAnswers: Array<{
+    key: string;
+    label: string;
+    value: string | boolean | null;
+    fileDownloadUrl: string | null;
+  }>;
+}
+
 export interface EntryDriverPatch {
   firstName?: string;
   lastName?: string;

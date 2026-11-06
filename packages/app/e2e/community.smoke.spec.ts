@@ -115,6 +115,12 @@ test('Community registration and admin lifecycle with API setup', async ({
   });
   await call(`/admin/events/${event.id}/registration-form-config`, 'PUT', {
     welcomeText: 'Alpha E2E registration',
+    // The event asks for a phone number, hides the city and requires the engine size.
+    fields: {
+      phone: { state: 'required' },
+      city: { state: 'hidden' },
+      displacement: { state: 'required' },
+    },
     customFields: [
       {
         key: 'vehicle_photo',
@@ -169,6 +175,13 @@ test('Community registration and admin lifecycle with API setup', async ({
   await page.getByLabel('Nachname').fill('Lovelace');
   await page.getByLabel('Kontakt-E-Mail').fill(participant);
   await page.getByLabel('Geburtsdatum').fill('1990-12-10');
+  // The event hides the city, so there is no such field; the phone number is required.
+  await expect(page.getByLabel('Ort', { exact: true })).toHaveCount(0);
+  await page.getByLabel('Straße und Hausnummer').fill('Musterweg 1');
+  await page.getByLabel('PLZ', { exact: true }).fill('01067');
+  await page.getByLabel('Notfallkontakt · Name').fill('Bernd Lovelace');
+  await page.getByLabel('Notfallkontakt · Telefon').fill('+49 351 999');
+  await page.getByLabel('Veröffentlichung').selectOption('initials');
   const uploadedPng = Buffer.from(
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/pVQAAAAASUVORK5CYII=',
     'base64',
@@ -181,9 +194,17 @@ test('Community registration and admin lifecycle with API setup', async ({
   await expect(page.getByRole('status')).toContainText('vehicle.png');
   await shots('public-driver-step');
   await page.getByRole('button', { name: 'Weiter', exact: true }).click();
+  // Without the required phone number the form stays on the driver step.
+  await expect(page.getByLabel('Telefon', { exact: true })).toBeVisible();
+  await page.getByLabel('Telefon', { exact: true }).fill('+49 351 123456');
+  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
   await page.getByLabel('Klasse').selectOption(cls.id);
   await page.getByLabel('Hersteller').fill('Lotus');
   await page.getByLabel('Modell').fill('Seven');
+  await page.getByLabel('Hubraum (cm³)').fill('1600');
+  await page.getByLabel('Zylinder').fill('4');
+  await page.getByLabel('Besitzer').fill('Ada Lovelace');
+  await page.getByLabel('Fahrzeughistorie').fill('Neuaufbau 2019');
   await shots('public-vehicle-step');
   await page.getByRole('button', { name: 'Weiter', exact: true }).click();
   await expect(page.getByText(consent)).toBeVisible();
@@ -250,6 +271,23 @@ test('Community registration and admin lifecycle with API setup', async ({
   });
   await expect(entryDetail).toBeVisible();
   await expect(entryDetail).toContainText(participant);
+  // What the participant filled in arrives unchanged in the detail.
+  for (const value of [
+    '+49 351 123456',
+    'Musterweg 1, 01067',
+    'Bernd Lovelace · +49 351 999',
+    'Nur Initialen',
+    '1600 cm³',
+    'Ada Lovelace',
+    'Neuaufbau 2019',
+    'Auto',
+  ])
+    await expect(entryDetail).toContainText(value);
+  // The accepted consent is shown from its stored evidence, with the exact wording.
+  const consents = entryDetail.getByRole('region', { name: 'Einwilligungen' });
+  await expect(consents).toContainText('participation');
+  await consents.getByText('Wortlaut anzeigen').click();
+  await expect(consents).toContainText(consent);
   const fileDownload = page.getByRole('link', { name: 'Datei herunterladen' });
   await expect(fileDownload).toBeVisible();
   const [download] = await Promise.all([
