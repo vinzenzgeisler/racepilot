@@ -220,15 +220,22 @@ test('Community registration and admin lifecycle with API setup', async ({
   );
   await shots('public-confirmation');
 
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1920, height: 1000 });
   await page.goto('/app');
   await page
     .getByRole('combobox', { name: 'Veranstaltung' })
     .selectOption(event.id);
-  await expect(page.getByText('Ada Lovelace', { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole('row').filter({ hasText: 'Ada Lovelace' }),
+  ).toBeVisible();
   await shots('admin-populated-list');
   const row = page.getByRole('row').filter({ hasText: 'Ada Lovelace' });
-  await row.locator('button[data-entry-action]').click();
+  await row.getByRole('button', { name: 'Ada Lovelace Lotus Seven' }).click();
+  await expect(
+    page
+      .getByRole('complementary', { name: 'Nennungsvorschau' })
+      .getByText('Ada Lovelace'),
+  ).toBeVisible();
   // Enter opens the detail of the selected entry; wait until it is loaded.
   await expect(row.locator('button[data-selected-entry]')).toBeVisible();
   await page.keyboard.press('Enter');

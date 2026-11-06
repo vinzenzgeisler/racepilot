@@ -20,7 +20,7 @@ type EventOption = {
   slug?: string;
   registrationClosesAt?: string | null;
 };
-type View = 'entries' | 'workflow' | 'account';
+type View = 'entries' | 'workflow' | 'setup' | 'account';
 type NavItem = { id: View; label: string; icon: IconName };
 export const APP_NAVIGATION_REGISTRY: Array<{
   label: string;
@@ -30,6 +30,7 @@ export const APP_NAVIGATION_REGISTRY: Array<{
     label: 'Veranstaltung',
     items: [
       { id: 'entries', label: 'Nennungen', icon: 'list' },
+      { id: 'setup', label: 'Einrichten', icon: 'calendar' },
       { id: 'workflow', label: 'Nennungsablauf', icon: 'approval' },
     ],
   },
@@ -129,10 +130,14 @@ export function AppShell({
             className={view === 'entries' ? 'nb-entry-page-header' : undefined}
             title={
               view === 'entries'
-                ? 'Nennungen'
+                ? detailOpen
+                  ? 'Nennung im Detail'
+                  : 'Nennungen'
                 : view === 'workflow'
                   ? 'Nennungsablauf'
-                  : 'Einstellungen'
+                  : view === 'setup'
+                    ? 'Veranstaltung einrichten'
+                    : 'Einstellungen'
             }
             description={
               view === 'entries' && closeDate
