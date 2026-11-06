@@ -1,0 +1,102 @@
+.nb-entry-list-row {
+  height: 64px;
+  cursor: pointer;
+}
+.nb-entry-list-row.is-selected {
+  background: var(--color-sage);
+  box-shadow: inset 3px 0 var(--color-green);
+}
+.nb-entry-list-row td {
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--color-line);
+  vertical-align: middle;
+}
+.nb-entry-list-person {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 220px;
+}
+.nb-entry-list-person img,
+.nb-entry-list-image-empty {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 40px;
+  object-fit: cover;
+  background: var(--color-sage);
+  color: var(--color-graphite);
+}
+.nb-entry-list-person span:last-child {
+  display: grid;
+  min-width: 0;
+}
+.nb-entry-list-person strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--text-heading-4);
+}
+.nb-entry-list-person small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-graphite);
+  font: var(--text-label);
+}
+.nb-entry-list-number {
+  font: var(--text-app-h2);
+}
+@media (width < 768px) {
+  .nb-entry-list-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-2);
+    min-height: 76px;
+    height: auto;
+    margin: 0;
+    padding: var(--space-2);
+    border: 0;
+    border-bottom: 1px solid var(--color-line);
+  }
+  .nb-entry-list-row td {
+    display: block;
+    height: auto;
+    padding: 0;
+    border: 0;
+  }
+  .nb-entry-list-row td:first-child,
+  .nb-entry-list-row td:nth-child(3),
+  .nb-entry-list-row td:nth-child(7),
+  .nb-entry-list-row td:nth-child(8),
+  .nb-entry-list-row td:nth-child(9) {
+    display: none;
+  }
+  .nb-entry-list-row td:nth-child(2) {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .nb-entry-list-row td:nth-child(4) {
+    grid-column: 2;
+    grid-row: 1;
+    text-align: end;
+  }
+  .nb-entry-list-row td:nth-child(5) {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .nb-entry-list-row td:nth-child(6) {
+    grid-column: 2;
+    grid-row: 2;
+    text-align: end;
+  }
+  .nb-entry-list-person {
+    min-width: 0;
+  }
+  .nb-entry-list-person img,
+  .nb-entry-list-image-empty {
+    width: 64px;
+    height: 48px;
+  }
+}

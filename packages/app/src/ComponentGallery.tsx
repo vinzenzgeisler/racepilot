@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { GalleryAdvancedComponents } from './features/gallery/GalleryAdvancedComponents.js';
+import { GalleryWorkspaceComponents } from './features/gallery/GalleryWorkspaceComponents.js';
 import './features/gallery/gallery-advanced.css';
 import {
   Button,
@@ -253,6 +254,7 @@ export function ComponentGallery() {
         )}
       </section>
       <GalleryAdvancedComponents />
+      <GalleryWorkspaceComponents />
       {selected && (
         <SelectionBar
           label="Auswahlaktionen"
