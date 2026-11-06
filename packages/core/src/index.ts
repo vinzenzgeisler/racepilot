@@ -20,3 +20,4 @@ export {
   MESSAGE_ATTACHMENT_LIMITS,
   MESSAGE_VERIFICATION_TOKEN_TTL_MS,
 } from '@racepilot/contracts';
+export * from './registration-fields.js';
