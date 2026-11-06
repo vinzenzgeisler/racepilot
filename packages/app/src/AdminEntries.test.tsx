@@ -218,6 +218,19 @@ function visibleEntryIds() {
     (button) => button.getAttribute('data-entry-action'),
   );
 }
+async function openDetail() {
+  await act(async () =>
+    document.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }),
+    ),
+  );
+  await flush();
+  expect(container.querySelector('.admin-detail')).not.toBeNull();
+}
+async function closeDetail() {
+  await click('Zurück zur Liste');
+  expect(container.querySelector('.admin-detail')).toBeNull();
+}
 function detailEntryId() {
   return container
     .querySelector('.admin-detail dl dd:nth-of-type(2)')
@@ -343,10 +356,12 @@ describe('AdminEntries', () => {
     await chooseEvent(eventA);
     await click(entryA);
     await click(entryA2);
+    await openDetail();
     expect(detailEntryId()).toBe('Casey Driver');
     await act(async () => slowDetail.resolve(Response.json(itemsA[0])));
     await flush();
     expect(detailEntryId()).toBe('Casey Driver');
+    await closeDetail();
     await setSelect('Klasse', classA);
     await submitFilters();
     expect(listCalls().at(-1)).toContain(`classId=${classA}`);
@@ -385,6 +400,7 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
+    await openDetail();
     await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
     await click('Angenommen');
     await chooseEvent(eventB);
@@ -416,9 +432,12 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
+    await openDetail();
     await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
     await click('Angenommen');
+    await closeDetail();
     await click(entryA2);
+    await openDetail();
     expect(detailEntryId()).toBe('Casey Driver');
     await act(async () =>
       slowTransition.resolve(
@@ -448,8 +467,10 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
+    await openDetail();
     await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
     await click('Angenommen');
+    await closeDetail();
     await setSelect('Klasse', classA);
     await submitFilters();
     await click('Weiter');
@@ -470,7 +491,7 @@ describe('AdminEntries', () => {
     expect(refreshes[0]).toContain(`classId=${classA}`);
   });
 
-  it('renders entry details instead of IDs and provides one next action per row', async () => {
+  it('renders entry details instead of IDs and one working row menu', async () => {
     await mount(async (url) => {
       if (url === '/admin/events') return eventList();
       if (url.endsWith('/classes')) return classesFor(classA);
@@ -484,17 +505,17 @@ describe('AdminEntries', () => {
     expect(firstRow.textContent).toContain('Touring A');
     expect(firstRow.textContent).toContain('42');
     expect(firstRow.textContent).not.toContain(entryA);
-    expect(firstRow.querySelectorAll('.entry-open-button')).toHaveLength(1);
+    expect(firstRow.querySelectorAll('.nb-entry-list-open')).toHaveLength(1);
     expect(
       firstRow.querySelector('.nb-menu summary')?.getAttribute('aria-label'),
-    ).toBe('Weitere Aktionen');
+    ).toBe('Weitere Aktionen für Alex Driver');
     expect(
       firstRow.querySelectorAll('.nb-menu [role=menuitem]').length,
     ).toBeGreaterThan(0);
-    expect(firstRow.querySelector('.entry-image-missing')).not.toBeNull();
+    expect(firstRow.querySelector('.nb-entry-list-image-empty')).not.toBeNull();
   });
 
-  it('shows selected count and closes the wide preview with Escape; Enter opens detail', async () => {
+  it('shows selected count and opens or closes detail with Enter and Escape', async () => {
     await mount(async (url) => {
       if (url === '/admin/events') return eventList();
       if (url.endsWith('/classes')) return classesFor(classA);
@@ -509,12 +530,14 @@ describe('AdminEntries', () => {
     await act(async () => {
       checkbox.click();
     });
-    expect(
-      container.querySelector('.entry-selection-bar')?.textContent,
-    ).toContain('1 von 2');
+    expect(container.querySelector('.nb-selection')?.textContent).toContain(
+      '1 von 2',
+    );
     const action = container.querySelector(
       `[data-entry-action="${entryA}"]`,
     ) as HTMLButtonElement;
+    await act(async () => action.click());
+    await flush();
     await act(async () => action.focus());
     await act(async () =>
       action.dispatchEvent(
@@ -582,10 +605,8 @@ describe('AdminEntries', () => {
     ) as HTMLInputElement;
     await act(async () => checkbox.click());
     await flush();
-    const accept = [
-      ...container.querySelectorAll('.entry-selection-bar button'),
-    ].find((button) =>
-      button.textContent?.includes('Zulassen'),
+    const accept = [...container.querySelectorAll('.nb-selection button')].find(
+      (button) => button.textContent?.includes('Zulassen'),
     ) as HTMLButtonElement;
     expect(accept.disabled).toBe(false);
     await act(async () => accept.click());
@@ -635,6 +656,7 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
+    await openDetail();
     await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
     await click('Bestätigt');
     expect(detailEntryId()).toBe('Casey Driver');
@@ -683,6 +705,7 @@ describe('AdminEntries', () => {
     });
     await chooseEvent(eventA);
     await click(entryA);
+    await openDetail();
     await setInput('Begründung (für das Protokoll erforderlich)', 'Reviewed');
     await click('Bestätigt');
     expect(detailEntryId()).toBe('Alex Driver');
@@ -711,18 +734,18 @@ describe('AdminEntries', () => {
       await flush();
     };
     await selectFirst();
-    expect(
-      container.querySelector('.entry-selection-bar')?.textContent,
-    ).toContain('1 von');
+    expect(container.querySelector('.nb-selection')?.textContent).toContain(
+      '1 von',
+    );
     await setInput('Suche', 'Alex');
     await submitFilters();
-    expect(container.querySelector('.entry-selection-bar')).toBeNull();
+    expect(container.querySelector('.nb-selection')).toBeNull();
     await selectFirst();
     await click('Weiter');
-    expect(container.querySelector('.entry-selection-bar')).toBeNull();
+    expect(container.querySelector('.nb-selection')).toBeNull();
     await selectFirst();
     await chooseEvent(eventB);
-    expect(container.querySelector('.entry-selection-bar')).toBeNull();
+    expect(container.querySelector('.nb-selection')).toBeNull();
     expect(
       (
         container.querySelector(
@@ -766,6 +789,7 @@ describe('AdminEntries', () => {
       ).click(),
     );
     await flush();
+    await openDetail();
     const actions = [
       ...container.querySelectorAll<HTMLButtonElement>('.admin-actions button'),
     ];
