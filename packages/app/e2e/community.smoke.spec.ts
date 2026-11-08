@@ -232,7 +232,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   const preview = page.getByRole('complementary', { name: 'Nennungsvorschau' });
   await expect(preview).toContainText('Ada Lovelace');
   await preview.getByRole('button', { name: 'Zulassen' }).click();
-  await expect(preview).toContainText('Zugelassen');
+  await expect(preview).toContainText('Angenommen');
   await preview.getByRole('button', { name: 'Vollständig öffnen' }).click();
   const entryDetail = page.getByRole('region', {
     name: 'Nennung im Detail',
@@ -252,7 +252,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
     /zugelassen|angenommen/i,
   );
-  await expect(entryDetail).toContainText('Zugelassen');
+  await expect(entryDetail).toContainText('Angenommen');
   await expect(
     entryDetail.getByRole('button', { name: 'Zulassen' }),
   ).toHaveCount(0);
