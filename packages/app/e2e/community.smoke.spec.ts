@@ -220,7 +220,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   );
   await shots('public-confirmation');
 
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1920, height: 1080 });
   await page.goto('/app');
   await page
     .getByRole('combobox', { name: 'Veranstaltung' })
