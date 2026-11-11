@@ -33,7 +33,7 @@ export function EntryPreview({
   const status = entry.statusProjection?.dimensions;
   const next = status?.find((item) => item.key === 'entry')?.nextAction;
   const nextStatus = next?.key.startsWith('entry:') ? next.key.slice(6) : null;
-  const canAcceptNext = next?.label.de === 'Zulassen';
+  const canAcceptNext = nextStatus === 'accepted';
   const missing =
     status
       ?.filter(

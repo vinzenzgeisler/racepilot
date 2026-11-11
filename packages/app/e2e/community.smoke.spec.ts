@@ -237,7 +237,11 @@ test('Community registration and admin lifecycle with API setup', async ({
   const preview = page.getByRole('complementary', { name: 'Nennungsvorschau' });
   await expect(preview).toContainText('Ada Lovelace');
   await shots('admin-entry-preview');
-  await preview.getByRole('button', { name: 'Zulassen' }).click();
+  const nextActionButton = preview
+    .locator('.nb-preview-actions > button')
+    .first();
+  await expect(nextActionButton).toBeVisible();
+  await nextActionButton.click();
   await expect(preview).toContainText('Angenommen');
   await preview.getByRole('button', { name: 'Vollständig öffnen' }).click();
   const entryDetail = page.getByRole('region', {
