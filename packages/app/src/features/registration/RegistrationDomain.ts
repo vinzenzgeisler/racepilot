@@ -4,6 +4,7 @@ import type {
   RegistrationFormConfig,
 } from '@racepilot/contracts';
 export type FormPayload = {
+  organization: { name: string; contactEmail: string | null };
   form: StandardRegistrationForm;
   event: {
     id: string;
@@ -141,8 +142,10 @@ export const translations = {
     street: 'Straße und Hausnummer',
     postalCode: 'PLZ',
     city: 'Ort',
-    emergencyContactName: 'Notfallkontakt · Name',
-    emergencyContactPhone: 'Notfallkontakt · Telefon',
+    address: 'Adresse',
+    emergencyContact: 'Notfallkontakt',
+    emergencyContactName: 'Name',
+    emergencyContactPhone: 'Telefon',
     publicationPreference: 'Veröffentlichung',
     publicationNotGiven: 'Keine Angabe',
     publicationNameVisible: 'Name sichtbar',
@@ -182,8 +185,10 @@ export const translations = {
     street: 'Street and number',
     postalCode: 'Postal code',
     city: 'City',
-    emergencyContactName: 'Emergency contact · name',
-    emergencyContactPhone: 'Emergency contact · phone',
+    address: 'Address',
+    emergencyContact: 'Emergency contact',
+    emergencyContactName: 'Name',
+    emergencyContactPhone: 'Phone',
     publicationPreference: 'Publication',
     publicationNotGiven: 'No preference',
     publicationNameVisible: 'Name visible',

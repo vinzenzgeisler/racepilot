@@ -1,5 +1,7 @@
 {
-  "packages/adapter-local-storage/src/index.ts": ["createLocalObjectStorage"],
+  "packages/adapter-local-storage/src/index.ts": [
+    "createLocalObjectStorage"
+  ],
   "packages/adapter-oidc/src/index.ts": [
     "OIDCConfig",
     "createOIDCIdentityProvider"
@@ -164,6 +166,7 @@
     "PublicationPreferenceSchema",
     "RegistrationBranding",
     "RegistrationBrandingSchema",
+    "RegistrationContactFieldsSchema",
     "RegistrationCustomField",
     "RegistrationCustomFieldAnswersSchema",
     "RegistrationCustomFieldSchema",
@@ -376,6 +379,8 @@
     "issueInvoice",
     "listEventModules",
     "listOrganizationModules",
+    "mapRegistrationContactDetails",
+    "mapRegistrationVehicleDetails",
     "messageCampaignDelivery",
     "messagePlaceholderNames",
     "messagePlaceholders",

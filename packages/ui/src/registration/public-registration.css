@@ -1,0 +1,264 @@
+.registration-shell {
+  max-width: none;
+  padding: 0;
+}
+.registration {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  --brand-radius: 0;
+}
+.registration-header {
+  background: var(--brand-primary);
+  color: var(--brand-primary-text);
+}
+.registration-header-inner,
+.registration-container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 75rem;
+  margin-inline: auto;
+  padding-inline: clamp(var(--space-4), 4vw, var(--space-12));
+}
+.registration-header-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(18rem, 0.8fr);
+  gap: var(--space-8) var(--space-12);
+  align-items: end;
+  padding-block: var(--space-8) var(--space-12);
+}
+.registration-language {
+  grid-column: 2;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.registration-header-copy {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+.registration-header-copy h1 {
+  color: var(--brand-primary-text);
+  max-width: 42rem;
+  margin-block: var(--space-2);
+  font: var(--text-registration-display);
+}
+.registration-header-copy > p:last-child {
+  max-width: 44rem;
+  margin-block-end: 0;
+  font-size: var(--text-body);
+  line-height: var(--type-body-line);
+}
+.registration-logo {
+  display: block;
+  max-width: 12rem;
+  max-height: 5rem;
+  object-fit: contain;
+  margin-bottom: var(--space-4);
+}
+.registration-header-image {
+  display: block;
+  width: 100%;
+  max-height: 18rem;
+  object-fit: cover;
+  margin-bottom: var(--space-4);
+}
+.registration-event-date {
+  display: inline-flex;
+  padding: var(--space-1) var(--space-2);
+  background: var(--brand-accent);
+  color: var(--brand-accent-text);
+  font: var(--text-label);
+  text-transform: uppercase;
+}
+.registration-header-meta {
+  grid-column: 2;
+  display: grid;
+  gap: 0;
+  border-top: 1px solid currentColor;
+}
+.registration-language .nb-button {
+  min-height: var(--target-min);
+  padding-inline: var(--space-3);
+  justify-content: center;
+  color: var(--brand-primary-text);
+  outline-color: currentColor;
+}
+.registration-language .nb-primary-dark {
+  color: var(--color-night);
+}
+.registration-language .nb-button-signal {
+  display: none;
+}
+.registration-organization-name {
+  margin: 0;
+  font-weight: 600;
+}
+.registration-header-meta p {
+  display: grid;
+  grid-template-columns: minmax(7.5rem, 0.7fr) 1fr;
+  gap: var(--space-3);
+  margin: 0;
+  padding-block: var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  font-weight: 600;
+}
+.registration-header-meta span {
+  font: var(--text-label);
+  opacity: 0.8;
+}
+.registration-container {
+  padding-block: var(--space-10) var(--space-12);
+}
+.registration .nb-steps.is-registration {
+  margin-block: 0 var(--space-8);
+}
+.registration-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.65fr) minmax(16rem, 0.8fr);
+  gap: var(--space-8);
+  align-items: start;
+}
+.registration-form {
+  min-width: 0;
+  padding: clamp(var(--space-6), 3vw, var(--space-10));
+  border: 1px solid var(--color-line);
+  background: var(--surface-panel);
+}
+.registration-form fieldset {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.registration-form legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.registration .nb-form-grid {
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+}
+.registration .nb-field > span {
+  color: var(--color-ink);
+  font: 500 var(--type-small-size)/var(--type-small-line) var(--font-plex);
+  text-transform: none;
+}
+.registration-form fieldset > .nb-form-grid,
+.registration-form fieldset > .nb-form-section,
+.registration-form fieldset > .registration-vehicle-fields,
+.registration-form fieldset > .consent-list,
+.registration-form fieldset > .guardian-fields,
+.registration-form fieldset > .registration-wide {
+  grid-column: 1 / -1;
+}
+.registration-summary {
+  position: sticky;
+  top: var(--space-4);
+  padding: var(--space-6);
+  border: 1px solid var(--color-line);
+  background: var(--surface-panel);
+}
+.registration-summary h3 {
+  margin-block-start: 0;
+  font: var(--text-app-h2);
+}
+.registration-summary p {
+  margin-block: 0;
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--color-line);
+}
+.registration-footer {
+  max-width: 75rem;
+  margin-inline: auto;
+  padding: var(--space-4) clamp(var(--space-4), 4vw, var(--space-12));
+  border-top: 1px solid var(--color-line);
+  color: var(--color-graphite);
+}
+.registration-form .vehicle-card {
+  border: 1px solid var(--color-line);
+  background: var(--surface-panel);
+}
+.registration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-line);
+}
+.registration :focus-visible {
+  outline: 0.2rem solid var(--brand-accent, var(--color-marshal));
+  outline-offset: 3px;
+}
+@media (width <= 48rem) {
+  .registration-header-inner {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+    padding-block: var(--space-6);
+  }
+  .registration-language,
+  .registration-header-copy,
+  .registration-header-meta {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .registration-language {
+    justify-content: flex-start;
+  }
+  .registration-container {
+    padding-block: var(--space-6);
+  }
+  .registration-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+  .registration-form fieldset {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .registration .nb-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .registration-summary {
+    position: static;
+  }
+  .registration-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.registration-form > fieldset > legend {
+  grid-column: 1 / -1;
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  margin-bottom: var(--space-4);
+  font: var(--text-app-h2);
+  white-space: normal;
+}
+
+.registration .nb-form-section.is-registration {
+  gap: var(--space-4);
+  margin-block: var(--space-6);
+  padding: var(--space-6) 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+
+.registration .nb-form-section.is-registration legend {
+  padding: 0;
+  font: var(--text-heading-4);
+}
+
+.registration .nb-form-section.is-registration > div {
+  display: block;
+}

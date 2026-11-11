@@ -49,6 +49,8 @@ export function createRegistrationFormMethods(
         );
       const [organization] = await db
         .select({
+          name: organizations.name,
+          contactEmail: organizations.contactEmail,
           registrationSettings: organizations.registrationSettings,
           registrationFormConfig: organizations.registrationFormConfig,
           currency: organizations.currency,
@@ -78,6 +80,10 @@ export function createRegistrationFormMethods(
             }
           : (eventConfig ?? organizationConfig ?? null);
       return {
+        organization: {
+          name: organization?.name ?? '',
+          contactEmail: organization?.contactEmail ?? null,
+        },
         event: {
           id: event.id,
           slug: event.slug,

@@ -1,4 +1,10 @@
-import { Field, FormGrid, FormWide, SelectField } from '@racepilot/ui';
+import {
+  Field,
+  FormGrid,
+  FormSection,
+  FormWide,
+  SelectField,
+} from '@racepilot/ui';
 import type { RegistrationFormConfig } from '@racepilot/contracts';
 import {
   fieldState,
@@ -43,39 +49,6 @@ export function RegistrationContactFields({
   return (
     <FormGrid>
       {text('phone', 'phone', 'tel')}
-      {state('street') !== 'hidden' && (
-        <FormWide>{text('street', 'street')}</FormWide>
-      )}
-      {text('postalCode', 'postalCode')}
-      {text('city', 'city')}
-      {emergency !== 'hidden' && (
-        <>
-          <Field
-            label={t.emergencyContactName}
-            required={
-              emergency === 'required' || Boolean(values.emergencyContactPhone)
-            }
-            maxLength={200}
-            value={values.emergencyContactName}
-            onChange={(event) =>
-              set('emergencyContactName')(event.target.value)
-            }
-          />
-          <Field
-            label={t.emergencyContactPhone}
-            type="tel"
-            // An emergency contact is one unit: giving the name makes the number necessary.
-            required={
-              emergency === 'required' || Boolean(values.emergencyContactName)
-            }
-            maxLength={40}
-            value={values.emergencyContactPhone}
-            onChange={(event) =>
-              set('emergencyContactPhone')(event.target.value)
-            }
-          />
-        </>
-      )}
       {state('publicationPreference') !== 'hidden' && (
         <SelectField
           label={t.publicationPreference}
@@ -88,6 +61,53 @@ export function RegistrationContactFields({
           <option value="initials">{t.publicationInitials}</option>
           <option value="hidden">{t.publicationHidden}</option>
         </SelectField>
+      )}
+      {(state('street') !== 'hidden' ||
+        state('postalCode') !== 'hidden' ||
+        state('city') !== 'hidden') && (
+        <FormWide>
+          <FormSection title={t.address} variant="registration">
+            <FormGrid>
+              {text('street', 'street')}
+              {text('postalCode', 'postalCode')}
+              {text('city', 'city')}
+            </FormGrid>
+          </FormSection>
+        </FormWide>
+      )}
+      {emergency !== 'hidden' && (
+        <FormWide>
+          <FormSection title={t.emergencyContact} variant="registration">
+            <FormGrid>
+              <Field
+                label={t.emergencyContactName}
+                required={
+                  emergency === 'required' ||
+                  Boolean(values.emergencyContactPhone)
+                }
+                maxLength={200}
+                value={values.emergencyContactName}
+                onChange={(event) =>
+                  set('emergencyContactName')(event.target.value)
+                }
+              />
+              <Field
+                label={t.emergencyContactPhone}
+                type="tel"
+                // An emergency contact is one unit: giving the name makes the number necessary.
+                required={
+                  emergency === 'required' ||
+                  Boolean(values.emergencyContactName)
+                }
+                maxLength={40}
+                value={values.emergencyContactPhone}
+                onChange={(event) =>
+                  set('emergencyContactPhone')(event.target.value)
+                }
+              />
+            </FormGrid>
+          </FormSection>
+        </FormWide>
       )}
     </FormGrid>
   );
