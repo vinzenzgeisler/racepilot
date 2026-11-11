@@ -21,6 +21,7 @@ export const mailTemplateContracts = {
     'statusKey',
     'statusLabelDe',
     'statusLabelEn',
+    'driverNote',
   ],
   'message-campaign': ['subject', 'body'],
 } as const;
@@ -83,13 +84,13 @@ const defaultCopy: Record<MailTemplateKey, Record<MailLocale, MailTemplate>> = {
   'status-change': {
     de: {
       subject: 'Neuer Nennungsstatus: {{eventName}}',
-      text: 'Hallo {{recipientName}}, der Status deiner Nennung für {{eventName}} ist jetzt {{statusLabelDe}} ({{statusKey}}).',
-      html: '<p>Hallo {{recipientName}},</p><p>Der Status deiner Nennung für {{eventName}} ist jetzt {{statusLabelDe}} (<code>{{statusKey}}</code>).</p>',
+      text: 'Hallo {{recipientName}}, der Status deiner Nennung für {{eventName}} ist jetzt {{statusLabelDe}} ({{statusKey}}). {{driverNote}}',
+      html: '<p>Hallo {{recipientName}},</p><p>Der Status deiner Nennung für {{eventName}} ist jetzt {{statusLabelDe}} (<code>{{statusKey}}</code>).</p><p>{{driverNote}}</p>',
     },
     en: {
       subject: 'Entry status updated: {{eventName}}',
-      text: 'Hello {{recipientName}}, your entry status for {{eventName}} is now {{statusLabelEn}} ({{statusKey}}).',
-      html: '<p>Hello {{recipientName}},</p><p>Your entry status for {{eventName}} is now {{statusLabelEn}} (<code>{{statusKey}}</code>).</p>',
+      text: 'Hello {{recipientName}}, your entry status for {{eventName}} is now {{statusLabelEn}} ({{statusKey}}). {{driverNote}}',
+      html: '<p>Hello {{recipientName}},</p><p>Your entry status for {{eventName}} is now {{statusLabelEn}} (<code>{{statusKey}}</code>).</p><p>{{driverNote}}</p>',
     },
   },
   'message-campaign': {
