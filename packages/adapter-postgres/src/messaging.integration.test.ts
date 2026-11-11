@@ -159,7 +159,7 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
           payload,
           'integration-test',
         ),
-      ).toBeNull();
+      ).toMatchObject({ ok: false, error: { code: 'event-not-found' } });
       const first = await repo.send(
         context,
         owner.event.id,
