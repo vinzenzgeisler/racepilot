@@ -17,7 +17,6 @@ import {
   people,
   vehicles,
   registrationGroups,
-  entries,
 } from './index.js';
 
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
@@ -118,6 +117,13 @@ describe.skipIf(!url)(
         };
         const tenantA = await createTenant('A');
         const tenantB = await createTenant('B');
+        const contextA = createRequestContext({
+          deploymentMode: 'community',
+          organizationId: organizationId(tenantA.organization.id),
+          permissions: new Set(['entry:read', 'entry:write']),
+          capabilities: new Set(),
+          correlationId: 'tenant-a',
+        });
         const createEntry = async () =>
           createEntryRepository(db).create!(contextA, {
             eventId: tenantA.event.id,
@@ -149,13 +155,6 @@ describe.skipIf(!url)(
         expect([...codes].sort()).toEqual(expectedBackfillCodes.sort());
 
         const repository = createEntryDocumentsRepository(db);
-        const contextA = createRequestContext({
-          deploymentMode: 'community',
-          organizationId: organizationId(tenantA.organization.id),
-          permissions: new Set(['entry:read', 'entry:write']),
-          capabilities: new Set(),
-          correlationId: 'tenant-a',
-        });
         const contextB = createRequestContext({
           deploymentMode: 'community',
           organizationId: organizationId(tenantB.organization.id),
