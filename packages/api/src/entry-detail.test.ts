@@ -1,12 +1,20 @@
 import { describe, expect, it } from 'vitest';
-import { organizationId, type Entry } from '@racepilot/core';
+import {
+  organizationId,
+  type Entry,
+  type EntryAdminActionResult,
+} from '@racepilot/core';
 import { createApp } from './index.js';
 
 const org = organizationId('11111111-1111-4111-8111-111111111111');
 const entryId = '33333333-3333-4333-8333-333333333333';
 const foreignEntryId = '44444444-4444-4444-8444-444444444444';
 
-function appWith(permissions: string[], calls: unknown[] = []) {
+function appWith(
+  permissions: string[],
+  calls: unknown[] = [],
+  actionResult: EntryAdminActionResult = { status: 'updated' },
+) {
   return createApp({
     config: { deploymentMode: 'community', organizationId: org },
     organizations: { getById: async () => null, update: async () => null },
@@ -25,6 +33,13 @@ function appWith(permissions: string[], calls: unknown[] = []) {
           : null,
       transition: async () => null,
       softDelete: async () => null,
+    },
+    entryAdminActions: {
+      availableActions: async () => ['change_class', 'delete'],
+      perform: async (ctx, id, action, actor) => {
+        calls.push(['action', ctx.organizationId, id, action, actor]);
+        return actionResult;
+      },
     },
     entryDetails: {
       updateDriver: async (ctx, id, patch, actor) => {
@@ -157,6 +172,19 @@ describe('entry detail routes', () => {
     expect(response.status).toBe(409);
     expect(await response.json()).toEqual({ error: 'person_shared' });
   });
+  it('returns only available management actions in the detail payload', async () => {
+    const response = await appWith(['entry:read', 'entry:write']).request(
+      `/admin/entries/${entryId}`,
+    );
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      availableActions: ['change_class', 'delete'],
+    });
+    const readOnly = await appWith(['entry:read']).request(
+      `/admin/entries/${entryId}`,
+    );
+    expect(await readOnly.json()).toMatchObject({ availableActions: [] });
+  });
   it('lists the mails of an entry', async () => {
     const response = await appWith(['entry:read']).request(
       `/admin/entries/${entryId}/messages`,
@@ -170,5 +198,49 @@ describe('entry detail routes', () => {
         }),
       ],
     });
+  });
+  it('maps typed admin action outcomes to API status codes', async () => {
+    const request = (body: unknown) =>
+      appWith(['entry:write']).request(
+        `/admin/entries/${entryId}/actions`,
+        json('POST', body),
+      );
+    const base = {
+      kind: 'adjust_amount',
+      amountCents: 1000,
+      reason: 'Rabatt',
+      expectedVersion: 1,
+    };
+    expect((await request(base)).status).toBe(200);
+    const stale = await appWith(['entry:write'], [], {
+      status: 'conflict',
+      reason: 'stale',
+    }).request(
+      `/admin/entries/${entryId}/actions`,
+      json('POST', { kind: 'delete', reason: 'Grund', expectedVersion: 1 }),
+    );
+    expect(stale.status).toBe(409);
+    expect(await stale.json()).toEqual({ error: 'stale' });
+    const capacity = await appWith(['entry:write'], [], {
+      status: 'conflict',
+      reason: 'capacity',
+    }).request(
+      `/admin/entries/${entryId}/actions`,
+      json('POST', {
+        kind: 'change_class',
+        classId: '22222222-2222-4222-8222-222222222222',
+        reason: 'Wechsel',
+        expectedVersion: 1,
+      }),
+    );
+    expect(capacity.status).toBe(409);
+    const missing = await appWith(['entry:write'], [], {
+      status: 'not_found',
+    }).request(`/admin/entries/${foreignEntryId}/actions`, json('POST', base));
+    expect(missing.status).toBe(404);
+    expect(
+      (await request({ kind: 'delete', reason: '', expectedVersion: 1 }))
+        .status,
+    ).toBe(422);
   });
 });

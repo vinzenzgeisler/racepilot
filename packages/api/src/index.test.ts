@@ -540,8 +540,8 @@ describe('api entry', () => {
           ...(reason === undefined ? {} : { reason }),
         }),
       });
-    expect((await request()).status).toBe(403);
-    expect((await request('')).status).toBe(403);
+    expect((await request()).status).toBe(422);
+    expect((await request('')).status).toBe(422);
     const optionalReason = await app.request(
       '/admin/entries/entry-1/transitions',
       {
@@ -550,8 +550,7 @@ describe('api entry', () => {
         body: JSON.stringify({ transition: 'acceptance', status: 'accepted' }),
       },
     );
-    expect(optionalReason.status).toBe(200);
-    expect((received as unknown[])[6]).toBe('');
+    expect(optionalReason.status).toBe(422);
     expect((await request('not allowed', 'pending')).status).toBe(403);
     const response = await request('request documents');
     expect(response.status).toBe(200);

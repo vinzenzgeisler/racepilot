@@ -4,6 +4,8 @@ import { registerEntryExportRoutes } from './entry-exports.js';
 import { registerOverviewRoutes } from './overview.js';
 import { z } from 'zod';
 import { registerEntryDocumentRoutes } from './documents.js';
+import { registerEntryAdminActionRoutes } from './entry-admin-actions.js';
+import { requireEntryWriter } from './entry-write-guard.js';
 import {
   EntryDriverUpdateRequest,
   EntryVehicleUpdateRequest,
@@ -20,6 +22,7 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
   registerEntryDocumentRoutes(context);
   registerEntryExportRoutes(context);
   registerOverviewRoutes(context);
+  registerEntryAdminActionRoutes(context);
 
   app.get('/admin/entries', async (c) => {
     const context = await resolveMemberContext(c.req.raw);
@@ -105,18 +108,10 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
       statuses: counts,
     });
   });
-  app.get('/admin/entries/:entryId', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('entry:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entries) return c.json({ error: 'Not found' }, 404);
-    const entry = await deps.entries.getById(context, c.req.param('entryId'));
-    return entry ? c.json(entry) : c.json({ error: 'Not found' }, 404);
-  });
   app.post('/admin/entries/:entryId/transitions', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     if (!deps.entries) return c.json({ error: 'Not found' }, 404);
     const body = await c.req.json().catch(() => null);
     const parsed = z
@@ -128,6 +123,8 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
       .strict()
       .safeParse(body);
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
+    if (!parsed.data.reason.trim())
+      return c.json({ error: 'reason_required' }, 422);
     try {
       const result = await transitionEntry(
         context,
@@ -151,10 +148,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
   app.post(
     '/admin/entries/:entryId/status-dimensions/:dimension/transitions',
     async (c) => {
-      const context = await resolveMemberContext(c.req.raw);
-      if (!context) return c.json({ error: 'Unauthorized' }, 401);
-      if (!context.permissions.has('entry:write'))
-        return c.json({ error: 'Forbidden' }, 403);
+      const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+      if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+      const context = guard.context;
       if (!deps.entryStatusDimensions)
         return c.json({ error: 'Not found' }, 404);
       const dimension = z
@@ -163,7 +159,7 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
       const parsed = z
         .object({
           status: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
-          reason: z.string().trim().min(1).max(1000),
+          reason: z.string().trim().max(1000),
         })
         .strict()
         .safeParse(await c.req.json().catch(() => null));
@@ -190,10 +186,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
     },
   );
   app.put('/admin/entries/:entryId/status-hints', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('entry:write'))
-      return c.json({ error: 'Forbidden' }, 403);
+    const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     if (!deps.entryStatusDimensions) return c.json({ error: 'Not found' }, 404);
     const parsed = z
       .object({
@@ -205,7 +200,7 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
           })
           .strict()
           .refine((value) => Object.keys(value).length > 0),
-        reason: z.string().trim().min(1).max(1000),
+        reason: z.string().trim().max(1000),
       })
       .strict()
       .safeParse(await c.req.json().catch(() => null));
@@ -237,10 +232,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
   });
   for (const subject of ['driver', 'vehicle'] as const) {
     app.patch(`/admin/entries/:entryId/${subject}`, async (c) => {
-      const context = await resolveMemberContext(c.req.raw);
-      if (!context) return c.json({ error: 'Unauthorized' }, 401);
-      if (!context.permissions.has('entry:write'))
-        return c.json({ error: 'Forbidden' }, 403);
+      const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+      if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+      const context = guard.context;
       if (!deps.entryDetails || !deps.entries)
         return c.json({ error: 'Not found' }, 404);
       const entryId = z.string().uuid().safeParse(c.req.param('entryId'));

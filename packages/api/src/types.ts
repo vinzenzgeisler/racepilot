@@ -9,6 +9,7 @@ import {
   type InvoicePaymentRepository,
   type EntryRepository,
   type EntryDetailRepository,
+  type EntryAdminActionsRepository,
   type EntryWorkflowRepository,
   type EntryStatusDimensionRepository,
   type EntryExportRepository,
@@ -98,6 +99,7 @@ export interface ApiDeps {
     ): Promise<MessageCampaignSendResult<MessageCampaignData>>;
   };
   entryDetails?: EntryDetailRepository;
+  entryAdminActions?: EntryAdminActionsRepository;
   entryExports?: EntryExportRepository;
   overview?: OverviewRepository;
   entryConfirmations?: EntryConfirmationRepository;
