@@ -193,11 +193,15 @@ test('Community registration and admin lifecycle with API setup', async ({
   });
   await expect(page.getByRole('status')).toContainText('vehicle.png');
   await shots('public-driver-step');
-  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Weiter zu Startmeldungen', exact: true })
+    .click();
   // Without the required phone number the form stays on the driver step.
   await expect(page.getByLabel('Telefon', { exact: true })).toBeVisible();
   await page.getByLabel('Telefon', { exact: true }).fill('+49 351 123456');
-  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Weiter zu Startmeldungen', exact: true })
+    .click();
   await page.getByLabel('Klasse').selectOption(cls.id);
   await page.getByLabel('Hersteller').fill('Lotus');
   await page.getByLabel('Modell').fill('Seven');
