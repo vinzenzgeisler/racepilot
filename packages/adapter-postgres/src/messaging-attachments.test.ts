@@ -37,7 +37,7 @@ describe('message attachment metadata validation', () => {
       await validateMessageAttachmentMetadata(storage(head), tenantId, [
         attachment,
       ]),
-    ).toBeNull();
+    ).toEqual({ ok: true });
     expect(head).toHaveBeenCalledWith(tenantId, attachment.objectId);
   });
 

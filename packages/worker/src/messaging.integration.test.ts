@@ -131,8 +131,9 @@ describe.skipIf(!databaseUrl)(
           'worker-test',
         );
         if (!sendResult.ok) throw new Error('Campaign send failed');
-        const campaign = sendResult.campaign;
-        expect(campaign).toMatchObject({ total: 1, status: 'sending' });
+        const campaign = sendResult.campaign.campaign;
+        expect(sendResult.campaign.recipients).toHaveLength(1);
+        expect(campaign.status).toBe('sending');
         const [outbox] = await db
           .select()
           .from(emailOutbox)
