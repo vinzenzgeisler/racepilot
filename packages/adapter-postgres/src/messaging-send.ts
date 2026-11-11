@@ -116,7 +116,7 @@ export function createMessageSender(
                   organizationId: context.organizationId,
                   eventId: value.eventId,
                   idempotencyKey: value.idempotencyKey,
-                  requestHash: digestMessage(value.requestHash),
+                  requestHash: value.requestHash,
                   subject: value.subject,
                   textBody: value.text,
                   status: 'planned',
