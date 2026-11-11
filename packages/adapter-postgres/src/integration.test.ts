@@ -1078,6 +1078,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         'id',
         'name',
         'openedAt',
+        'orgaCodePrefix',
         'organizationId',
         'registrationClosesAt',
         'registrationOpensAt',
@@ -1563,6 +1564,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         [
           'id',
           'organizationId',
+          'orgaCode',
           'eventId',
           'classId',
           'registrationGroupId',
@@ -1578,6 +1580,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           'deletedAt',
           'deletionReason',
           'statusProjection',
+          'documentProjection',
           'adminHistory',
           'adminDetails',
         ].sort(),
