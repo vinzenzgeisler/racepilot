@@ -102,7 +102,11 @@ export function EntryListRow({
       <td data-priority="3" className="nb-entry-list-waiver">
         {waiver}
       </td>
-      <td data-priority="1" data-column="actions" onClick={(event) => event.stopPropagation()}>
+      <td
+        data-priority="1"
+        data-column="actions"
+        onClick={(event) => event.stopPropagation()}
+      >
         {nextAction}
         {menu}
       </td>
