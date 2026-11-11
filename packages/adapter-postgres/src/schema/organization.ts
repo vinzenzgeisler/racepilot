@@ -80,6 +80,7 @@ export const events = pgTable(
       .notNull()
       .references(() => organizations.id),
     slug: text('slug').notNull(),
+    orgaCodePrefix: text('orga_code_prefix'),
     name: text('name').notNull(),
     startsOn: date('starts_on').notNull(),
     endsOn: date('ends_on').notNull(),

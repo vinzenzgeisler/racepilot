@@ -24,6 +24,7 @@ export function createEventRepository(db: Database): EventRepository {
     id: row.id,
     organizationId: organizationId(row.organizationId),
     slug: row.slug,
+    orgaCodePrefix: row.orgaCodePrefix,
     name: row.name,
     startsOn: row.startsOn,
     endsOn: row.endsOn,
@@ -80,6 +81,7 @@ export function createEventRepository(db: Database): EventRepository {
         .values({
           organizationId: ctx.organizationId,
           ...input,
+          orgaCodePrefix: input.orgaCodePrefix?.trim().toUpperCase() ?? null,
           registrationOpensAt: input.registrationOpensAt
             ? new Date(input.registrationOpensAt)
             : null,
@@ -95,6 +97,12 @@ export function createEventRepository(db: Database): EventRepository {
         .update(events)
         .set({
           ...(patch.slug !== undefined ? { slug: patch.slug } : {}),
+          ...(patch.orgaCodePrefix !== undefined
+            ? {
+                orgaCodePrefix:
+                  patch.orgaCodePrefix?.trim().toUpperCase() ?? null,
+              }
+            : {}),
           ...(patch.name !== undefined ? { name: patch.name } : {}),
           ...(patch.startsOn !== undefined ? { startsOn: patch.startsOn } : {}),
           ...(patch.endsOn !== undefined ? { endsOn: patch.endsOn } : {}),

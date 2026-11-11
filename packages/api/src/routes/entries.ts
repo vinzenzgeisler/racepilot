@@ -1,6 +1,7 @@
 import type { ApiRoutesContext } from './context.js';
 import { registerArtifactRoutes } from './artifact.js';
 import { z } from 'zod';
+import { registerEntryDocumentRoutes } from './documents.js';
 import {
   EntryDriverUpdateRequest,
   EntryVehicleUpdateRequest,
@@ -14,6 +15,7 @@ import {
 export function registerEntriesRoutes(context: ApiRoutesContext): void {
   const { app, deps, resolveMemberContext } = context;
   registerArtifactRoutes(context);
+  registerEntryDocumentRoutes(context);
 
   app.get('/admin/entries', async (c) => {
     const context = await resolveMemberContext(c.req.raw);

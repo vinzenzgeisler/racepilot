@@ -35,6 +35,7 @@ const entry: Entry = {
   verificationStatus: 'unverified',
   acceptanceStatus: 'pending',
   requestedStartNumber: null,
+  orgaCode: 'EVT-00001',
   priceSnapshotVersion: null,
   formSnapshotVersion: null,
   createdAt: new Date(0).toISOString(),

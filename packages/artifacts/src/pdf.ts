@@ -17,6 +17,7 @@ export interface EntryConfirmationData {
   readonly priceSnapshot: PriceSnapshot;
   readonly paymentRecipient: PaymentRecipient | null;
   readonly paymentReference: string;
+  readonly orgaCodes?: readonly string[];
   readonly bankTransferCapability: boolean;
   readonly branding: {
     readonly organizationName: string;
@@ -92,6 +93,8 @@ export async function createEntryConfirmationPdf(
     ' ' +
     input.priceSnapshot.currency;
   text('Preis laut Preissnapshot: ' + amount, 48, 535, 14, bold);
+  if (input.orgaCodes?.length)
+    text('Orga-Code: ' + input.orgaCodes.join(', '), 48, 515);
   if (input.bankTransferCapability) {
     const instruction = createTransferInstruction({
       recipient: input.paymentRecipient,

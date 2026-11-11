@@ -34,6 +34,7 @@ export function createEntryConfirmationRepository(
           className: eventClasses.name,
           snapshot: entries.priceSnapshot,
           paymentReference: invoices.paymentReference,
+          orgaCode: entries.orgaCode,
         })
         .from(registrationGroups)
         .innerJoin(
@@ -119,6 +120,7 @@ export function createEntryConfirmationRepository(
         classes: [...new Set(rows.map((row) => row.className))],
         priceSnapshot: snapshot,
         paymentReference: reference,
+        orgaCodes: [...new Set(rows.map((row) => row.orgaCode))],
       };
     },
   };

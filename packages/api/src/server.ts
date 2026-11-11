@@ -21,6 +21,7 @@ import {
   createPaymentRecipientRepository,
   createEventClassPricingRepository,
   createEntryRepository,
+  createEntryDocumentsRepository,
   createEntryDetailRepository,
   getOrganizationMailConfiguration,
   createModuleActivationRepository,
@@ -125,6 +126,7 @@ serve({
     pricing: createEventClassPricingRepository(db),
     entries: createEntryRepository(db),
     messages: createMessageRepository(db, storage, config.CANONICAL_BASE_URL),
+    entryDocuments: createEntryDocumentsRepository(db),
     // Optional event modules are registered statically here (ADR 0004); Community
     // activates everything locally, so no entitlement port is supplied.
     modules: {

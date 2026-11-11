@@ -15,6 +15,8 @@ import {
 import { eq, and, inArray } from 'drizzle-orm';
 import { invoices } from './schema/billing.js';
 import { events } from './schema/organization.js';
+import { eventEntryDocumentTypes, entryDocuments } from './schema/documents.js';
+import { projectEntryDocumentLines } from './entry-document-projection.js';
 
 export function mapEntry(
   row: typeof entries.$inferSelect,
@@ -27,6 +29,7 @@ export function mapEntry(
     driverPersonId: row.driverPersonId,
     vehicleId: row.vehicleId,
     requestedStartNumber: row.requestedStartNumber,
+    orgaCode: row.orgaCode,
     priceSnapshotVersion: row.priceSnapshotVersion,
     formSnapshotVersion: row.formSnapshotVersion,
     priceSnapshot: row.priceSnapshot,
@@ -69,6 +72,8 @@ export async function projectEntryRows(
     invoiceRows,
     eventRows,
     starterResult,
+    documentTypes,
+    documentRows,
   ] = await Promise.all([
     revisionIds.length
       ? db.execute(sql`
@@ -133,6 +138,29 @@ export async function projectEntryRows(
         FROM entry WHERE organization_id=${ctx.organizationId}
           AND event_id IN ${inSql(eventIds)} AND deleted_at IS NULL
       `),
+    db
+      .select()
+      .from(eventEntryDocumentTypes)
+      .where(
+        and(
+          eq(eventEntryDocumentTypes.organizationId, ctx.organizationId),
+          inArray(eventEntryDocumentTypes.eventId, eventIds),
+          eq(eventEntryDocumentTypes.enabled, true),
+        ),
+      ),
+    db
+      .select()
+      .from(entryDocuments)
+      .where(
+        and(
+          eq(entryDocuments.organizationId, ctx.organizationId),
+          inArray(entryDocuments.entryId, ids),
+        ),
+      )
+      .orderBy(
+        sql`${entryDocuments.uploadedAt} desc`,
+        sql`${entryDocuments.id} desc`,
+      ),
   ]);
   type WorkflowRow = {
     id: string;
@@ -158,6 +186,24 @@ export async function projectEntryRows(
   const invoiceMap = new Map(
     invoiceRows.map((row) => [row.registrationGroupId, row.status]),
   );
+  const typeMap = new Map(
+    documentTypes.map((type) => [
+      type.eventId,
+      [
+        ...documentTypes.filter(
+          (candidate) => candidate.eventId === type.eventId,
+        ),
+      ],
+    ]),
+  );
+  const latestDocumentMap = new Map<
+    string,
+    typeof entryDocuments.$inferSelect
+  >();
+  for (const document of documentRows) {
+    const key = `${document.entryId}:${document.typeKey}`;
+    if (!latestDocumentMap.has(key)) latestDocumentMap.set(key, document);
+  }
   const closeMap = new Map(
     eventRows.map((row) => [row.id, row.registrationClosesAt]),
   );
@@ -194,6 +240,22 @@ export async function projectEntryRows(
       config: configMap.get(row.eventId) ?? defaultEntryStatusDimensionConfig,
       hints,
     });
-    return { ...mapEntry(row), statusProjection };
+    const documentProjection = projectEntryDocumentLines(
+      row.id,
+      typeMap.get(row.eventId) ?? [],
+      documentRows,
+      statusProjection.dimensions,
+    );
+    return {
+      ...mapEntry(row),
+      statusProjection: {
+        ...statusProjection,
+        documents: {
+          complete: documentProjection.uploadedRequiredCount,
+          total: documentProjection.requiredCount,
+        },
+      },
+      documentProjection,
+    };
   });
 }

@@ -525,7 +525,10 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           ({ key }) => key === 'technical_inspection',
         )?.value,
       ).toBe('reinspection');
-      expect(projected?.statusProjection?.documents.total).toBe(2);
+      expect(projected?.statusProjection?.documents).toEqual({
+        complete: 0,
+        total: 0,
+      });
       expect(
         projected?.statusProjection?.hints.find(
           ({ key }) => key === 'passenger',
@@ -2708,6 +2711,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           .from(emailOutbox)
           .where(eq(emailOutbox.organizationId, org!.id))
       )[0]!;
+      expect(outbox.variables.orgaCodes).toContain('-');
       const verificationUrl = outbox.variables.verificationUrl!;
       const token = new URL(verificationUrl).searchParams.get('token')!;
       expect(new URL(verificationUrl).origin).toBe(

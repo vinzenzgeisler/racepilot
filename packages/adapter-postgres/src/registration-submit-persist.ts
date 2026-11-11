@@ -1,4 +1,4 @@
-import { desc, eq, and } from 'drizzle-orm';
+import { desc, eq, and, inArray } from 'drizzle-orm';
 import {
   calculatePrice,
   mapRegistrationVehicleDetails,
@@ -8,7 +8,7 @@ import {
 import type { RequestContext } from '@racepilot/core';
 import { eventClassPricingRules } from './schema/billing.js';
 import { emailTemplateVersions } from './mail-schema.js';
-import { vehicles } from './schema/entries.js';
+import { vehicles, entries } from './schema/entries.js';
 import { consentEvidence } from './schema/forms.js';
 import { persistRegistrationVerificationToken } from './registration-verification-token.js';
 import { eventClasses } from './schema/organization.js';
@@ -173,6 +173,21 @@ export async function persistRegistrationSubmission(args: {
       receivedAt.getTime() + (tokenTtlMs ?? MESSAGE_VERIFICATION_TOKEN_TTL_MS),
     ),
   });
+  const codeRows = await tx
+    .select({ id: entries.id, code: entries.orgaCode })
+    .from(entries)
+    .where(
+      and(
+        eq(entries.organizationId, ctx.organizationId),
+        eq(entries.eventId, event.id),
+        inArray(entries.id, entryIds),
+      ),
+    );
+  const codeByEntry = new Map(codeRows.map((row) => [row.id, row.code]));
+  const orgaCodes = entryIds.flatMap((id) => {
+    const code = codeByEntry.get(id);
+    return code ? [code] : [];
+  });
   const verificationUrl = new URL(
     `/registration/verify?token=${encodeURIComponent(token)}`,
     canonicalBase,
@@ -192,6 +207,8 @@ export async function persistRegistrationSubmission(args: {
       variables: {
         verificationUrl,
         recipientName: `${payload.person.firstName.trim()} ${payload.person.lastName.trim()}`,
+        orgaCode: orgaCodes.length === 1 ? orgaCodes[0]! : orgaCodes.join(', '),
+        orgaCodes: orgaCodes.join(', '),
       },
       correlationId: payload.submissionId,
     },

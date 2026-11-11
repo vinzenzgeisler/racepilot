@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { EntryDocumentProjectionSchema } from './documents.js';
 
 export const PriceSnapshotSchema = z
   .object({
@@ -29,6 +30,7 @@ export const EntryResponse = z
   .object({
     id: z.string().uuid(),
     organizationId: z.string().uuid(),
+    orgaCode: z.string().optional(),
     eventId: z.string().uuid(),
     classId: z.string().uuid(),
     registrationGroupId: z.string().uuid(),
@@ -143,6 +145,7 @@ export const EntryResponse = z
       })
       .strict()
       .optional(),
+    documentProjection: EntryDocumentProjectionSchema.optional(),
     statusProjection: z
       .object({
         dimensions: z.array(

@@ -950,6 +950,7 @@ describe('entry confirmation artifact routes', () => {
                   lines: [],
                 },
                 paymentReference: 'RP-1',
+                orgaCodes: ['RACE-00001'],
               }
             : null;
         },
