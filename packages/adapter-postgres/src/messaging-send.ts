@@ -9,6 +9,7 @@ import type {
 } from '@racepilot/core';
 import { sendMessageCampaign } from '@racepilot/core';
 import { MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/contracts';
+import { validateMessageAttachmentMetadata } from './messaging-attachments.js';
 import type { Database } from './database.js';
 import { organizations } from './schema/organization.js';
 import { groupEmailVerifications } from './schema/public-registration.js';
@@ -51,41 +52,12 @@ export function createMessageSender(
       CampaignResponse
     > = {
       maxAttachments: MESSAGE_ATTACHMENT_LIMITS.maxCount,
-      validateAttachments: async (attachments) => {
-        if (attachments.length && (!storage || !storage.head))
-          return {
-            ok: false,
-            error: {
-              code: 'storage-unavailable',
-              message: 'Attachment storage is unavailable',
-            },
-          };
-        let totalBytes = 0;
-        for (const attachment of attachments) {
-          const object = await storage!.head!(
-            ctx.organizationId,
-            attachment.objectId,
-          );
-          if (!object || object.contentType !== 'application/pdf')
-            return {
-              ok: false,
-              error: {
-                code: 'attachment-unavailable',
-                message: 'Attachment is unavailable or not a PDF',
-              },
-            };
-          totalBytes += object.size;
-          if (totalBytes > MESSAGE_ATTACHMENT_LIMITS.maxBytes)
-            return {
-              ok: false,
-              error: {
-                code: 'attachment-too-large',
-                message: 'Attachments exceed the configured size limit',
-              },
-            };
-        }
-        return null;
-      },
+      validateAttachments: (attachments) =>
+        validateMessageAttachmentMetadata(
+          storage,
+          ctx.organizationId,
+          attachments,
+        ),
       transaction: (context, work) =>
         db.transaction(async (tx) => {
           const transaction: MessageCampaignTransaction<
