@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   defaultRegistrationFormConfig,
   PublicRegistrationRequestSchema,
+  RegistrationContactFieldsSchema,
   RegistrationFormConfigPatchSchema,
   RegistrationFormConfigSchema,
 } from '@racepilot/contracts';
@@ -68,7 +69,12 @@ describe('registration field configuration', () => {
   it('normalizes, bounds and rejects public contact and vehicle input', () => {
     const valid = PublicRegistrationRequestSchema.parse(
       request(
-        { phone: ' +49 351 123456 ', city: '', emergencyContactName: 'Bernd' },
+        {
+          phone: ' +49 351 123456 ',
+          city: '',
+          emergencyContactName: 'Bernd',
+          emergencyContactPhone: '+49 351 654321',
+        },
         { displacementCc: 1177, cylinders: 4, history: '  Neuaufbau ' },
       ),
     );
@@ -86,5 +92,32 @@ describe('registration field configuration', () => {
       expect(PublicRegistrationRequestSchema.safeParse(bad).success).toBe(
         false,
       );
+  });
+});
+
+describe('shared emergency contact schema', () => {
+  it('accepts both fields or neither and rejects either incomplete direction', () => {
+    expect(RegistrationContactFieldsSchema.safeParse({}).success).toBe(true);
+    expect(
+      RegistrationContactFieldsSchema.safeParse({
+        emergencyContactName: 'Anna',
+        emergencyContactPhone: '+49 12345',
+      }).success,
+    ).toBe(true);
+    expect(
+      RegistrationContactFieldsSchema.safeParse({
+        emergencyContactName: 'Anna',
+      }).success,
+    ).toBe(false);
+    expect(
+      RegistrationContactFieldsSchema.safeParse({
+        emergencyContactPhone: '+49 12345',
+      }).success,
+    ).toBe(false);
+    expect(
+      PublicRegistrationRequestSchema.safeParse(
+        request({ emergencyContactPhone: '+49 12345' }),
+      ).success,
+    ).toBe(false);
   });
 });

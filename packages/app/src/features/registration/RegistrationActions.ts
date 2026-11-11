@@ -1,6 +1,7 @@
 import type { FormEvent } from 'react';
 import {
   PublicRegistrationRequestSchema,
+  RegistrationContactFieldsSchema,
   RegistrationDraftSchema,
 } from '@racepilot/contracts';
 import type { RegistrationModel } from './RegistrationModel.js';
@@ -63,6 +64,15 @@ export function createRegistrationActions(
     event.preventDefault();
     if (step < steps.length - 1) {
       if (formRef.current && !formRef.current.reportValidity()) return;
+      if (
+        steps[step]?.id === 'driver' &&
+        !RegistrationContactFieldsSchema.safeParse(
+          contactPayload(values, payload!.registrationFormConfig),
+        ).success
+      ) {
+        setError(t.retry);
+        return;
+      }
       setStep(step + 1);
       setError('');
       return;

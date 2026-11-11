@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { RegistrationCustomFieldAnswersSchema } from './registration-config.js';
 import {
-  registrationContactShape,
+  RegistrationContactFieldsSchema,
   registrationVehicleDetailsShape,
 } from './registration-details.js';
 
@@ -86,21 +86,18 @@ export const PublicRegistrationRequestSchema = z
     formVersion: z.literal('1.0'),
     language: z.enum(['de', 'en']),
     eventSlug: z.string().trim().min(1).max(100),
-    person: z
-      .object({
-        firstName: z.string().trim().min(1).max(100),
-        lastName: z.string().trim().min(1).max(100),
-        email: z.string().email().max(254),
-        dateOfBirth: z.string().date(),
-        country: z
-          .string()
-          .regex(/^[A-Z]{2}$/)
-          .optional(),
-        guardianName: z.string().trim().min(1).max(200).optional(),
-        guardianEmail: z.string().email().max(254).optional(),
-        ...registrationContactShape,
-      })
-      .strict(),
+    person: RegistrationContactFieldsSchema.extend({
+      firstName: z.string().trim().min(1).max(100),
+      lastName: z.string().trim().min(1).max(100),
+      email: z.string().email().max(254),
+      dateOfBirth: z.string().date(),
+      country: z
+        .string()
+        .regex(/^[A-Z]{2}$/)
+        .optional(),
+      guardianName: z.string().trim().min(1).max(200).optional(),
+      guardianEmail: z.string().email().max(254).optional(),
+    }).strict(),
     customAnswers: RegistrationCustomFieldAnswersSchema.optional(),
     entries: z
       .array(

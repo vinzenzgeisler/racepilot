@@ -96,3 +96,5 @@ export type {
   MessageTemplate,
   MessageCampaignCreate,
 } from './messages.js';
+
+export { RegistrationContactFieldsSchema } from './registration-details.js';

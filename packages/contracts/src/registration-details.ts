@@ -29,6 +29,22 @@ export const registrationContactShape = {
   emergencyContactPhone: phone,
   publicationPreference: PublicationPreferenceSchema.nullable().optional(),
 };
+
+/** Shared contact schema used by request validation and the public form step. */
+export const RegistrationContactFieldsSchema = z
+  .object(registrationContactShape)
+  .superRefine((contact, context) => {
+    const hasName = Boolean(contact.emergencyContactName);
+    const hasPhone = Boolean(contact.emergencyContactPhone);
+    if (hasName !== hasPhone) {
+      context.addIssue({
+        code: 'custom',
+        path: [hasName ? 'emergencyContactPhone' : 'emergencyContactName'],
+        message: 'Emergency contact name and phone must be provided together',
+      });
+    }
+  });
+
 /** Technical details of one reported vehicle. The type follows the class, it is not asked. */
 export const registrationVehicleDetailsShape = {
   displacementCc: z.number().int().min(1).max(20000).nullable().optional(),
