@@ -449,8 +449,6 @@
     "Field",
     "FieldGrid",
     "FieldItem",
-    "FieldPreview",
-    "FieldPreviewList",
     "FieldValue",
     "FileUpload",
     "FileUploadProps",

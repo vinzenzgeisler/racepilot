@@ -1,11 +1,5 @@
 import { adminFetch } from '../../auth.js';
-import {
-  Button,
-  PageHeader,
-  SelectField,
-  SplitPane,
-  Stack,
-} from '@racepilot/ui';
+import { Button, PageHeader, SelectField, Stack } from '@racepilot/ui';
 import { useEffect, useState, type ChangeEvent } from 'react';
 import {
   defaultRegistrationFormConfig,
@@ -17,7 +11,6 @@ import {
 } from '@racepilot/contracts';
 import { RegistrationAppearance } from './RegistrationAppearance.js';
 import { RegistrationCustomFields } from './RegistrationCustomFields.js';
-import { RegistrationSettingsPreview } from './RegistrationSettingsPreview.js';
 import {
   RegistrationFeatureOptions,
   RegistrationFormOptions,
@@ -197,45 +190,32 @@ export function RegistrationFormSettings({ eventId }: { eventId: string }) {
             Veranstaltung · überschreibt Organisation
           </option>
         </SelectField>
-        <SplitPane
-          asideFirstOnMobile
-          stickyAside
-          main={
-            <Stack gap={4}>
-              <RegistrationAppearance
-                activeConfig={activeConfig}
-                updateConfig={updateConfig}
-                change={change}
-                upload={upload}
-              />
-              <RegistrationFormOptions
-                config={activeConfig}
-                updateConfig={updateConfig}
-                fieldLabels={registrationFieldLabels}
-              />
-              <RegistrationCustomFields
-                activeConfig={activeConfig}
-                updateConfig={updateConfig}
-                updateCustomField={updateCustomField}
-                change={change}
-              />
-              <RegistrationFeatureOptions
-                config={activeConfig}
-                updateConfig={updateConfig}
-              />
-              <div>
-                <Button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void save()}
-                >
-                  {busy ? 'Wird gespeichert …' : 'Änderungen speichern'}
-                </Button>
-              </div>
-            </Stack>
-          }
-          aside={<RegistrationSettingsPreview config={activeConfig} />}
+        <RegistrationAppearance
+          activeConfig={activeConfig}
+          updateConfig={updateConfig}
+          change={change}
+          upload={upload}
         />
+        <RegistrationFormOptions
+          config={activeConfig}
+          updateConfig={updateConfig}
+          fieldLabels={registrationFieldLabels}
+        />
+        <RegistrationCustomFields
+          activeConfig={activeConfig}
+          updateConfig={updateConfig}
+          updateCustomField={updateCustomField}
+          change={change}
+        />
+        <RegistrationFeatureOptions
+          config={activeConfig}
+          updateConfig={updateConfig}
+        />
+        <div>
+          <Button type="button" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Wird gespeichert …' : 'Änderungen speichern'}
+          </Button>
+        </div>
         {message && <p role="status">{message}</p>}
       </Stack>
     </section>
