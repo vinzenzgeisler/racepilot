@@ -76,3 +76,5 @@ export { createEntryDocumentsRepository } from './entry-documents.js';
 export * from './schema/documents.js';
 
 export { createOverviewRepository } from './event-overview.js';
+export { createEntryAdminActionsRepository } from './entry-admin-actions.js';
+export * from './schema/entry-admin.js';

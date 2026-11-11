@@ -4,7 +4,8 @@ import {
   entries,
   entryAuditEvents,
 } from './schema/entries.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, desc } from 'drizzle-orm';
+import { entryNotes } from './schema/entry-admin.js';
 import { sql } from 'drizzle-orm';
 import { organizations, events } from './schema/organization.js';
 import { enqueueMailOutbox } from './mail-outbox.js';
@@ -106,6 +107,18 @@ export function createEntryTransitionMethod(
             )
             .limit(1);
           if (recipient?.email) {
+            const [driverNote] = await tx
+              .select({ body: entryNotes.body })
+              .from(entryNotes)
+              .where(
+                and(
+                  eq(entryNotes.organizationId, ctx.organizationId),
+                  eq(entryNotes.entryId, id),
+                  eq(entryNotes.visibility, 'driver'),
+                ),
+              )
+              .orderBy(desc(entryNotes.createdAt))
+              .limit(1);
             await enqueueMailOutbox(
               db,
               ctx.organizationId,
@@ -125,6 +138,7 @@ export function createEntryTransitionMethod(
                   statusKey: workflow.notification.statusKey,
                   statusLabelDe: workflow.notification.statusLabelDe,
                   statusLabelEn: workflow.notification.statusLabelEn,
+                  driverNote: driverNote?.body ?? '',
                 },
               },
               tx,
