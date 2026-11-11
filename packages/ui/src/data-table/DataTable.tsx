@@ -6,12 +6,14 @@ export function DataTable({
   compact = false,
   header,
   className = '',
+  headerCellClassNames,
 }: {
   headers: string[];
   children: React.ReactNode;
   compact?: boolean;
   header?: React.ReactNode;
   className?: string;
+  headerCellClassNames?: Array<string | undefined>;
 }) {
   return (
     <div className={`nb-table-scroll ${className}`}>
@@ -19,8 +21,12 @@ export function DataTable({
         <thead>
           {header ?? (
             <tr>
-              {headers.map((h) => (
-                <th key={h} scope="col">
+              {headers.map((h, index) => (
+                <th
+                  key={h}
+                  className={headerCellClassNames?.[index]}
+                  scope="col"
+                >
                   {h}
                 </th>
               ))}

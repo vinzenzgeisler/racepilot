@@ -15,6 +15,7 @@
   border-left: 1px solid var(--color-line);
   background: var(--color-ivory);
 }
+/* --workspace-preview-breakpoint: CSS is the source read by the app hook. */
 @media (width >= 1680px) {
   .nb-workspace-split.has-preview {
     grid-template-columns: minmax(0, 1fr) 480px;
@@ -28,7 +29,16 @@
 }
 @media (width >= 2200px) {
   .nb-workspace-split.has-preview {
-    grid-template-columns: minmax(0, min(1440px, 1fr)) minmax(480px, 880px);
+    grid-template-columns:
+      minmax(0, var(--workspace-list-max-width))
+      minmax(
+        480px,
+        clamp(
+          480px,
+          calc(100vw - var(--nb-nav-width) - var(--workspace-list-max-width)),
+          var(--workspace-preview-max-width)
+        )
+      );
   }
 }
 @media (width < 768px) {

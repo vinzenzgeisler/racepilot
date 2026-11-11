@@ -32,6 +32,22 @@ export function AdminNavigation({
   compact?: boolean;
 }) {
   const items = groups.flatMap((group) => group.items);
+  const eventPicker = (
+    <label className="nb-admin-event-picker">
+      <span className="nb-visually-hidden">{eventLabel}</span>
+      <select
+        value={selectedEvent}
+        onChange={(event) => onEventChange(event.target.value)}
+      >
+        <option value="">{eventPlaceholder}</option>
+        {events.map((event) => (
+          <option key={event.id} value={event.id}>
+            {event.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
   const item = (entry: NavItem) => (
     <button
       key={entry.id}
@@ -56,20 +72,7 @@ export function AdminNavigation({
       >
         <div className="nb-admin-nav-top">
           <div className="nb-admin-nav-brand">{brand}</div>
-          <label className="nb-admin-event-picker">
-            <span className="nb-visually-hidden">{eventLabel}</span>
-            <select
-              value={selectedEvent}
-              onChange={(event) => onEventChange(event.target.value)}
-            >
-              <option value="">{eventPlaceholder}</option>
-              {events.map((event) => (
-                <option key={event.id} value={event.id}>
-                  {event.label}
-                </option>
-              ))}
-            </select>
-          </label>
+          {eventPicker}
         </div>
         <nav>
           {groups.map((group) => (
@@ -85,6 +88,7 @@ export function AdminNavigation({
         </nav>
         {user && <div className="nb-admin-nav-user">{user}</div>}
       </aside>
+      <div className="nb-admin-mobile-event-picker">{eventPicker}</div>
       <nav className="nb-admin-mobile-nav" aria-label={ariaLabel}>
         {items.map(item)}
       </nav>

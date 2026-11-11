@@ -9,15 +9,19 @@ export function WorkspaceSplit({
   preview,
   previewLabel,
   mobilePreviewOpen = false,
+  wide = false,
 }: {
   filters?: ReactNode;
   children: ReactNode;
   preview?: ReactNode;
   previewLabel?: string;
   mobilePreviewOpen?: boolean | undefined;
+  wide?: boolean | undefined;
 }) {
   return (
-    <div className={`nb-workspace-split${preview ? ' has-preview' : ''}`}>
+    <div
+      className={`nb-workspace-split${preview ? ' has-preview' : ''}${wide ? ' is-wide' : ''}`}
+    >
       {filters && <div className="nb-workspace-split-filters">{filters}</div>}
       <div className="nb-workspace-split-content">{children}</div>
       {preview && (

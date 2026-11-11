@@ -1,7 +1,8 @@
 .nb-page-header {
   display: grid;
   gap: var(--space-3);
-  padding-block: var(--space-4);
+  padding: var(--space-4);
+  background: var(--color-white);
   border-bottom: 2px solid var(--color-ink);
 }
 .nb-page-header > p {

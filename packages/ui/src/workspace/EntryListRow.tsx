@@ -46,16 +46,19 @@ export function EntryListRow({
       className={`nb-entry-list-row${selected ? ' is-selected' : ''}`}
       onClick={onOpen}
     >
-      <td onClick={(event) => event.stopPropagation()}>
-        <Checkbox
-          visuallyHiddenLabel
-          label={selectLabel}
-          checked={checked}
-          onChange={(event) => onSelect?.(event.target.checked)}
-        />
-      </td>
       <td>
         <div className="nb-entry-list-person">
+          <span
+            className="nb-entry-list-select"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Checkbox
+              visuallyHiddenLabel
+              label={selectLabel}
+              checked={checked}
+              onChange={(event) => onSelect?.(event.target.checked)}
+            />
+          </span>
           {imageUrl ? (
             <img src={imageUrl} alt={imageAlt} />
           ) : (
@@ -93,8 +96,8 @@ export function EntryListRow({
       </td>
       <td>{status}</td>
       <td>{payment}</td>
-      <td>{inspection}</td>
-      <td>{waiver}</td>
+      <td className="nb-entry-list-inspection">{inspection}</td>
+      <td className="nb-entry-list-waiver">{waiver}</td>
       <td onClick={(event) => event.stopPropagation()}>
         {nextAction}
         {menu}
