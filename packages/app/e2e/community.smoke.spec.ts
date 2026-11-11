@@ -35,7 +35,9 @@ test('Community registration and admin lifecycle with API setup', async ({
     if (auth?.startsWith('Bearer ')) token = auth.slice(7);
   });
   await page.locator('#kc-login').click();
-  await expect(page.getByRole('heading', { name: 'Nennungen' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Nennungen' }),
+  ).toBeVisible();
   await expect.poll(() => token).not.toBe('');
 
   // Labelled test setup via the logged-in admin API.
