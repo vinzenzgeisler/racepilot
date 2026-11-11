@@ -5,6 +5,7 @@ import {
   renderMailTemplate,
   defaultMailTemplate,
   type MailOutboxRepository,
+  type MailOutboxRecord,
 } from './mail.js';
 import { organizationId } from '@racepilot/core';
 import type {
@@ -14,35 +15,35 @@ import type {
 } from '@racepilot/core';
 const ctx: JobContext = {
   deploymentMode: 'cloud',
-  organizationId: 'org-a' as JobContext['organizationId'],
+  organizationId: organizationId('org-a'),
   jobId: 'job',
   correlationId: 'corr',
 };
 function setup() {
-  const row = {
+  const row: MailOutboxRecord = {
     id: 'mail-1',
     organizationId: 'org-a',
     eventId: null,
-    templateKey: 'verification' as const,
+    templateKey: 'verification',
     templateVersion: 1,
-    locale: 'en' as const,
+    locale: 'en',
     recipient: 'person@example.test',
     idempotencyKey: 'key',
     variables: {
       recipientName: '<Sam>',
       verificationUrl: 'https://example.test/verify',
     },
-    status: 'pending' as const,
+    status: 'pending',
     attempts: 0,
   };
-  let status: string = 'pending';
+  let status: MailOutboxRecord['status'] = 'pending';
   let attempts = 0;
   let claims = 0;
   const deliveries: unknown[] = [];
   const repo: MailOutboxRepository = {
     get: async () => ({
       ...row,
-      status: status as typeof row.status,
+      status,
       attempts,
     }),
     claim: async () => {
@@ -77,7 +78,7 @@ function setup() {
 }
 describe('mail outbox worker', () => {
   it('provides a complete escaped registration-resume template in both supported locales', () => {
-    for (const locale of ['de', 'en'] as const) {
+    for (const locale of ['de', 'en'] satisfies ReadonlyArray<'de' | 'en'>) {
       const rendered = renderMailTemplate(
         defaultMailTemplate('registration-resume', locale),
         'registration-resume',
@@ -231,17 +232,17 @@ describe('mail outbox worker', () => {
 
 describe('message campaign delivery', () => {
   it('renders campaign content and forwards uploaded PDFs to the mail adapter', async () => {
-    const row = {
+    const row: MailOutboxRecord = {
       id: 'message-1',
       organizationId: 'org-a',
       eventId: 'event-1',
-      templateKey: 'message-campaign' as const,
+      templateKey: 'message-campaign',
       templateVersion: 1,
-      locale: 'en' as const,
+      locale: 'en',
       recipient: 'driver@example.test',
       idempotencyKey: 'campaign-entry',
       variables: { subject: 'Hello Ada', body: 'Welcome to Spring Run' },
-      status: 'pending' as const,
+      status: 'pending',
       attempts: 0,
       attachments: [
         {
@@ -300,13 +301,13 @@ describe('campaign attachment storage delivery', () => {
   it('loads tenant-owned PDFs from object storage before SMTP delivery', async () => {
     const tenantId = '11111111-1111-4111-8111-111111111111';
     const objectId = '22222222-2222-4222-8222-222222222222';
-    const row = {
+    const row: MailOutboxRecord = {
       id: 'mail-attachment',
       organizationId: tenantId,
       eventId: 'event-id',
-      templateKey: 'message-campaign' as const,
+      templateKey: 'message-campaign',
       templateVersion: 1,
-      locale: 'en' as const,
+      locale: 'en',
       recipient: 'driver@example.test',
       idempotencyKey: 'mail-attachment-key',
       variables: {
@@ -314,7 +315,7 @@ describe('campaign attachment storage delivery', () => {
         body: 'See attached',
         attachments: JSON.stringify([{ objectId, filename: 'rules.pdf' }]),
       },
-      status: 'pending' as const,
+      status: 'pending',
       attempts: 0,
     };
     const repository: MailOutboxRepository = {
