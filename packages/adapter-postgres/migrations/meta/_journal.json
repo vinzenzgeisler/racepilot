@@ -183,6 +183,13 @@
       "when": 1793446468834,
       "tag": "0025_registration_contact_scope",
       "breakpoints": false
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1793446468835,
+      "tag": "0026_messaging",
+      "breakpoints": false
     }
   ]
 }
