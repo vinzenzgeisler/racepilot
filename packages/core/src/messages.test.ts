@@ -206,7 +206,7 @@ describe('message campaign send use case', () => {
     getLocale: async () => 'en',
     enqueueVerificationRecipient: async () => ({ id: 'recipient-a' }),
     enqueueRecipient: async () => ({ id: 'recipient-a' }),
-    markSending: async () => {},
+    markSending: async (campaign) => campaign,
     listRecipients: async () => [],
   };
   const ports: TestPorts = {

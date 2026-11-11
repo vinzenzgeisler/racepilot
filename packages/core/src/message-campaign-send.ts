@@ -110,7 +110,7 @@ export interface MessageCampaignTransaction<Campaign, CampaignRecipient> {
     attachmentRefs: readonly { objectId: string; filename: string }[];
     correlationId: string;
   }): Promise<CampaignRecipient>;
-  markSending(campaign: Campaign): Promise<void>;
+  markSending(campaign: Campaign): Promise<Campaign>;
   listRecipients(campaign: Campaign): Promise<readonly CampaignRecipient[]>;
 }
 
@@ -282,11 +282,11 @@ export async function sendMessageCampaign<Campaign, CampaignRecipient>(
       });
       if (!result.ok) return result;
     }
-    await tx.markSending(campaign);
-    const recipients = await tx.listRecipients(campaign);
+    const sendingCampaign = await tx.markSending(campaign);
+    const recipients = await tx.listRecipients(sendingCampaign);
     return {
       ok: true,
-      campaign: { campaign, recipients },
+      campaign: { campaign: sendingCampaign, recipients },
     };
   });
 }

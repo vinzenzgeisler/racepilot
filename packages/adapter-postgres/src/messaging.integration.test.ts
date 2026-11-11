@@ -183,7 +183,7 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         ok: true,
         campaign: {
           campaign: { status: 'sending' },
-          recipients: [{ email: 'owner@example.test' }],
+          recipients: [{ email: 'ada-owner@example.test' }],
         },
       });
       if (!first.ok || !replay.ok) throw new Error('Campaign send failed');
@@ -252,7 +252,7 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         ok: true,
         campaign: {
           campaign: { status: 'sending' },
-          recipients: [{ email: 'owner@example.test' }],
+          recipients: [{ email: 'ada-owner@example.test' }],
         },
       });
       await db.insert(invoices).values({
@@ -273,7 +273,7 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         ok: true,
         campaign: {
           campaign: { status: 'sending' },
-          recipients: [{ email: 'owner@example.test' }],
+          recipients: [{ email: 'ada-owner@example.test' }],
         },
       });
       const allCampaigns = await db

@@ -226,7 +226,7 @@ export function createMessageSender(
               return row;
             },
             markSending: async (campaign) => {
-              await tx
+              const [updated] = await tx
                 .update(messageCampaigns)
                 .set({ status: 'sending' })
                 .where(
@@ -234,7 +234,10 @@ export function createMessageSender(
                     eq(messageCampaigns.organizationId, context.organizationId),
                     eq(messageCampaigns.id, campaign.id),
                   ),
-                );
+                )
+                .returning();
+              if (!updated) throw new Error('Message campaign update failed');
+              return updated;
             },
             listRecipients: (campaign) =>
               tx
