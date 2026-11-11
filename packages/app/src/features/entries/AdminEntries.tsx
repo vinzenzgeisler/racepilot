@@ -7,7 +7,12 @@ import {
 } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { SelectField } from '@racepilot/ui';
-import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
+import {
+  initialQuery,
+  request,
+  type EntryQuery,
+  type WorkflowView,
+} from './AdminEntriesModel.js';
 import { AdminEntriesState } from './AdminEntriesState.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
@@ -25,6 +30,7 @@ type AdminEntriesProps = {
   onOpenDetail?: () => void;
   onCloseDetail?: () => void;
   onSelectionChange?: (entry: Entry | null) => void;
+  onWorkflowChange?: (workflow: WorkflowView | null) => void;
   entriesRevision?: number;
   previewAdvance?: { eventId: string; entryId: string } | null | undefined;
   onPreviewAdvanceHandled?: () => void;
@@ -51,6 +57,7 @@ function AdminEntriesView({
   onOpenDetail,
   onCloseDetail,
   onSelectionChange,
+  onWorkflowChange,
   entriesRevision = 0,
   previewAdvance = null,
   onPreviewAdvanceHandled,
@@ -126,6 +133,7 @@ function AdminEntriesView({
     refreshRevision,
     setActionError,
   });
+  useEffect(() => onWorkflowChange?.(workflow), [onWorkflowChange, workflow]);
   const {
     setReason,
     busy,

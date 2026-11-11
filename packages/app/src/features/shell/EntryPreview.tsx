@@ -6,24 +6,29 @@ import {
   PreviewPanel,
   StatusLabel,
 } from '@racepilot/ui';
+import type { WorkflowView } from '../entries/AdminEntriesModel.js';
 
 const STATUS_DOCUMENT_KEYS = ['waiver', 'payment'] as const;
-const STATUS_DOCUMENT_LABELS: Record<
-  (typeof STATUS_DOCUMENT_KEYS)[number],
-  string
-> = {
+type StatusDocumentKey = (typeof STATUS_DOCUMENT_KEYS)[number];
+function isStatusDocumentKey(key: string): key is StatusDocumentKey {
+  return STATUS_DOCUMENT_KEYS.some((candidate) => candidate === key);
+}
+
+const STATUS_DOCUMENT_LABELS: Record<StatusDocumentKey, string> = {
   waiver: 'Haftverzicht Fahrer',
   payment: 'Startgeld',
 };
 
 export function EntryPreview({
   entry,
+  workflow,
   onNextAction,
   onClose,
   onOpenDetail,
   busy,
 }: {
   entry: Entry;
+  workflow: WorkflowView | null;
   onNextAction: (status: string) => Promise<void>;
   onClose: () => void;
   onOpenDetail: () => void;
@@ -33,7 +38,17 @@ export function EntryPreview({
   const status = entry.statusProjection?.dimensions;
   const next = status?.find((item) => item.key === 'entry')?.nextAction;
   const nextStatus = next?.key.startsWith('entry:') ? next.key.slice(6) : null;
-  const canAcceptNext = nextStatus === 'accepted';
+  const nextCategory = workflow?.statuses.find(
+    (item) => item.key === nextStatus,
+  )?.category;
+  const canAcceptNext = nextCategory === 'accepted';
+  const canAdvance = Boolean(
+    nextStatus &&
+    nextCategory &&
+    !['rejected', 'withdrawn', 'cancelled', 'canceled', 'declined'].includes(
+      nextCategory,
+    ),
+  );
   const missing =
     status
       ?.filter(
@@ -65,13 +80,12 @@ export function EntryPreview({
       })) ?? [];
   const statusDocuments =
     status
-      ?.filter((item) => STATUS_DOCUMENT_KEYS.some((key) => key === item.key))
+      ?.filter((item): item is typeof item & { key: StatusDocumentKey } =>
+        isStatusDocumentKey(item.key),
+      )
       .map((item) => ({
         id: item.key,
-        label:
-          STATUS_DOCUMENT_LABELS[
-            item.key as keyof typeof STATUS_DOCUMENT_LABELS
-          ],
+        label: STATUS_DOCUMENT_LABELS[item.key],
         status: (
           <StatusLabel
             status={item.meaning === 'not_relevant' ? 'empty' : item.meaning}
@@ -109,7 +123,7 @@ export function EntryPreview({
       closeLabel="Vorschau schließen"
       footer={
         <div className="nb-preview-actions">
-          {nextStatus && next && (
+          {canAdvance && nextStatus && next && (
             <Button
               disabled={busy}
               onClick={() => void onNextAction(nextStatus)}
@@ -117,8 +131,8 @@ export function EntryPreview({
               {next.label.de}
             </Button>
           )}
-          {!nextStatus && <p>Keine weitere Statusaktion verfügbar.</p>}
-          {nextStatus && canAcceptNext && (
+          {!canAdvance && <p>Keine weitere Statusaktion verfügbar.</p>}
+          {canAdvance && canAcceptNext && nextStatus && (
             <p className="nb-preview-hint">
               {missing.length
                 ? `Es ${missing.length > 1 ? 'fehlen' : 'fehlt'} noch ${missingText}. Nach dem Zulassen springt die Vorschau zur nächsten offenen Nennung.`

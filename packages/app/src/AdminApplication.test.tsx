@@ -360,6 +360,37 @@ describe('AdminApplication event switch and detail access', () => {
     expect(detail.textContent).not.toContain('Zulassen');
   });
 
+  it('does not offer a destructive workflow category as the preview primary action', async () => {
+    listedEntries = [
+      {
+        ...alex,
+        acceptanceStatus: 'accepted',
+        statusProjection: {
+          ...alex.statusProjection,
+          dimensions: alex.statusProjection.dimensions.map((dimension) =>
+            dimension.key === 'entry'
+              ? {
+                  ...dimension,
+                  nextAction: {
+                    key: 'entry:withdrawn',
+                    label: { de: 'Als abgesagt markieren', en: 'Withdraw' },
+                  },
+                }
+              : dimension,
+          ),
+        },
+      },
+    ];
+    await mount();
+
+    expect(textOf()).toContain('Keine weitere Statusaktion verfügbar.');
+    expect(
+      [...container.querySelectorAll('.nb-preview-actions button')].some(
+        (button) => button.textContent?.includes('Als abgesagt markieren'),
+      ),
+    ).toBe(false);
+  });
+
   it('opens the next open entry after accepting the preview entry', async () => {
     listedEntries = [alex, nextAlex];
     await mount();
