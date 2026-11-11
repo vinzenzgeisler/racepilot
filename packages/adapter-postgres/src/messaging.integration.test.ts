@@ -117,10 +117,10 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         capabilities: new Set(),
         correlationId: `${suffix}-foreign`,
       });
-      const filter = {
+      const filter: Parameters<typeof repo.preview>[2] = {
         classIds: [],
         statuses: [],
-        payment: 'any' as const,
+        payment: 'any',
         entryIds: [],
         additionalAddresses: [],
       };
