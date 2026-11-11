@@ -1,18 +1,15 @@
 import { and, eq } from 'drizzle-orm';
 import type {
   MessageCampaignCreate,
-  ObjectStorageProvider,
+  MessageCampaignSendPorts,
   MessageCampaignSendResult,
+  MessageCampaignTransaction,
+  ObjectStorageProvider,
   RequestContext,
 } from '@racepilot/core';
-import {
-  fingerprintMessageRequest,
-  renderMessageTemplate,
-  transitionMessageCampaign,
-  validateMessageTemplate,
-} from '@racepilot/core';
+import { sendMessageCampaign } from '@racepilot/core';
 import { MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/contracts';
-import type { Database } from './database.js';
+import type { Database, TransactionDatabase } from './database.js';
 import { organizations } from './schema/organization.js';
 import { enqueueMailOutbox } from './mail-outbox.js';
 import {
@@ -27,6 +24,10 @@ import {
   messageLocale,
 } from './messaging-utils.js';
 
+type Campaign = typeof messageCampaigns.$inferSelect;
+type CampaignRecipient = typeof messageCampaignRecipients.$inferSelect;
+type CampaignResponse = ReturnType<typeof messageCampaignResponse>;
+
 export function createMessageSender(
   db: Database,
   storage?: ObjectStorageProvider,
@@ -37,197 +38,202 @@ export function createMessageSender(
     idempotencyKey: string,
     input: MessageCampaignCreate,
     actor: string,
-  ) => {
-    const templateErrors = validateMessageTemplate(input.subject, input.text);
-    if (templateErrors.length)
-      return {
-        ok: false,
-        error: {
-          code: 'invalid-template',
-          message: 'Message template is invalid',
-          details: templateErrors,
-        },
-      } satisfies MessageCampaignSendResult;
-    if (input.attachments.length > MESSAGE_ATTACHMENT_LIMITS.maxCount)
-      return {
-        ok: false,
-        error: {
-          code: 'too-many-attachments',
-          message: 'Too many attachments',
-        },
-      } satisfies MessageCampaignSendResult;
-    const attachmentRefs: Array<{ objectId: string; filename: string }> = [];
-    let attachmentBytes = 0;
-    for (const attachment of input.attachments) {
-      const object = await storage?.get(
-        ctx.organizationId,
-        attachment.objectId,
-      );
-      if (!object || object.ref.contentType !== 'application/pdf')
-        return {
-          ok: false,
-          error: {
-            code: 'attachment-unavailable',
-            message: 'Attachment is unavailable or not a PDF',
-          },
-        } satisfies MessageCampaignSendResult;
-      attachmentBytes += object.ref.size;
-      if (attachmentBytes > MESSAGE_ATTACHMENT_LIMITS.maxBytes)
-        return {
-          ok: false,
-          error: {
-            code: 'attachment-too-large',
-            message: 'Attachments exceed the configured size limit',
-          },
-        } satisfies MessageCampaignSendResult;
-      attachmentRefs.push({
-        objectId: attachment.objectId,
-        filename: attachment.filename,
-      });
-    }
-    const resolved = await resolveMessageRecipients(
-      db,
-      ctx,
-      eventId,
-      input.recipients,
-    );
-    if (!resolved)
-      return {
-        ok: false,
-        error: { code: 'event-not-found', message: 'Event not found' },
-      } satisfies MessageCampaignSendResult;
-    if (!resolved.count)
-      return {
-        ok: false,
-        error: {
-          code: 'no-recipients',
-          message: 'No recipients match the selection',
-        },
-      } satisfies MessageCampaignSendResult;
-    const requestHash = digestMessage(fingerprintMessageRequest(input));
-    const sendingStatus = transitionMessageCampaign('planned', 'sending');
-    return db.transaction(async (tx) => {
-      const [campaign] = await tx
-        .insert(messageCampaigns)
-        .values({
-          organizationId: ctx.organizationId,
-          eventId,
-          idempotencyKey,
-          requestHash,
-          subject: input.subject,
-          textBody: input.text,
-          status: 'planned',
-          actor,
-        })
-        .onConflictDoNothing()
-        .returning();
-      if (!campaign) {
-        const [existing] = await tx
-          .select()
-          .from(messageCampaigns)
-          .where(
-            and(
-              eq(messageCampaigns.organizationId, ctx.organizationId),
-              eq(messageCampaigns.idempotencyKey, idempotencyKey),
-            ),
-          )
-          .limit(1);
-        if (!existing || existing.requestHash !== requestHash)
+  ): Promise<MessageCampaignSendResult<CampaignResponse>> => {
+    const ports: MessageCampaignSendPorts<
+      Campaign,
+      CampaignRecipient,
+      CampaignResponse
+    > = {
+      maxAttachments: MESSAGE_ATTACHMENT_LIMITS.maxCount,
+      validateAttachments: async (attachments) => {
+        if (attachments.length && !storage)
           return {
             ok: false,
             error: {
-              code: 'idempotency-conflict',
-              message:
-                'Idempotency key was already used with a different request',
+              code: 'storage-unavailable',
+              message: 'Attachment storage is unavailable',
             },
-          } satisfies MessageCampaignSendResult;
-        const recipients = await tx
-          .select()
-          .from(messageCampaignRecipients)
-          .where(
-            and(
-              eq(messageCampaignRecipients.organizationId, ctx.organizationId),
-              eq(messageCampaignRecipients.campaignId, existing.id),
-            ),
+          };
+        let totalBytes = 0;
+        for (const attachment of attachments) {
+          const object = await storage!.get(
+            ctx.organizationId,
+            attachment.objectId,
           );
-        return {
-          ok: true,
-          campaign: messageCampaignResponse(existing, recipients),
-          replayed: true,
-        } satisfies MessageCampaignSendResult;
-      }
-      await tx.insert(messageCampaignAudits).values({
-        organizationId: ctx.organizationId,
-        campaignId: campaign.id,
-        actor,
-        action: 'send',
-      });
-      const [organization] = await tx
-        .select({ locale: organizations.locale })
-        .from(organizations)
-        .where(eq(organizations.id, ctx.organizationId))
-        .limit(1);
-      for (const recipient of resolved.recipients) {
-        const rendered = renderMessageTemplate(input.subject, input.text, {
-          firstName: recipient.firstName,
-          lastName: recipient.lastName,
-          fullName: recipient.fullName,
-          email: recipient.email,
-          eventName: recipient.eventName,
-          className: recipient.className,
-          entryNumber: recipient.entryNumber,
-        });
-        const outboxId = await enqueueMailOutbox(
-          db,
-          ctx.organizationId,
-          {
-            eventId,
-            registrationGroupId: recipient.registrationGroupId ?? null,
-            templateKey: 'message-campaign',
-            templateVersion: 1,
-            locale: messageLocale(organization?.locale ?? 'de'),
-            recipient: recipient.email,
-            idempotencyKey: `message-campaign:${campaign.id}:${digestMessage(recipient.email)}`,
-            variables: {
-              subject: rendered.subject,
-              body: rendered.text,
-              attachments: JSON.stringify(attachmentRefs),
+          if (!object || object.ref.contentType !== 'application/pdf')
+            return {
+              ok: false,
+              error: {
+                code: 'attachment-unavailable',
+                message: 'Attachment is unavailable or not a PDF',
+              },
+            };
+          totalBytes += object.ref.size;
+          if (totalBytes > MESSAGE_ATTACHMENT_LIMITS.maxBytes)
+            return {
+              ok: false,
+              error: {
+                code: 'attachment-too-large',
+                message: 'Attachments exceed the configured size limit',
+              },
+            };
+        }
+        return null;
+      },
+      transaction: (context, work) =>
+        db.transaction(async (tx) => {
+          const transaction: MessageCampaignTransaction<
+            Campaign,
+            CampaignRecipient,
+            CampaignResponse
+          > = {
+            resolveRecipients: async (requestedEventId, filter) => {
+              const resolved = await resolveMessageRecipients(
+                tx,
+                context,
+                requestedEventId,
+                filter,
+              );
+              return resolved?.recipients ?? null;
             },
-            correlationId: ctx.correlationId,
-          },
-          tx,
-        );
-        await tx.insert(messageCampaignRecipients).values({
-          organizationId: ctx.organizationId,
-          campaignId: campaign.id,
-          eventId,
-          entryId: recipient.entryId || null,
-          outboxId,
-          email: recipient.email,
-          subject: rendered.subject,
-          status: 'planned',
-        });
-      }
-      await tx
-        .update(messageCampaigns)
-        .set({ status: sendingStatus })
-        .where(
-          and(
-            eq(messageCampaigns.organizationId, ctx.organizationId),
-            eq(messageCampaigns.id, campaign.id),
-          ),
-        );
-      const recipients = await tx
-        .select()
-        .from(messageCampaignRecipients)
-        .where(eq(messageCampaignRecipients.campaignId, campaign.id));
-      return {
-        ok: true,
-        campaign: messageCampaignResponse(
-          { ...campaign, status: sendingStatus },
-          recipients,
-        ),
-      } satisfies MessageCampaignSendResult;
-    });
+            findByIdempotencyKey: async (key) => {
+              const [campaign] = await tx
+                .select()
+                .from(messageCampaigns)
+                .where(
+                  and(
+                    eq(messageCampaigns.organizationId, context.organizationId),
+                    eq(messageCampaigns.idempotencyKey, key),
+                  ),
+                )
+                .limit(1);
+              if (!campaign) return null;
+              const recipients = await tx
+                .select()
+                .from(messageCampaignRecipients)
+                .where(
+                  and(
+                    eq(
+                      messageCampaignRecipients.organizationId,
+                      context.organizationId,
+                    ),
+                    eq(messageCampaignRecipients.campaignId, campaign.id),
+                  ),
+                );
+              return {
+                requestHash: campaign.requestHash,
+                campaign,
+                recipients,
+              };
+            },
+            createCampaign: async (value) => {
+              const [campaign] = await tx
+                .insert(messageCampaigns)
+                .values({
+                  organizationId: context.organizationId,
+                  eventId: value.eventId,
+                  idempotencyKey: value.idempotencyKey,
+                  requestHash: digestMessage(value.requestHash),
+                  subject: value.subject,
+                  textBody: value.text,
+                  status: 'planned',
+                  actor: value.actor,
+                })
+                .onConflictDoNothing()
+                .returning();
+              return campaign ?? null;
+            },
+            recordAudit: async (campaign, auditActor) => {
+              await tx.insert(messageCampaignAudits).values({
+                organizationId: context.organizationId,
+                campaignId: campaign.id,
+                actor: auditActor,
+                action: 'send',
+              });
+            },
+            getLocale: async () => {
+              const [organization] = await tx
+                .select({ locale: organizations.locale })
+                .from(organizations)
+                .where(eq(organizations.id, context.organizationId))
+                .limit(1);
+              return organization?.locale ?? 'de';
+            },
+            enqueueRecipient: async (value) => {
+              const outboxId = await enqueueMailOutbox(
+                db,
+                context.organizationId,
+                {
+                  eventId: value.eventId,
+                  registrationGroupId: value.recipient.registrationGroupId,
+                  templateKey: 'message-campaign',
+                  templateVersion: 1,
+                  locale: messageLocale(value.locale),
+                  recipient: value.recipient.email,
+                  idempotencyKey: `message-campaign:${value.campaign.id}:${digestMessage(value.recipient.email)}`,
+                  variables: {
+                    subject: value.subject,
+                    body: value.text,
+                    attachments: JSON.stringify(value.attachmentRefs),
+                  },
+                  correlationId: value.correlationId,
+                },
+                tx,
+              );
+              const [row] = await tx
+                .insert(messageCampaignRecipients)
+                .values({
+                  organizationId: context.organizationId,
+                  campaignId: value.campaign.id,
+                  eventId: value.eventId,
+                  entryId: value.recipient.entryId,
+                  outboxId,
+                  email: value.recipient.email,
+                  subject: value.subject,
+                  status: 'planned',
+                })
+                .returning();
+              return row!;
+            },
+            markSending: async (campaign) => {
+              await tx
+                .update(messageCampaigns)
+                .set({ status: 'sending' })
+                .where(
+                  and(
+                    eq(messageCampaigns.organizationId, context.organizationId),
+                    eq(messageCampaigns.id, campaign.id),
+                  ),
+                );
+            },
+            listRecipients: (campaign) =>
+              tx
+                .select()
+                .from(messageCampaignRecipients)
+                .where(
+                  and(
+                    eq(
+                      messageCampaignRecipients.organizationId,
+                      context.organizationId,
+                    ),
+                    eq(messageCampaignRecipients.campaignId, campaign.id),
+                  ),
+                ),
+            toResponse: (campaign, recipients) =>
+              messageCampaignResponse({ ...campaign, status: 'sending' }, [
+                ...recipients,
+              ]),
+          };
+          return work(transaction);
+        }),
+    };
+    return sendMessageCampaign<Campaign, CampaignRecipient, CampaignResponse>(
+      ctx,
+      eventId,
+      idempotencyKey,
+      input,
+      actor,
+      ports,
+    );
   };
 }

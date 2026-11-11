@@ -5,12 +5,12 @@ import type {
   RequestContext,
 } from '@racepilot/core';
 import { resolveMessageRecipientCandidates } from '@racepilot/core';
-import type { Database } from './database.js';
+import type { Database, TransactionDatabase } from './database.js';
 import { entries, people, registrationGroups } from './schema/entries.js';
 import { eventClasses, events } from './schema/organization.js';
 
 export async function resolveMessageRecipients(
-  db: Database,
+  db: Database | TransactionDatabase,
   ctx: RequestContext,
   eventId: string,
   filter: MessageRecipientFilter,
