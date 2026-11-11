@@ -1,5 +1,5 @@
 import { Checkbox, Field, Steps } from '@racepilot/ui';
-import type { CSSProperties } from 'react';
+import { Fragment, type CSSProperties } from 'react';
 import type { RegistrationModel } from './RegistrationModel.js';
 import type { RegistrationActions } from './RegistrationActions.js';
 import {
@@ -8,7 +8,10 @@ import {
 } from './RegistrationChrome.js';
 import { RegistrationVehicleFields } from './RegistrationVehicleFields.js';
 import { RegistrationCustomAnswers } from './RegistrationCustomAnswers.js';
-import { RegistrationContactFields } from './RegistrationContactFields.js';
+import {
+  RegistrationContactFields,
+  RegistrationPhoneField,
+} from './RegistrationContactFields.js';
 import { RegistrationReview } from './RegistrationReview.js';
 import { RegistrationFooter } from './RegistrationFooter.js';
 export function RegistrationView({
@@ -184,28 +187,41 @@ export function RegistrationView({
                     );
                   const key = field.key;
                   return (
-                    <Field
-                      key={field.key}
-                      label={field.label[locale]}
-                      type={field.type}
-                      placeholder={
-                        field.key === 'dateOfBirth' ? 'TT.MM.JJJJ' : undefined
-                      }
-                      hint={
-                        field.key === 'email'
-                          ? locale === 'de'
-                            ? 'Bestätigungslink wird gesendet'
-                            : 'A confirmation link will be sent'
-                          : undefined
-                      }
-                      required={field.required}
-                      value={driverFieldValue(values, key)}
-                      onChange={(e) =>
-                        setValues((old) =>
-                          updateDriverField(old, key, e.target.value),
-                        )
-                      }
-                    />
+                    <Fragment key={field.key}>
+                      <Field
+                        label={field.label[locale]}
+                        type={field.type}
+                        {...(field.key === 'dateOfBirth'
+                          ? { placeholder: 'TT.MM.JJJJ' }
+                          : {})}
+                        {...(field.key === 'email'
+                          ? {
+                              hint:
+                                locale === 'de'
+                                  ? 'Bestätigungslink wird gesendet'
+                                  : 'A confirmation link will be sent',
+                            }
+                          : {})}
+                        required={field.required}
+                        value={driverFieldValue(values, key)}
+                        onChange={(e) =>
+                          setValues((old) =>
+                            updateDriverField(old, key, e.target.value),
+                          )
+                        }
+                      />
+                      {field.key === 'dateOfBirth' &&
+                        currentStep.id === 'driver' && (
+                          <RegistrationPhoneField
+                            config={payload.registrationFormConfig}
+                            values={values}
+                            onChange={(patch) =>
+                              setValues((old) => ({ ...old, ...patch }))
+                            }
+                            t={t}
+                          />
+                        )}
+                    </Fragment>
                   );
                 })
               )}

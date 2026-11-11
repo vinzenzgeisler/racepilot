@@ -58,7 +58,6 @@ export function RegistrationContactFields({
   const emergency = state('emergencyContact');
   return (
     <FormGrid variant="registration">
-      {text('phone', 'phone', 'tel')}
       <FormWide>
         <FormSection title={t.address} variant="registration">
           <FormGrid variant="registration">
@@ -139,5 +138,30 @@ export function RegistrationContactFields({
         </FormWide>
       )}
     </FormGrid>
+  );
+}
+
+export function RegistrationPhoneField({
+  config,
+  values,
+  onChange,
+  t,
+}: {
+  config: RegistrationFormConfig;
+  values: DriverContact;
+  onChange: (patch: Partial<DriverContact>) => void;
+  t: Words;
+}) {
+  if (fieldState(config, 'phone') === 'hidden') return null;
+  return (
+    <Field
+      label={t.phone}
+      type="tel"
+      hint={t.phoneHint}
+      required={fieldState(config, 'phone') === 'required'}
+      maxLength={100}
+      value={values.phone}
+      onChange={(event) => onChange({ phone: event.target.value })}
+    />
   );
 }
