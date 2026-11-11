@@ -157,6 +157,7 @@ const taskList = composeWorkerTasks(moduleTasks, {
           repository: createMailOutboxRepository(db, { leaseMs }),
           mail: mail!,
           canonicalBaseUrl: mailConfig.CANONICAL_BASE_URL!,
+          ...(storage ? { storage } : {}),
         }),
       }
     : {}),

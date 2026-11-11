@@ -124,7 +124,7 @@ serve({
     paymentRecipients: createPaymentRecipientRepository(db),
     pricing: createEventClassPricingRepository(db),
     entries: createEntryRepository(db),
-    messages: createMessageRepository(db),
+    messages: createMessageRepository(db, storage, config.CANONICAL_BASE_URL),
     // Optional event modules are registered statically here (ADR 0004); Community
     // activates everything locally, so no entitlement port is supplied.
     modules: {

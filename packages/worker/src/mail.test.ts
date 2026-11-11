@@ -6,7 +6,12 @@ import {
   defaultMailTemplate,
   type MailOutboxRepository,
 } from './mail.js';
-import type { JobContext } from '@racepilot/core';
+import { organizationId } from '@racepilot/core';
+import type {
+  JobContext,
+  MailAttachment,
+  ObjectStorageProvider,
+} from '@racepilot/core';
 const ctx: JobContext = {
   deploymentMode: 'cloud',
   organizationId: 'org-a' as JobContext['organizationId'],
@@ -221,5 +226,156 @@ describe('mail outbox worker', () => {
       claims: 0,
       deliveries: [],
     });
+  });
+});
+
+describe('message campaign delivery', () => {
+  it('renders campaign content and forwards uploaded PDFs to the mail adapter', async () => {
+    const row = {
+      id: 'message-1',
+      organizationId: 'org-a',
+      eventId: 'event-1',
+      templateKey: 'message-campaign' as const,
+      templateVersion: 1,
+      locale: 'en' as const,
+      recipient: 'driver@example.test',
+      idempotencyKey: 'campaign-entry',
+      variables: { subject: 'Hello Ada', body: 'Welcome to Spring Run' },
+      status: 'pending' as const,
+      attempts: 0,
+      attachments: [
+        {
+          filename: 'rules.pdf',
+          contentType: 'application/pdf',
+          content: new Uint8Array([37, 80, 68, 70, 45]),
+        },
+      ],
+    };
+    let finished = false;
+    const repository: MailOutboxRepository = {
+      get: async () => row,
+      claim: async () => ({ ...row, status: 'sending' }),
+      template: async () => null,
+      organizationMailConfig: async () => ({
+        from: 'club@example.test',
+        replyTo: null,
+      }),
+      finish: async (_context, _id, result) => {
+        finished = result.outcome === 'sent';
+      },
+    };
+    const sent: Array<
+      Parameters<
+        NonNullable<
+          Parameters<typeof processMailOutboxJob>[0]['deps']['mail']['send']
+        >
+      >[0]
+    > = [];
+    await processMailOutboxJob({
+      ctx,
+      outboxId: row.id,
+      deps: {
+        repository,
+        mail: {
+          send: async (message) => {
+            sent.push(message);
+          },
+        },
+      },
+    });
+    expect(finished).toBe(true);
+    expect(sent[0]).toMatchObject({
+      subject: 'Hello Ada',
+      text: 'Welcome to Spring Run',
+      to: row.recipient,
+    });
+    expect(sent[0]?.attachments?.[0]).toMatchObject({
+      filename: 'rules.pdf',
+      contentType: 'application/pdf',
+    });
+  });
+});
+
+describe('campaign attachment storage delivery', () => {
+  it('loads tenant-owned PDFs from object storage before SMTP delivery', async () => {
+    const tenantId = '11111111-1111-4111-8111-111111111111';
+    const objectId = '22222222-2222-4222-8222-222222222222';
+    const row = {
+      id: 'mail-attachment',
+      organizationId: tenantId,
+      eventId: 'event-id',
+      templateKey: 'message-campaign' as const,
+      templateVersion: 1,
+      locale: 'en' as const,
+      recipient: 'driver@example.test',
+      idempotencyKey: 'mail-attachment-key',
+      variables: {
+        subject: 'Hello',
+        body: 'See attached',
+        attachments: JSON.stringify([{ objectId, filename: 'rules.pdf' }]),
+      },
+      status: 'pending' as const,
+      attempts: 0,
+    };
+    const repository: MailOutboxRepository = {
+      get: async () => row,
+      claim: async () => ({ ...row, status: 'sending' }),
+      template: async () => null,
+      organizationMailConfig: async () => ({
+        from: 'club@example.test',
+        replyTo: null,
+      }),
+      finish: async () => {},
+    };
+    const storage: ObjectStorageProvider = {
+      put: async () => {
+        throw new Error('not used');
+      },
+      get: async (requestedTenant, requestedObject) =>
+        requestedTenant === organizationId(tenantId) &&
+        requestedObject === objectId
+          ? {
+              ref: {
+                organizationId: organizationId(tenantId),
+                objectId,
+                contentType: 'application/pdf',
+                size: 5,
+                sha256: 'a'.repeat(64),
+              },
+              body: new Uint8Array([37, 80, 68, 70, 45]),
+            }
+          : null,
+      delete: async () => {},
+    };
+    const received: MailAttachment[][] = [];
+    const task = createMailOutboxTask({
+      deploymentMode: 'cloud',
+      getOrganization: async () => ({ status: 'active' }),
+      repository,
+      mail: {
+        send: async (message) => {
+          received.push([...(message.attachments ?? [])]);
+        },
+      },
+      canonicalBaseUrl: 'https://example.test',
+      storage,
+    });
+    await task(
+      {
+        type: 'mail.outbox',
+        schemaVersion: 1,
+        organizationId: tenantId,
+        correlationId: 'corr',
+        payload: { outboxId: row.id },
+      },
+      { job: { id: 'worker-job' } },
+    );
+    expect(received[0]).toEqual([
+      {
+        filename: 'rules.pdf',
+        contentType: 'application/pdf',
+        content: new Uint8Array([37, 80, 68, 70, 45]),
+      },
+    ]);
   });
 });

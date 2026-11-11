@@ -1,5 +1,6 @@
 import type { ApiRoutesContext } from './context.js';
 import {
+  MESSAGE_ATTACHMENT_LIMITS,
   MessageCampaignCreateSchema,
   MessageRecipientFilterSchema,
   MessageTemplateSchema,
@@ -23,6 +24,60 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
     const result = await deps.messages.preview(member, eventId.data, body.data);
     return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
   });
+  app.post('/admin/events/:eventId/messages/attachments', async (c) => {
+    const member = await resolveMemberContext(c.req.raw);
+    if (!member) return c.json({ error: 'Unauthorized' }, 401);
+    if (!member.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.objectStorage)
+      return c.json({ error: 'Storage unavailable' }, 503);
+    const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
+    const body = z
+      .object({
+        filename: z
+          .string()
+          .trim()
+          .min(1)
+          .max(120)
+          .regex(/^[A-Za-z0-9][A-Za-z0-9 ._()-]*\.pdf$/i),
+        contentType: z.literal('application/pdf'),
+        contentBase64: z
+          .string()
+          .max(Math.ceil((MESSAGE_ATTACHMENT_LIMITS.maxBytes * 4) / 3) + 8),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (
+      !eventId.success ||
+      !body.success ||
+      !/^[A-Za-z0-9+/]*={0,2}$/.test(body.data.contentBase64)
+    )
+      return c.json({ error: 'Invalid PDF attachment' }, 400);
+    const event = await deps.events.getById(member, eventId.data);
+    if (!event) return c.json({ error: 'Not found' }, 404);
+    const content = Buffer.from(body.data.contentBase64, 'base64');
+    if (
+      !content.length ||
+      content.length > MESSAGE_ATTACHMENT_LIMITS.maxBytes ||
+      new TextDecoder().decode(content.slice(0, 5)) !== '%PDF-'
+    )
+      return c.json({ error: 'Invalid PDF attachment' }, 400);
+    const stored = await deps.objectStorage.put({
+      organizationId: member.organizationId,
+      body: new Uint8Array(content),
+      contentType: 'application/pdf',
+    });
+    return c.json(
+      {
+        objectId: stored.objectId,
+        filename: body.data.filename,
+        size: stored.size,
+        contentType: stored.contentType,
+      },
+      201,
+    );
+  });
+
   app.get('/admin/events/:eventId/messages/templates', async (c) => {
     const member = await resolveMemberContext(c.req.raw);
     if (!member) return c.json({ error: 'Unauthorized' }, 401);
@@ -84,6 +139,32 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
     return preview
       ? c.json(preview)
       : c.json({ error: 'No example recipient or invalid placeholder' }, 400);
+  });
+
+  app.post('/admin/events/:eventId/messages/actions/:action', async (c) => {
+    const member = await resolveMemberContext(c.req.raw);
+    if (!member) return c.json({ error: 'Unauthorized' }, 401);
+    if (!member.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.messages) return c.json({ error: 'Not found' }, 404);
+    const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
+    const action = z
+      .enum(['resend-verification', 'remind-open-payments'])
+      .safeParse(c.req.param('action'));
+    if (!eventId.success || !action.success)
+      return c.json({ error: 'Invalid request' }, 400);
+    const actor = member.subject
+      ? `${member.subject.issuer}|${member.subject.subject}`
+      : member.correlationId;
+    const campaign = await deps.messages.quickAction(
+      member,
+      eventId.data,
+      action.data,
+      actor,
+    );
+    return campaign
+      ? c.json(campaign, 202)
+      : c.json({ error: 'No matching recipients or unavailable action' }, 404);
   });
 
   app.post('/admin/events/:eventId/messages/campaigns', async (c) => {

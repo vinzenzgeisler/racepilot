@@ -73,6 +73,12 @@ export function permissionsForRole(role: MembershipRole): ReadonlySet<string> {
     : new Set(['role:member']);
 }
 
+export interface MailAttachment {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly content: Uint8Array;
+}
+
 export interface MailMessage {
   readonly organizationId: OrganizationId;
   readonly to: string;
@@ -82,6 +88,7 @@ export interface MailMessage {
   readonly idempotencyKey: string;
   readonly from?: string;
   readonly replyTo?: string;
+  readonly attachments?: readonly MailAttachment[];
 }
 
 export interface MailProvider {
