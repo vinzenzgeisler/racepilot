@@ -5,7 +5,6 @@ import { EntryWorkflowCategory } from './workflow-model.js';
 import { OrganizationId } from './context.js';
 import { PriceSnapshot } from './pricing.js';
 import { RequestContext } from './context.js';
-import { StoredObjectRef } from './providers.js';
 import type { AdminEntryDetails } from './entry-detail.js';
 
 export interface Person {
