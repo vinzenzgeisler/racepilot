@@ -148,3 +148,188 @@ describe('message campaign state machine', () => {
     expect(() => transitionMessageCampaign('sent', 'planned')).toThrow();
   });
 });
+
+describe('message campaign send use case', () => {
+  type TestCampaign = { id: string };
+  type TestRecipient = { id: string };
+  type TestResponse = { id: string };
+  type TestPorts = import('./messages.js').MessageCampaignSendPorts<
+    TestCampaign,
+    TestRecipient,
+    TestResponse
+  >;
+  const context = {
+    deploymentMode: 'community' as const,
+    organizationId: 'org-a' as never,
+    permissions: new Set<string>(),
+    capabilities: new Set<string>(),
+    correlationId: 'message-test',
+  };
+  const input = {
+    eventId: 'event-a',
+    recipients: {
+      classIds: [],
+      statuses: [],
+      payment: 'any' as const,
+      entryIds: [],
+      additionalAddresses: [],
+    },
+    subject: 'Hello {{firstName}}',
+    text: 'Welcome',
+    attachments: [],
+  };
+  const transactionCalls: string[] = [];
+  const transaction: import('./messages.js').MessageCampaignTransaction<
+    TestCampaign,
+    TestRecipient,
+    TestResponse
+  > = {
+    resolveRecipients: async (): Promise<
+      import('./messages.js').MessageCampaignRecipient[]
+    > => {
+      transactionCalls.push('resolve');
+      return [];
+    },
+    findByIdempotencyKey: async () => null,
+    createCampaign: async () => null,
+    recordAudit: async () => {},
+    getLocale: async () => 'en',
+    enqueueRecipient: async () => ({ id: 'recipient-a' }),
+    markSending: async () => {},
+    listRecipients: async () => [],
+    toResponse: () => ({ id: 'response-a' }),
+  };
+  const ports: TestPorts = {
+    maxAttachments: 1,
+    validateAttachments: async () => null,
+    transaction: async (_context, work) => {
+      transactionCalls.push('begin');
+      return work(transaction);
+    },
+  };
+
+  it('keeps template rejection typed and does not begin a transaction', async () => {
+    const { sendMessageCampaign } = await import('./messages.js');
+    const result = await sendMessageCampaign(
+      context,
+      input.eventId,
+      'key-001',
+      {
+        ...input,
+        subject: '{{unknown}}',
+      },
+      'actor',
+      ports,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'invalid-template' },
+    });
+    expect(transactionCalls).toEqual([]);
+  });
+
+  it('returns typed attachment count and validation errors before opening a transaction', async () => {
+    const { sendMessageCampaign } = await import('./messages.js');
+    const tooMany = await sendMessageCampaign(
+      context,
+      input.eventId,
+      'key-001',
+      {
+        ...input,
+        attachments: [
+          { objectId: 'a', filename: 'a.pdf' },
+          { objectId: 'b', filename: 'b.pdf' },
+        ],
+      },
+      'actor',
+      ports,
+    );
+    expect(tooMany).toMatchObject({
+      ok: false,
+      error: { code: 'too-many-attachments' },
+    });
+    const unavailablePorts: TestPorts = {
+      ...ports,
+      validateAttachments: async () => ({
+        ok: false,
+        error: { code: 'attachment-unavailable', message: 'Missing PDF' },
+      }),
+    };
+    const unavailable = await sendMessageCampaign(
+      context,
+      input.eventId,
+      'key-001',
+      {
+        ...input,
+        attachments: [{ objectId: 'a', filename: 'a.pdf' }],
+      },
+      'actor',
+      unavailablePorts,
+    );
+    expect(unavailable).toMatchObject({
+      ok: false,
+      error: { code: 'attachment-unavailable' },
+    });
+    expect(transactionCalls).toEqual([]);
+  });
+
+  it('resolves recipients inside the transaction and returns a typed empty-selection error', async () => {
+    const { sendMessageCampaign } = await import('./messages.js');
+    const result = await sendMessageCampaign(
+      context,
+      input.eventId,
+      'key-001',
+      input,
+      'actor',
+      ports,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'no-recipients' },
+    });
+    expect(transactionCalls).toEqual(['begin', 'resolve']);
+  });
+
+  it('returns an idempotency conflict instead of an absent campaign', async () => {
+    const { sendMessageCampaign } = await import('./messages.js');
+    const conflictPorts: TestPorts = {
+      ...ports,
+      transaction: async (_context, work) =>
+        work({
+          ...transaction,
+          resolveRecipients: async (): Promise<
+            import('./messages.js').MessageCampaignRecipient[]
+          > => [
+            {
+              entryId: 'entry-a',
+              registrationGroupId: 'group-a',
+              email: 'ada@example.test',
+              firstName: 'Ada',
+              lastName: 'Lovelace',
+              fullName: 'Ada Lovelace',
+              eventName: 'Run',
+              className: 'Open',
+              entryNumber: '1',
+            },
+          ],
+          findByIdempotencyKey: async () => ({
+            requestHash: 'different',
+            campaign: { id: 'campaign-a' },
+            recipients: [],
+          }),
+        }),
+    };
+    const result = await sendMessageCampaign(
+      context,
+      input.eventId,
+      'key-001',
+      input,
+      'actor',
+      conflictPorts,
+    );
+    expect(result).toMatchObject({
+      ok: false,
+      error: { code: 'idempotency-conflict' },
+    });
+  });
+});

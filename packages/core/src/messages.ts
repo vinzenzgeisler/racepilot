@@ -397,7 +397,14 @@ export async function sendMessageCampaign<
       text: input.text,
       actor,
     });
-    if (!campaign)
+    if (!campaign) {
+      const concurrent = await tx.findByIdempotencyKey(idempotencyKey);
+      if (concurrent?.requestHash === requestHash)
+        return {
+          ok: true,
+          campaign: tx.toResponse(concurrent.campaign, concurrent.recipients),
+          replayed: true,
+        };
       return {
         ok: false,
         error: {
@@ -405,6 +412,7 @@ export async function sendMessageCampaign<
           message: 'Idempotency key was concurrently used',
         },
       };
+    }
     await tx.recordAudit(campaign, actor, mode.auditAction ?? 'send');
     const locale = await tx.getLocale();
     const attachments = input.attachments.map((item) => ({
