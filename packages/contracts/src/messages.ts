@@ -10,16 +10,7 @@ export const MessageRecipientFilterSchema = z
   .object({
     classIds: z.array(z.string().uuid()).max(100).default([]),
     statuses: z
-      .array(
-        z.enum([
-          'unverified',
-          'verified',
-          'pending',
-          'accepted',
-          'rejected',
-          'withdrawn',
-        ]),
-      )
+      .array(z.enum(['pending', 'accepted', 'rejected', 'withdrawn']))
       .max(50)
       .default([]),
     emailVerified: z.boolean().optional(),

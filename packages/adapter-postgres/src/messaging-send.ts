@@ -5,12 +5,12 @@ import type {
   RequestContext,
 } from '@racepilot/core';
 import {
-  MESSAGE_ATTACHMENT_LIMITS,
   fingerprintMessageRequest,
   renderMessageTemplate,
   transitionMessageCampaign,
   validateMessageTemplate,
 } from '@racepilot/core';
+import { MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/contracts';
 import type { Database } from './database.js';
 import { organizations } from './schema/organization.js';
 import { enqueueMailOutbox } from './mail-outbox.js';

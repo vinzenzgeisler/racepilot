@@ -28,6 +28,52 @@ describe('message templates', () => {
 });
 
 describe('message recipients', () => {
+  it('keeps acceptance status and email verification as independent filters', () => {
+    const candidate = {
+      address: 'ada@example.test',
+      entryId: 'entry-a',
+      classId: 'class-a',
+      verificationStatus: 'unverified',
+      acceptanceStatus: 'accepted',
+      paymentStatus: 'open' as const,
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      eventName: 'Run',
+      className: 'Open',
+      entryNumber: '12',
+    };
+    expect(
+      resolveMessageRecipientCandidates([candidate], {
+        classIds: [],
+        statuses: ['accepted'],
+        emailVerified: false,
+        payment: 'any',
+        entryIds: [],
+        additionalAddresses: [],
+      }),
+    ).toHaveLength(1);
+    expect(
+      resolveMessageRecipientCandidates([candidate], {
+        classIds: [],
+        statuses: ['unverified'],
+        emailVerified: false,
+        payment: 'any',
+        entryIds: [],
+        additionalAddresses: [],
+      }),
+    ).toHaveLength(0);
+    expect(
+      resolveMessageRecipientCandidates([candidate], {
+        classIds: [],
+        statuses: ['accepted'],
+        emailVerified: true,
+        payment: 'any',
+        entryIds: [],
+        additionalAddresses: [],
+      }),
+    ).toHaveLength(0);
+  });
+
   it('resolves class, status, verification, payment and individual-entry filters in core', () => {
     const candidate = {
       address: 'ada@example.test',

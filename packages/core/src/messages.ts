@@ -23,12 +23,6 @@ export interface MessageCampaignCreate {
   attachments: Array<{ objectId: string; filename: string }>;
 }
 
-export const MESSAGE_ATTACHMENT_LIMITS = Object.freeze({
-  maxCount: 5,
-  maxBytes: 10 * 1024 * 1024,
-});
-export const MESSAGE_VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
-
 export const messagePlaceholderNames = [
   'firstName',
   'lastName',
@@ -112,7 +106,6 @@ export function resolveMessageRecipientCandidates(
       return false;
     if (
       filter.statuses.length &&
-      !filter.statuses.includes(candidate.verificationStatus) &&
       !filter.statuses.includes(candidate.acceptanceStatus)
     )
       return false;

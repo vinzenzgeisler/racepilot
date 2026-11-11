@@ -1,10 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import type { RequestContext } from '@racepilot/core';
-import {
-  MESSAGE_VERIFICATION_TOKEN_TTL_MS,
-  transitionMessageCampaign,
-} from '@racepilot/core';
+import { transitionMessageCampaign } from '@racepilot/core';
+import { MESSAGE_VERIFICATION_TOKEN_TTL_MS } from '@racepilot/contracts';
 import type { MessageCampaignCreate } from '@racepilot/core';
 import type { Database } from './database.js';
 import { entries, people, registrationGroups } from './schema/entries.js';
