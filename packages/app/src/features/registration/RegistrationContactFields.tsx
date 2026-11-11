@@ -81,6 +81,7 @@ export function RegistrationContactFields({
             <FormGrid>
               <Field
                 label={t.emergencyContactName}
+                aria-label={`${t.emergencyContact} · ${t.emergencyContactName}`}
                 required={
                   emergency === 'required' ||
                   Boolean(values.emergencyContactPhone)
@@ -93,6 +94,7 @@ export function RegistrationContactFields({
               />
               <Field
                 label={t.emergencyContactPhone}
+                aria-label={`${t.emergencyContact} · ${t.emergencyContactPhone}`}
                 type="tel"
                 // An emergency contact is one unit: giving the name makes the number necessary.
                 required={

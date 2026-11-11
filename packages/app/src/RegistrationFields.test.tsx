@@ -19,6 +19,7 @@ const term = {
   hash: 'b'.repeat(64),
 };
 const form = (fields: Record<string, { state: string }>, legacy = false) => ({
+  organization: { name: 'Club', contactEmail: 'club@example.test' },
   form: standardRegistrationForm,
   event: {
     id: '20000000-0000-4000-8000-000000000001',
@@ -97,11 +98,16 @@ async function mount(
   );
   return submissions;
 }
-const control = (label: string) =>
-  [...container.querySelectorAll('label')]
+const control = (label: string) => {
+  const labelledControl = [...container.querySelectorAll('label')]
     .find((item) => item.textContent?.trim().startsWith(label))
-    ?.querySelector('input,select,textarea') as
+    ?.querySelector('input,select,textarea');
+  const ariaLabelledControl = container.querySelector(
+    `[aria-label="${label}"]`,
+  );
+  return (labelledControl ?? ariaLabelledControl ?? undefined) as
     HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | undefined;
+};
 async function fill(label: string, value: string) {
   const element = control(label)!;
   const prototype =
@@ -198,12 +204,12 @@ describe('public registration contact and vehicle fields', () => {
       'en',
     );
     expect(control('Phone')).toBeTruthy();
-    expect(control('Emergency contact · phone')?.required).toBe(false);
-    await fill('Emergency contact · phone', '+49 351 999');
-    expect(control('Emergency contact · name')?.required).toBe(true);
-    await fill('Emergency contact · phone', '');
-    await fill('Emergency contact · name', 'Bernd');
-    expect(control('Emergency contact · phone')?.required).toBe(true);
+    expect(control('Emergency contact · Phone')?.required).toBe(false);
+    await fill('Emergency contact · Phone', '+49 351 999');
+    expect(control('Emergency contact · Name')?.required).toBe(true);
+    await fill('Emergency contact · Phone', '');
+    await fill('Emergency contact · Name', 'Bernd');
+    expect(control('Emergency contact · Phone')?.required).toBe(true);
     expect(control('Publication')?.tagName).toBe('SELECT');
   });
 

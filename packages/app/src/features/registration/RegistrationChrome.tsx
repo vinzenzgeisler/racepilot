@@ -32,6 +32,7 @@ export function RegistrationHeader({
           <Button
             type="button"
             variant={locale === 'de' ? 'primary-dark' : 'secondary'}
+            aria-label="Deutsch"
             aria-pressed={locale === 'de'}
             onClick={() => setLocale('de')}
           >
@@ -40,6 +41,7 @@ export function RegistrationHeader({
           <Button
             type="button"
             variant={locale === 'en' ? 'primary-dark' : 'secondary'}
+            aria-label="English"
             aria-pressed={locale === 'en'}
             onClick={() => setLocale('en')}
           >
@@ -73,6 +75,17 @@ export function RegistrationHeader({
           </p>
         </div>
         <div className="registration-header-meta">
+          <p className="registration-organization-name">
+            {payload.organization.name}
+          </p>
+          {payload.organization.contactEmail && (
+            <p>
+              <span>{locale === 'de' ? 'Kontakt' : 'Contact'}</span>
+              <a href={`mailto:${payload.organization.contactEmail}`}>
+                {payload.organization.contactEmail}
+              </a>
+            </p>
+          )}
           <p>
             <span>{locale === 'de' ? 'Startgeld' : 'Entry fee'}</span>
             {model.estimateMessage}

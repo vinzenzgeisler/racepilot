@@ -30,6 +30,7 @@ const terms = [
   },
 ];
 const registrationForm = {
+  organization: { name: 'Club', contactEmail: 'club@example.test' },
   form: standardRegistrationForm,
   event: {
     id: '20000000-0000-4000-8000-000000000001',
@@ -136,7 +137,7 @@ describe('public registration UI', () => {
       ).toBe(true);
       const germanButton = Array.from(
         container.querySelectorAll('button'),
-      ).find((button) => button.textContent === 'Deutsch');
+      ).find((button) => button.getAttribute('aria-label') === 'Deutsch');
       expect(germanButton).toBeTruthy();
       await act(async () => germanButton?.click());
       expect(container.textContent).toContain('Fahrerdaten');
@@ -150,7 +151,7 @@ describe('public registration UI', () => {
       ).toBe(true);
       const englishButton = Array.from(
         container.querySelectorAll('button'),
-      ).find((button) => button.textContent === 'English');
+      ).find((button) => button.getAttribute('aria-label') === 'English');
       await act(async () => englishButton?.click());
       const dobLabel = Array.from(container.querySelectorAll('label')).find(
         (label) => label.textContent?.includes('Date of birth'),
