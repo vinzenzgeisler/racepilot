@@ -9,7 +9,7 @@ export async function validateMessageAttachmentMetadata(
   storage: ObjectStorageProvider | undefined,
   organizationId: OrganizationId,
   attachments: readonly { objectId: string; filename: string }[],
-): Promise<MessageCampaignSendResult | null> {
+): Promise<MessageCampaignSendResult | { ok: true }> {
   if (attachments.length && (!storage || !storage.head))
     return {
       ok: false,
@@ -20,7 +20,16 @@ export async function validateMessageAttachmentMetadata(
     };
   let totalBytes = 0;
   for (const attachment of attachments) {
-    const metadata = await storage!.head!(organizationId, attachment.objectId);
+    const head = storage?.head;
+    if (!head)
+      return {
+        ok: false,
+        error: {
+          code: 'storage-unavailable',
+          message: 'Attachment metadata storage is unavailable',
+        },
+      };
+    const metadata = await head(organizationId, attachment.objectId);
     if (!metadata || metadata.contentType !== 'application/pdf')
       return {
         ok: false,
@@ -39,5 +48,5 @@ export async function validateMessageAttachmentMetadata(
         },
       };
   }
-  return null;
+  return { ok: true };
 }

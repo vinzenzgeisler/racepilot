@@ -7,40 +7,32 @@ import {
 } from '@racepilot/contracts';
 import { z } from 'zod';
 
-type MessageRouteFailure = {
-  ok: false;
-  status: 401 | 403 | 404;
-  error: string;
-};
-type AuthorizedMessageRoute = {
-  ok: true;
-  member: NonNullable<
-    Awaited<ReturnType<ApiRoutesContext['resolveMemberContext']>>
-  >;
-  messages: NonNullable<ApiRoutesContext['deps']['messages']>;
-};
-type AuthorizedMemberRoute = {
-  ok: true;
-  member: NonNullable<
-    Awaited<ReturnType<ApiRoutesContext['resolveMemberContext']>>
-  >;
-};
+function messageCampaignResponse(
+  data: import('@racepilot/core').MessageCampaignData,
+) {
+  const { campaign, recipients } = data;
+  return {
+    id: campaign.id,
+    eventId: campaign.eventId,
+    subject: campaign.subject,
+    status: campaign.status,
+    createdAt: campaign.createdAt.toISOString(),
+    total: recipients.length,
+    sent: recipients.filter((recipient) => recipient.status === 'sent').length,
+    failed: recipients.filter((recipient) => recipient.status === 'failed')
+      .length,
+    recipients: recipients.map((recipient) => ({
+      id: recipient.id,
+      entryId: recipient.entryId,
+      email: recipient.email,
+      subject: recipient.subject,
+      status: recipient.status,
+    })),
+  };
+}
 
 function createMessageRouteGuard(context: ApiRoutesContext) {
-  function guard(
-    request: Request,
-    permission: string,
-  ): Promise<AuthorizedMessageRoute | MessageRouteFailure>;
-  function guard(
-    request: Request,
-    permission: string,
-    needsMessages: false,
-  ): Promise<AuthorizedMemberRoute | MessageRouteFailure>;
-  async function guard(
-    request: Request,
-    permission: string,
-    needsMessages = true,
-  ) {
+  return async (request: Request, permission: string) => {
     const member = await context.resolveMemberContext(request);
     if (!member)
       return {
@@ -50,13 +42,11 @@ function createMessageRouteGuard(context: ApiRoutesContext) {
       };
     if (!member.permissions.has(permission))
       return { ok: false as const, status: 403 as const, error: 'Forbidden' };
-    if (needsMessages && !context.deps.messages)
+    const messages = context.deps.messages;
+    if (!messages)
       return { ok: false as const, status: 404 as const, error: 'Not found' };
-    return needsMessages
-      ? { ok: true as const, member, messages: context.deps.messages! }
-      : { ok: true as const, member };
-  }
-  return guard;
+    return { ok: true as const, member, messages };
+  };
 }
 
 export function registerMessageRoutes(context: ApiRoutesContext): void {
@@ -77,10 +67,12 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
       eventId.data,
       body.data,
     );
-    return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
+    return result.ok
+      ? c.json(result.value)
+      : c.json({ error: result.error.message, code: result.error.code }, 404);
   });
   app.post('/admin/events/:eventId/messages/attachments', async (c) => {
-    const access = await guard(c.req.raw, 'event:write', false);
+    const access = await guard(c.req.raw, 'event:write');
     if (!access.ok) return c.json({ error: access.error }, access.status);
     const { member } = access;
     if (!deps.objectStorage)
@@ -184,9 +176,16 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
       body.data.subject,
       body.data.text,
     );
-    return preview
-      ? c.json(preview)
-      : c.json({ error: 'No example recipient or invalid placeholder' }, 400);
+    if (preview.ok) return c.json(preview.value);
+    const status = preview.error.code === 'event-not-found' ? 404 : 422;
+    return c.json(
+      {
+        error: preview.error.message,
+        code: preview.error.code,
+        ...(preview.error.details ? { details: preview.error.details } : {}),
+      },
+      status,
+    );
   });
 
   app.post('/admin/events/:eventId/messages/actions/:action', async (c) => {
@@ -208,7 +207,8 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
       action.data,
       actor,
     );
-    if (campaign.ok) return c.json(campaign.campaign, 202);
+    if (campaign.ok)
+      return c.json(messageCampaignResponse(campaign.campaign), 202);
     const status =
       campaign.error.code === 'verification-unavailable'
         ? 503
@@ -252,7 +252,8 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
       body.data,
       actor,
     );
-    if (campaign.ok) return c.json(campaign.campaign, 202);
+    if (campaign.ok)
+      return c.json(messageCampaignResponse(campaign.campaign), 202);
     const status =
       campaign.error.code === 'idempotency-conflict'
         ? 409

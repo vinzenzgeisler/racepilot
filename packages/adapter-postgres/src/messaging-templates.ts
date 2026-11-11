@@ -22,11 +22,22 @@ const DEFAULT_MESSAGE_TEMPLATE = Object.freeze({
 
 export function createMessageTemplateRepository(db: Database) {
   return {
-    preview: (
+    preview: async (
       ctx: RequestContext,
       eventId: string,
       filter: MessageRecipientFilter,
-    ) => resolveMessageRecipients(db, ctx, eventId, filter),
+    ) => {
+      const result = await resolveMessageRecipients(db, ctx, eventId, filter);
+      return result
+        ? { ok: true as const, value: result }
+        : {
+            ok: false as const,
+            error: {
+              code: 'event-not-found' as const,
+              message: 'Event not found',
+            },
+          };
+    },
     listTemplates: async (ctx: RequestContext, eventId: string) => {
       const [event] = await db
         .select({ id: events.id })
@@ -117,24 +128,65 @@ export function createMessageTemplateRepository(db: Database) {
       text: string,
     ) => {
       const result = await resolveMessageRecipients(db, ctx, eventId, filter);
-      if (
-        !result ||
-        !result.recipients.length ||
-        validateMessageTemplate(subject, text).length
-      )
-        return null;
-      const recipient = result.recipients[0]!;
+      if (!result)
+        return {
+          ok: false as const,
+          error: {
+            code: 'event-not-found' as const,
+            message: 'Event not found',
+          },
+        };
+      if (!result.recipients.length)
+        return {
+          ok: false as const,
+          error: {
+            code: 'no-recipients' as const,
+            message: 'No example recipient matches the selection',
+          },
+        };
+      const errors = validateMessageTemplate(subject, text);
+      if (errors.length)
+        return {
+          ok: false as const,
+          error: {
+            code: 'invalid-template' as const,
+            message: 'Message template is invalid',
+            details: errors,
+          },
+        };
+      const [recipient] = result.recipients;
+      if (!recipient)
+        return {
+          ok: false as const,
+          error: {
+            code: 'no-recipients' as const,
+            message: 'No example recipient matches the selection',
+          },
+        };
+      const rendered = renderMessageTemplate(subject, text, {
+        firstName: recipient.firstName,
+        lastName: recipient.lastName,
+        fullName: recipient.fullName,
+        email: recipient.email,
+        eventName: recipient.eventName,
+        className: recipient.className,
+        entryNumber: recipient.entryNumber,
+      });
+      if (!rendered.ok)
+        return {
+          ok: false as const,
+          error: {
+            code: 'invalid-template' as const,
+            message: 'Message template is invalid',
+            details: rendered.errors,
+          },
+        };
       return {
-        recipient: { email: recipient.email, name: recipient.name },
-        ...renderMessageTemplate(subject, text, {
-          firstName: recipient.firstName,
-          lastName: recipient.lastName,
-          fullName: recipient.fullName,
-          email: recipient.email,
-          eventName: recipient.eventName,
-          className: recipient.className,
-          entryNumber: recipient.entryNumber,
-        }),
+        ok: true as const,
+        value: {
+          recipient: { email: recipient.email, name: recipient.name },
+          ...rendered.value,
+        },
       };
     },
   };

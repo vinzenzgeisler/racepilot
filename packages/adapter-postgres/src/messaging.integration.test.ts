@@ -124,10 +124,12 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         entryIds: [],
         additionalAddresses: [],
       };
-      expect(await repo.preview(context, foreign.event.id, filter)).toBeNull();
+      expect(
+        await repo.preview(context, foreign.event.id, filter),
+      ).toMatchObject({ ok: false, error: { code: 'event-not-found' } });
       expect(
         await repo.preview(foreignContext, owner.event.id, filter),
-      ).toBeNull();
+      ).toMatchObject({ ok: false, error: { code: 'event-not-found' } });
       const templates = await repo.listTemplates(context, owner.event.id);
       expect(templates).toEqual([
         expect.objectContaining({
@@ -139,10 +141,13 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
       expect(await repo.listTemplates(context, owner.event.id)).toHaveLength(1);
       const preview = await repo.preview(context, owner.event.id, filter);
       expect(preview).toMatchObject({
-        count: 1,
-        recipients: [
-          { email: `ada-owner@example.test`, entryId: owner.entry.id },
-        ],
+        ok: true,
+        value: {
+          count: 1,
+          recipients: [
+            { email: `ada-owner@example.test`, entryId: owner.entry.id },
+          ],
+        },
       });
       const payload = {
         eventId: owner.event.id,
@@ -176,10 +181,15 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
       );
       expect(first).toMatchObject({
         ok: true,
-        campaign: { total: 1, status: 'sending' },
+        campaign: {
+          campaign: { status: 'sending' },
+          recipients: [{ email: 'owner@example.test' }],
+        },
       });
       if (!first.ok || !replay.ok) throw new Error('Campaign send failed');
-      expect(replay.campaign).toMatchObject({ id: first.campaign.id });
+      expect(replay.campaign).toMatchObject({
+        campaign: { id: first.campaign.campaign.id },
+      });
       expect(
         await repo.send(
           context,
@@ -209,7 +219,9 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
       expect(campaigns).toHaveLength(1);
       expect(recipients).toHaveLength(1);
       expect(outbox).toHaveLength(1);
-      expect(outbox[0]?.variables).toMatchObject({
+      const [outboxRow] = outbox;
+      if (!outboxRow) throw new Error('Expected one outbox row');
+      expect(outboxRow.variables).toMatchObject({
         subject: 'Hello Ada',
         body: 'Welcome Event owner',
       });
@@ -217,16 +229,18 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
       await db
         .update(messageCampaigns)
         .set({ status: 'failed' })
-        .where(eq(messageCampaigns.id, sentCampaign.id));
+        .where(eq(messageCampaigns.id, sentCampaign.campaign.id));
       await db
         .update(messageCampaignRecipients)
         .set({ status: 'failed' })
-        .where(eq(messageCampaignRecipients.campaignId, sentCampaign.id));
+        .where(
+          eq(messageCampaignRecipients.campaignId, sentCampaign.campaign.id),
+        );
       await db
         .update(emailOutbox)
         .set({ status: 'failed' })
-        .where(eq(emailOutbox.id, outbox[0]!.id));
-      const retried = await repo.retryFailed(context, sentCampaign.id);
+        .where(eq(emailOutbox.id, outboxRow.id));
+      const retried = await repo.retryFailed(context, sentCampaign.campaign.id);
       expect(retried).toMatchObject({ status: 'sending', failed: 0 });
       const verification = await repo.quickAction(
         context,
@@ -236,7 +250,10 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
       );
       expect(verification).toMatchObject({
         ok: true,
-        campaign: { status: 'sending', total: 1 },
+        campaign: {
+          campaign: { status: 'sending' },
+          recipients: [{ email: 'owner@example.test' }],
+        },
       });
       await db.insert(invoices).values({
         organizationId: owner.org.id,
@@ -254,7 +271,10 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
       );
       expect(paymentReminder).toMatchObject({
         ok: true,
-        campaign: { status: 'sending', total: 1 },
+        campaign: {
+          campaign: { status: 'sending' },
+          recipients: [{ email: 'owner@example.test' }],
+        },
       });
       const allCampaigns = await db
         .select()

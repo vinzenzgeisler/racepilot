@@ -22,6 +22,8 @@ import {
   type ExternalIdentity,
   type MessageCampaignCreate,
   type MessageCampaignSendResult,
+  type MessageCampaignData,
+  type MessagePreviewResult,
   type MessageRecipientFilter,
   type MessageTemplate,
 } from '@racepilot/core';
@@ -49,21 +51,23 @@ export interface ApiDeps {
       context: RequestContext,
       eventId: string,
       filter: MessageRecipientFilter,
-    ): Promise<{
-      count: number;
-      recipients: Array<{
-        entryId: string | null;
-        email: string;
-        name: string;
-      }>;
-    } | null>;
+    ): Promise<
+      MessagePreviewResult<{
+        count: number;
+        recipients: Array<{
+          entryId: string | null;
+          email: string;
+          name: string;
+        }>;
+      }>
+    >;
     send(
       context: RequestContext,
       eventId: string,
       idempotencyKey: string,
       input: MessageCampaignCreate,
       actor: string,
-    ): Promise<MessageCampaignSendResult>;
+    ): Promise<MessageCampaignSendResult<MessageCampaignData>>;
     retryFailed(
       context: RequestContext,
       campaignId: string,
@@ -83,13 +87,13 @@ export interface ApiDeps {
       filter: MessageRecipientFilter,
       subject: string,
       text: string,
-    ): Promise<unknown | null>;
+    ): Promise<MessagePreviewResult<unknown>>;
     quickAction(
       context: RequestContext,
       eventId: string,
       action: 'resend-verification' | 'remind-open-payments',
       actor: string,
-    ): Promise<MessageCampaignSendResult>;
+    ): Promise<MessageCampaignSendResult<MessageCampaignData>>;
   };
   entryDetails?: EntryDetailRepository;
   entryExports?: EntryExportRepository;

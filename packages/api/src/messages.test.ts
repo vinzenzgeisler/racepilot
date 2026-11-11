@@ -35,17 +35,35 @@ function appFor(permissions = context.permissions) {
       actor,
       organizationId: requestContext.organizationId,
     });
-    return { ok: true, campaign: { id: `campaign-${input.eventId}` } };
+    return {
+      ok: true,
+      campaign: {
+        campaign: {
+          id: `campaign-${input.eventId}`,
+          eventId: input.eventId,
+          subject: input.subject,
+          status: 'sending',
+          createdAt: new Date(),
+        },
+        recipients: [],
+      },
+    };
   };
   const send = vi.fn(sendImplementation);
   const messages: NonNullable<ApiDeps['messages']> = {
-    preview: async () => ({ count: 0, recipients: [] }),
+    preview: async () => ({
+      ok: true as const,
+      value: { count: 0, recipients: [] },
+    }),
     send,
     retryFailed: async () => null,
     list: async () => [],
     listTemplates: async () => [],
     saveTemplate: async () => null,
-    previewTemplate: async () => null,
+    previewTemplate: async () => ({
+      ok: false as const,
+      error: { code: 'no-recipients' as const, message: 'No recipients' },
+    }),
     quickAction: async () => ({
       ok: false,
       error: { code: 'no-recipients', message: 'No matching recipients' },
