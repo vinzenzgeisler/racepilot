@@ -28,8 +28,8 @@
   min-height: var(--target-min);
   padding: var(--space-2);
   border: 1px solid var(--overlay-sidebar-border);
-  background: var(--color-white);
-  color: var(--color-ink);
+  background: transparent;
+  color: var(--color-white);
   font: var(--text-body);
 }
 .nb-admin-nav nav {
