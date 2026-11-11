@@ -1,0 +1,110 @@
+.registration-review {
+  grid-column: 1 / -1;
+}
+.registration-summary {
+  position: static;
+  padding: var(--space-6);
+  border: 1px solid var(--color-line);
+  background: var(--surface-panel);
+}
+.registration-summary h3 {
+  margin-block-start: 0;
+  font: var(--text-app-h2);
+}
+.registration-summary dl,
+.registration-review dl {
+  margin: 0;
+}
+.registration-summary .registration-summary-row,
+.registration-review .registration-review-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: var(--space-3);
+  padding-block: var(--space-2);
+  border-top: 1px solid var(--color-line);
+}
+.registration-summary dt,
+.registration-review dt {
+  color: var(--color-graphite);
+}
+.registration-summary dd,
+.registration-review dd {
+  margin: 0;
+  text-align: end;
+}
+.registration-draft-status {
+  margin-block: var(--space-4) 0;
+  color: var(--color-graphite);
+  font: var(--text-label);
+}
+.registration-review {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+.registration-review-wide {
+  grid-column: 1 / -1;
+}
+.registration-review-card {
+  padding: var(--space-4) 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+  background: transparent;
+}
+.registration-review-card:not(.registration-review-wide) {
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+}
+.registration-review-card h3 {
+  margin: 0;
+  font: var(--text-app-h2);
+}
+.registration-review-card > h3 {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+}
+.registration-review-card:not(.registration-review-wide) > h3 {
+  padding-bottom: 0;
+  border: 0;
+  margin-bottom: var(--space-3);
+  font: var(--text-label);
+  text-transform: uppercase;
+}
+.registration-review-card > strong {
+  display: block;
+}
+.registration-review-card > .nb-button {
+  margin-top: var(--space-2);
+}
+.registration-review-detail {
+  color: var(--color-graphite);
+  font: 400 var(--type-small-size)/var(--type-small-line) var(--font-plex);
+}
+.registration-review-consents h4 {
+  margin: 0 0 var(--space-3);
+  font: var(--text-label);
+  text-transform: uppercase;
+}
+.registration-review-consents section + section {
+  margin-top: var(--space-4);
+}
+.registration-review-card p {
+  margin: 0;
+}
+.registration-review-card p + p {
+  margin-top: var(--space-2);
+}
+.registration-review-card .registration-review-entry {
+  margin: 0;
+}
+.registration-organizer-notice {
+  padding: var(--space-3) 0;
+  border: 0;
+  background: transparent;
+  white-space: pre-line;
+}
+@media (width <= 48rem) {
+  .registration-review {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -27,9 +27,12 @@
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
+  --space-5: 20px;
   --space-6: 24px;
   --space-8: 32px;
+  --space-10: 40px;
   --space-12: 48px;
+  --space-16: 64px;
   --tracking-label: var(--type-label-tracking);
   --text-body: 400 var(--type-body-size-app)/var(--type-body-app-line)
     var(--font-plex);
@@ -39,6 +42,7 @@
     var(--font-archivo);
   --text-app-h1: 800 var(--type-h1-size-app)/var(--type-h1-line)
     var(--font-archivo);
+  --text-registration-display: 800 60px/1 var(--font-archivo);
   --text-app-h2: 700 var(--type-h2-size-app)/var(--type-h2-line)
     var(--font-archivo);
   --radius: 0;
@@ -103,4 +107,25 @@
   --type-h3-stretch: 112%;
   --type-label-tracking: 0.08em;
   font-synthesis: none;
+  --registration-content-max: 75rem;
+  --registration-copy-max: 42rem;
+  --registration-intro-max: 44rem;
+  --registration-meta-label-width: 7.5rem;
+  --registration-meta-min: 18rem;
+  --registration-summary-min: 16rem;
+  --registration-logo-max-width: 12rem;
+  --registration-logo-max-height: 5rem;
+  --registration-header-image-max: 18rem;
+  --registration-field-min: 15rem;
+  --registration-main-column: 1.65fr;
+  --registration-side-column: 0.8fr;
+  --registration-step-bar-1: 8px;
+  --registration-step-bar-2: 14px;
+  --registration-step-bar-3: 20px;
+}
+
+@media (width <= 720px) {
+  :root {
+    --text-registration-display: 800 36px/1 var(--font-archivo);
+  }
 }

@@ -94,6 +94,20 @@ export const EntryResponse = z
             history: z.string().nullable().optional(),
           })
           .strict(),
+        consents: z
+          .array(
+            z
+              .object({
+                key: z.string(),
+                version: z.string(),
+                language: z.enum(['de', 'en']),
+                acceptedAt: z.string().datetime({ offset: true }),
+                text: z.string().nullable(),
+                required: z.boolean().nullable(),
+              })
+              .strict(),
+          )
+          .optional(),
         invoice: z
           .object({
             id: z.string().uuid(),
@@ -106,7 +120,15 @@ export const EntryResponse = z
           .strict()
           .nullable()
           .optional(),
-        eventClass: z.object({ code: z.string(), name: z.string() }).strict(),
+        eventClass: z
+          .object({
+            code: z.string(),
+            name: z.string(),
+            vehicleType: z
+              .enum(['car', 'motorcycle', 'kart', 'other'])
+              .optional(),
+          })
+          .strict(),
         startNumber: z.string().nullable(),
         customAnswers: z.array(
           z

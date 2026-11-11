@@ -1,0 +1,22 @@
+/** German names of the standard registration fields, as the organizer sees them. */
+export const registrationFieldLabels: Record<string, string> = {
+  dateOfBirth: 'Geburtsdatum',
+  phone: 'Telefon',
+  street: 'Straße',
+  postalCode: 'PLZ',
+  city: 'Ort',
+  country: 'Land',
+  emergencyContact: 'Notfallkontakt',
+  publicationPreference: 'Veröffentlichung',
+  biography: 'Sportlicher Werdegang',
+  organizer_notes: 'Hinweise an den Veranstalter',
+  requestedStartNumber: 'Wunsch-Startnummer',
+  make: 'Hersteller',
+  model: 'Modell',
+  year: 'Baujahr',
+  displacement: 'Hubraum',
+  cylinders: 'Zylinder',
+  owner: 'Besitzer',
+  history: 'Fahrzeughistorie',
+  vehicleImage: 'Fahrzeugbild',
+};

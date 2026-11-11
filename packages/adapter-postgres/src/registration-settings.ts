@@ -161,6 +161,14 @@ export interface PublicRegistrationPayload {
     country?: string | undefined;
     guardianName?: string | undefined;
     guardianEmail?: string | undefined;
+    phone?: string | null | undefined;
+    street?: string | null | undefined;
+    postalCode?: string | null | undefined;
+    city?: string | null | undefined;
+    emergencyContactName?: string | null | undefined;
+    emergencyContactPhone?: string | null | undefined;
+    publicationPreference?:
+      'name_visible' | 'initials' | 'hidden' | null | undefined;
   };
   customAnswers?: Record<
     string,
@@ -174,6 +182,10 @@ export interface PublicRegistrationPayload {
       model: string;
       year: number | null;
       registration: string | null;
+      displacementCc?: number | null | undefined;
+      cylinders?: number | null | undefined;
+      ownerName?: string | null | undefined;
+      history?: string | null | undefined;
     };
   }>;
   consents: Array<{

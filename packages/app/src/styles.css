@@ -1,6 +1,5 @@
 @import url('@racepilot/ui/tokens.css');
 @import url('./features/styles/global.css');
-@import url('./features/registration/styles.css');
 @import url('./features/entries/admin.css');
 @import url('./features/entries/status.css');
 @import url('./features/gallery/styles.css');

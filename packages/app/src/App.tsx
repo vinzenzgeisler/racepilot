@@ -87,7 +87,7 @@ export function App({ renderContribution }: AppProps = {}) {
   );
   if (registrationMatch)
     return (
-      <main className="shell">
+      <main className="shell registration-shell">
         <Registration
           organizationId={config.organization.id}
           eventSlug={decodeURIComponent(registrationMatch[1]!)}

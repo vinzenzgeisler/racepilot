@@ -1,0 +1,292 @@
+.registration-shell {
+  max-width: none;
+  padding: 0;
+}
+.registration {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  --brand-radius: 0;
+}
+.registration-header {
+  background: var(--brand-primary);
+  color: var(--brand-primary-text);
+}
+.registration-header-inner,
+.registration-container {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--registration-content-max);
+  margin-inline: auto;
+  padding-inline: clamp(var(--space-4), 4vw, var(--space-12));
+}
+.registration-header-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(
+      var(--registration-meta-min),
+      var(--registration-side-column)
+    );
+  grid-template-rows: auto 1fr;
+  gap: var(--space-4) var(--space-12);
+  align-items: start;
+  padding-block: var(--space-8) var(--space-10);
+}
+.registration-language {
+  grid-column: 2;
+  grid-row: 1;
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+.registration-header-copy {
+  grid-column: 1;
+  grid-row: 1 / span 2;
+}
+.registration-header-copy h1 {
+  color: var(--brand-primary-text);
+  max-width: var(--registration-copy-max);
+  margin-block: var(--space-2);
+  font: var(--text-registration-display);
+}
+.registration-header-copy > p:last-child {
+  max-width: var(--registration-intro-max);
+  margin-block-end: 0;
+  font-size: var(--text-body);
+  line-height: var(--type-body-line);
+}
+.registration-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+.registration-logo {
+  display: block;
+  max-width: var(--registration-logo-max-width);
+  max-height: var(--registration-logo-max-height);
+  object-fit: contain;
+  margin: 0;
+}
+.registration-organization-name {
+  margin: 0;
+  font: var(--text-label);
+  text-transform: uppercase;
+  letter-spacing: var(--type-label-tracking);
+}
+.registration-header-image {
+  display: block;
+  width: 100%;
+  max-height: var(--registration-header-image-max);
+  object-fit: cover;
+  margin-bottom: var(--space-4);
+}
+.registration-event-date {
+  display: inline-flex;
+  padding: var(--space-1) var(--space-2);
+  background: var(--color-mint);
+  color: var(--color-green);
+  font: var(--text-label);
+  text-transform: uppercase;
+}
+.registration-header-meta {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: grid;
+  align-content: start;
+  gap: 0;
+}
+.registration-header-meta .registration-language {
+  grid-column: 1;
+  grid-row: auto;
+  justify-content: flex-end;
+  margin-bottom: var(--space-3);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid currentColor;
+}
+.registration-language .nb-button {
+  min-height: var(--target-min);
+  padding-inline: var(--space-3);
+  justify-content: center;
+  color: var(--brand-primary-text);
+  outline-color: currentColor;
+}
+.registration-language .nb-primary-dark {
+  color: var(--color-night);
+}
+.registration-language .nb-button-signal {
+  display: none;
+}
+.registration-header-meta p {
+  display: grid;
+  grid-template-columns: minmax(var(--registration-meta-label-width), 0.7fr) 1fr;
+  gap: var(--space-3);
+  margin: 0;
+  padding-block: var(--space-3);
+  border-bottom: 1px solid color-mix(in srgb, currentColor 25%, transparent);
+  font-weight: 500;
+}
+.registration-header-meta span {
+  font: var(--text-label);
+  opacity: 0.8;
+}
+.registration-header-meta a {
+  color: inherit;
+  text-decoration-color: currentColor;
+}
+.registration-container {
+  padding-block: var(--space-10) var(--space-12);
+}
+.registration .nb-steps.is-registration {
+  margin-block: 0 var(--space-8);
+}
+.registration-layout {
+  display: grid;
+  grid-template-columns: minmax(0, var(--registration-main-column)) minmax(
+      var(--registration-summary-min),
+      var(--registration-side-column)
+    );
+  gap: var(--space-8);
+  align-items: start;
+}
+.registration-form {
+  min-width: 0;
+  padding: clamp(var(--space-6), 3vw, var(--space-10));
+  border: 1px solid var(--color-line);
+  background: var(--surface-panel);
+}
+.registration-form > fieldset {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(var(--registration-field-min), 100%), 1fr)
+  );
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.registration-form legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.registration .nb-field > span,
+.registration .nb-textarea > span {
+  color: var(--color-ink);
+  font: 400 var(--type-small-size)/var(--type-small-line) var(--font-plex);
+  text-transform: none;
+}
+.registration .nb-form-grid.is-registration {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+.registration .nb-form-grid.is-registration > *,
+.registration-form .nb-field {
+  min-width: 0;
+  width: 100%;
+}
+.registration .nb-form-grid.is-registration > .registration-wide {
+  grid-column: 1 / -1;
+}
+.registration .nb-form-grid.is-registration.is-address {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+.registration-step-description {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--color-graphite);
+}
+.registration-form > fieldset > .nb-form-grid,
+.registration-form > fieldset > .nb-form-section,
+.registration-form > fieldset > .registration-vehicle-fields,
+.registration-form > fieldset > .consent-list,
+.registration-form > fieldset > .guardian-fields,
+.registration-form > fieldset > .registration-wide,
+.registration-form > fieldset > .registration-review {
+  grid-column: 1 / -1;
+}
+.registration-form > fieldset > .nb-form-section,
+.registration-form > fieldset > .registration-vehicle-fields,
+.registration-form > fieldset > .consent-list,
+.registration-form > fieldset > .guardian-fields,
+.registration-form > fieldset > .registration-wide {
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-line);
+}
+@media (width <= 48rem) {
+  .registration-header-inner {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    gap: var(--space-4);
+    padding-block: var(--space-6);
+  }
+  .registration-language,
+  .registration-header-copy,
+  .registration-header-meta {
+    grid-column: 1;
+    grid-row: auto;
+  }
+  .registration-header-meta {
+    display: contents;
+  }
+  .registration-language,
+  .registration-header-meta .registration-language {
+    justify-content: flex-start;
+  }
+  .registration-container {
+    padding-block: var(--space-6);
+  }
+  .registration-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-6);
+  }
+  .registration-form > fieldset {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .registration .nb-form-grid.is-registration,
+  .registration .nb-form-grid.is-registration.is-address {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .registration-summary {
+    position: static;
+  }
+}
+.registration-form > fieldset > legend {
+  grid-column: 1 / -1;
+  position: static;
+  width: auto;
+  height: auto;
+  overflow: visible;
+  clip: auto;
+  margin-bottom: var(--space-4);
+  font: var(--text-app-h2);
+  white-space: normal;
+}
+.registration .nb-form-section.is-registration {
+  display: block;
+  margin-block: var(--space-6) 0;
+  padding: var(--space-6) 0 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+}
+.registration .nb-form-section.is-registration legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+.registration .nb-form-section.is-registration > h3 {
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  font: var(--text-app-h2);
+}
+.registration .nb-form-section.is-registration > div {
+  display: block;
+}

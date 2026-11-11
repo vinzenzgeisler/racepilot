@@ -1,6 +1,6 @@
 .nb-detail-section {
   padding: var(--space-6) 0;
-  border-top: 1px solid var(--color-ink);
+  border-top: 1px solid var(--color-line);
 }
 .nb-detail-section:first-child {
   border-top: 0;

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 104" width="360" height="104">
+  <path d="M14 75 68 15l54 60H99L68 40 37 75Z" fill="#d7f2e8"/>
+  <path d="m57 75 38-42 38 42h-22L95 56 78 75Z" fill="#f5f4ee"/>
+  <path d="M149 34h197v4H149zm0 38h197v4H149z" fill="#d7f2e8" opacity=".65"/>
+  <text x="150" y="58" fill="#fff" font-family="Arial,sans-serif" font-size="22" font-weight="700" letter-spacing="2">BERGPREIS</text>
+</svg>

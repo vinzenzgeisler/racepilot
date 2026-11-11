@@ -1,5 +1,15 @@
 import type { RequestContext } from './context.js';
 
+/** One recorded acceptance of a versioned text; `text` is null when the event no longer carries it. */
+export interface AdminEntryConsent {
+  key: string;
+  version: string;
+  language: 'de' | 'en';
+  acceptedAt: string;
+  text: string | null;
+  required: boolean | null;
+}
+
 export interface AdminEntryDriver {
   /** Display name; edit the structured parts below, never split this string. */
   name: string;
@@ -44,6 +54,26 @@ export interface AdminEntryInvoice {
   status: 'open' | 'partially_paid' | 'paid' | 'cancelled';
 }
 
+/** Everything the admin detail shows about one entry beyond the entry record itself. */
+export interface AdminEntryDetails {
+  driver: AdminEntryDriver;
+  vehicle: AdminEntryVehicle;
+  invoice?: AdminEntryInvoice | null;
+  consents?: AdminEntryConsent[];
+  eventClass: {
+    code: string;
+    name: string;
+    vehicleType?: 'car' | 'motorcycle' | 'kart' | 'other';
+  };
+  startNumber: string | null;
+  customAnswers: Array<{
+    key: string;
+    label: string;
+    value: string | boolean | null;
+    fileDownloadUrl: string | null;
+  }>;
+}
+
 export interface EntryDriverPatch {
   firstName?: string;
   lastName?: string;
@@ -63,7 +93,6 @@ export interface EntryVehiclePatch {
   model?: string;
   year?: number | null;
   registration?: string | null;
-  vehicleType?: string | null;
   displacementCc?: number | null;
   cylinders?: number | null;
   ownerName?: string | null;

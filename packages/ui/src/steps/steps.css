@@ -52,3 +52,61 @@
   color: var(--color-ivory);
   font: 10px/1 var(--font-mono);
 }
+
+.nb-steps.is-registration {
+  gap: var(--space-6);
+  margin-block: var(--space-6);
+  border-bottom: 1px solid var(--color-line);
+}
+.nb-steps.is-registration li {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-6) 0 var(--space-3);
+  color: var(--color-graphite);
+  font-size: var(--type-small-size);
+}
+.nb-steps.is-registration li::after {
+  position: absolute;
+  right: 0;
+  top: 0;
+  left: 0;
+  height: 1px;
+  background: var(--color-sage);
+  content: '';
+}
+.nb-steps.is-registration li:nth-child(1)::after {
+  height: var(--registration-step-bar-1);
+}
+.nb-steps.is-registration li:nth-child(2)::after {
+  height: var(--registration-step-bar-2);
+}
+.nb-steps.is-registration li:nth-child(3)::after {
+  height: var(--registration-step-bar-3);
+}
+.nb-steps.is-registration li[aria-current='step'] {
+  color: var(--color-ink);
+}
+.nb-steps.is-registration li[aria-current='step']::after,
+.nb-steps.is-registration li.is-done::after {
+  background: var(--color-green);
+}
+.nb-step-registration-mark {
+  color: var(--color-graphite);
+  font: var(--text-label);
+}
+.nb-steps.is-registration li[aria-current='step'] .nb-step-registration-mark,
+.nb-steps.is-registration li.is-done .nb-step-registration-mark {
+  color: var(--color-green);
+}
+@media (width <= 600px) {
+  .nb-steps.is-registration {
+    gap: var(--space-3);
+  }
+  .nb-steps.is-registration li {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+}

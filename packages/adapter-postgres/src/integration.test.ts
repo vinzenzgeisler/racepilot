@@ -1620,7 +1620,8 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           history: null,
         },
         invoice: null,
-        eventClass: { code: 'A', name: 'A' },
+        consents: [],
+        eventClass: { code: 'A', name: 'A', vehicleType: 'car' },
         startNumber: 'A-01',
         customAnswers: [],
       });

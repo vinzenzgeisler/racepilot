@@ -1,11 +1,14 @@
-import { Field, FileUpload, SelectField } from '@racepilot/ui';
+import { Field, FileUpload, SelectField, Textarea } from '@racepilot/ui';
 import type { Dispatch, SetStateAction } from 'react';
 import type { RegistrationCustomField } from '@racepilot/contracts';
 
 type Answer = string | boolean | { objectId: string; uploadToken: string };
 
+function textAnswer(answer: Answer | undefined): string {
+  return typeof answer === 'string' ? answer : '';
+}
+
 export function RegistrationCustomAnswers({
-  isDriver,
   fields,
   locale,
   customAnswers,
@@ -13,7 +16,6 @@ export function RegistrationCustomAnswers({
   uploadedNames,
   uploadCustomField,
 }: {
-  isDriver: boolean;
   fields: RegistrationCustomField[];
   locale: 'de' | 'en';
   customAnswers: Record<string, Answer>;
@@ -21,38 +23,50 @@ export function RegistrationCustomAnswers({
   uploadedNames: Record<string, string>;
   uploadCustomField: (fieldKey: string, file: File) => Promise<void>;
 }) {
-  if (!isDriver) return null;
   return (
     <>
       {fields.map((field) => (
-        <div key={field.key}>
-          {field.type === 'text' && (
-            <Field
-              label={field.label[locale]}
-              maxLength={2000}
-              required={field.required}
-              value={
-                typeof customAnswers[field.key] === 'string'
-                  ? (customAnswers[field.key] as string)
-                  : ''
-              }
-              onChange={(event) =>
-                setCustomAnswers((old) => ({
-                  ...old,
-                  [field.key]: event.target.value,
-                }))
-              }
-            />
-          )}
+        <div
+          className={
+            field.key === 'biography' || field.key === 'organizer_notes'
+              ? 'registration-wide'
+              : undefined
+          }
+          key={field.key}
+        >
+          {field.type === 'text' &&
+            (field.key === 'biography' || field.key === 'organizer_notes' ? (
+              <Textarea
+                label={field.label[locale]}
+                maxLength={2000}
+                required={field.required}
+                value={textAnswer(customAnswers[field.key])}
+                onChange={(event) =>
+                  setCustomAnswers((old) => ({
+                    ...old,
+                    [field.key]: event.target.value,
+                  }))
+                }
+              />
+            ) : (
+              <Field
+                label={field.label[locale]}
+                maxLength={2000}
+                required={field.required}
+                value={textAnswer(customAnswers[field.key])}
+                onChange={(event) =>
+                  setCustomAnswers((old) => ({
+                    ...old,
+                    [field.key]: event.target.value,
+                  }))
+                }
+              />
+            ))}
           {field.type === 'select' && (
             <SelectField
               label={field.label[locale]}
               required={field.required}
-              value={
-                typeof customAnswers[field.key] === 'string'
-                  ? (customAnswers[field.key] as string)
-                  : ''
-              }
+              value={textAnswer(customAnswers[field.key])}
               onChange={(event) =>
                 setCustomAnswers((old) => ({
                   ...old,

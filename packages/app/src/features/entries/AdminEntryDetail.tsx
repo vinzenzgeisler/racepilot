@@ -15,6 +15,7 @@ import {
   EntryDocumentsSection,
   type DimensionAction,
 } from './detail/EntryDocumentsSection.js';
+import { EntryConsentsSection } from './detail/EntryConsentsSection.js';
 import { EntryCustomAnswers } from './detail/EntryCustomAnswers.js';
 import { EntryDriverSection } from './detail/EntryDriverSection.js';
 import { EntryHistorySection } from './detail/EntryHistorySection.js';
@@ -205,6 +206,7 @@ export function AdminEntryDetail({
         />
         <EntryVehicleSection
           vehicle={details.vehicle}
+          eventClass={details.eventClass}
           busy={api.busy}
           onSave={api.saveVehicle}
         />
@@ -216,6 +218,7 @@ export function AdminEntryDetail({
           }
           onRecordPayment={() => setPending({ kind: 'payment' })}
         />
+        <EntryConsentsSection consents={details.consents ?? []} />
         <EntryMessagesSection
           messages={messages.items}
           failed={messages.failed}

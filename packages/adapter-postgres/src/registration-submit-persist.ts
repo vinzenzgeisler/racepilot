@@ -1,6 +1,7 @@
 import { desc, eq, and } from 'drizzle-orm';
 import {
   calculatePrice,
+  mapRegistrationVehicleDetails,
   normalizeRequestedStartNumber,
   MESSAGE_VERIFICATION_TOKEN_TTL_MS,
 } from '@racepilot/core';
@@ -10,6 +11,7 @@ import { emailTemplateVersions } from './mail-schema.js';
 import { vehicles } from './schema/entries.js';
 import { consentEvidence } from './schema/forms.js';
 import { persistRegistrationVerificationToken } from './registration-verification-token.js';
+import { eventClasses } from './schema/organization.js';
 import { publicEntrySubmissions } from './schema/public-registration.js';
 import { createEntryRepository } from './entry-repository.js';
 import { createInvoiceRepository } from './billing-invoices.js';
@@ -101,6 +103,19 @@ export async function persistRegistrationSubmission(args: {
           })),
         })
       : null;
+  const classTypes = new Map(
+    (
+      await tx
+        .select({ id: eventClasses.id, vehicleType: eventClasses.vehicleType })
+        .from(eventClasses)
+        .where(
+          and(
+            eq(eventClasses.organizationId, ctx.organizationId),
+            eq(eventClasses.eventId, event.id),
+          ),
+        )
+    ).map((row) => [row.id, row.vehicleType]),
+  );
   const entryRepo = createEntryRepository(db);
   const invoiceRepo = createInvoiceRepository(db);
   const entryIds: string[] = [];
@@ -113,6 +128,9 @@ export async function persistRegistrationSubmission(args: {
         model: requestEntry.vehicle.model.trim(),
         year: requestEntry.vehicle.year,
         registration: requestEntry.vehicle.registration?.trim() ?? null,
+        // The type is not asked: it follows the class the vehicle starts in.
+        vehicleType: classTypes.get(requestEntry.classId) ?? null,
+        ...mapRegistrationVehicleDetails(requestEntry.vehicle),
       })
       .returning({ id: vehicles.id });
     const entry = await entryRepo.create!(

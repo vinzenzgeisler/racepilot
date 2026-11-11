@@ -1,0 +1,77 @@
+.registration-form > fieldset > .registration-vehicle-fields {
+  margin-top: var(--space-4);
+  padding-top: 0;
+  border-top: 0;
+}
+.registration-vehicle-fields {
+  display: grid;
+  gap: var(--space-6);
+}
+.registration-vehicle-fields > .nb-button {
+  justify-self: end;
+}
+.registration-vehicle-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
+}
+.registration-vehicle-number {
+  font: var(--text-app-h2);
+}
+.registration-vehicle-summary p {
+  margin: var(--space-1) 0 0;
+  color: var(--color-graphite);
+}
+.registration-vehicle-summary-actions,
+.registration-vehicle-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+.registration-vehicle-editor {
+  display: grid;
+  gap: var(--space-4);
+}
+.registration-vehicle-editor h3 {
+  margin: 0;
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-line);
+  font: var(--text-app-h2);
+}
+.registration-form .vehicle-card {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.registration-form .vehicle-card + .vehicle-card {
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-line);
+}
+.registration-form .vehicle-card > .nb-form-grid {
+  grid-column: 1 / -1;
+}
+.registration-form .vehicle-card > .nb-field,
+.registration-form .vehicle-card > .nb-select-field {
+  min-width: 0;
+  width: 100%;
+}
+@media (width <= 48rem) {
+  .registration-form .vehicle-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .registration-vehicle-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .registration-vehicle-summary-actions {
+    grid-column: 1 / -1;
+  }
+}
