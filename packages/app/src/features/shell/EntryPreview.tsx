@@ -1,4 +1,7 @@
-import type { EntryResponse as Entry } from '@racepilot/contracts';
+import type {
+  EntryResponse as Entry,
+  EntryWorkflowCategory,
+} from '@racepilot/contracts';
 import {
   Button,
   DocumentList,
@@ -13,6 +16,13 @@ type StatusDocumentKey = (typeof STATUS_DOCUMENT_KEYS)[number];
 function isStatusDocumentKey(key: string): key is StatusDocumentKey {
   return STATUS_DOCUMENT_KEYS.some((candidate) => candidate === key);
 }
+
+/** Workflow categories the preview may advance an entry into; terminal outcomes stay in the detail view. */
+const PREVIEW_PROGRESS_CATEGORIES: readonly EntryWorkflowCategory[] = [
+  'pending',
+  'accepted',
+  'waitlisted',
+];
 
 const STATUS_DOCUMENT_LABELS: Record<StatusDocumentKey, string> = {
   waiver: 'Haftverzicht Fahrer',
@@ -44,10 +54,7 @@ export function EntryPreview({
   const canAcceptNext = nextCategory === 'accepted';
   const canAdvance = Boolean(
     nextStatus &&
-    nextCategory &&
-    !['rejected', 'withdrawn', 'cancelled', 'canceled', 'declined'].includes(
-      nextCategory,
-    ),
+    PREVIEW_PROGRESS_CATEGORIES.some((category) => category === nextCategory),
   );
   const missing =
     status

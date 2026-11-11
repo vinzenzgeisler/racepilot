@@ -123,6 +123,7 @@
     "EntryStatusDimensionConfigSchema",
     "EntryStatusMeaningSchema",
     "EntryVehicleUpdateRequest",
+    "EntryWorkflowCategory",
     "EventClassSchema",
     "EventPublicRegistrationRateLimitOverrides",
     "EventPublicRegistrationRateLimitOverridesSchema",
