@@ -1,7 +1,5 @@
 import { renderMessageTemplate } from './messages.js';
-import type {
-  MessageCampaignDeliveryStrategy,
-} from './message-campaign-send.js';
+import type { MessageCampaignDeliveryStrategy } from './message-campaign-send.js';
 
 export function messageCampaignDelivery<
   Campaign,
