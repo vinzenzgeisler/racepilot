@@ -1,11 +1,5 @@
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import {
-  ActionPanel,
-  Button,
-  DocumentList,
-  PreviewPanel,
-  StatusLabel,
-} from '@racepilot/ui';
+import { Button, DocumentList, PreviewPanel, StatusLabel } from '@racepilot/ui';
 
 export function EntryPreview({
   entry,
@@ -53,6 +47,20 @@ export function EntryPreview({
         href: answer.fileDownloadUrl!,
         status: <StatusLabel status="done" label="Vorhanden" />,
       })) ?? [];
+  const statusDocuments =
+    status
+      ?.filter((item) => ['waiver', 'payment'].includes(item.key))
+      .map((item) => ({
+        id: item.key,
+        label: item.label.de,
+        status: (
+          <StatusLabel
+            status={item.meaning === 'not_relevant' ? 'empty' : item.meaning}
+            label={item.label.de}
+          />
+        ),
+      })) ?? [];
+  const allDocuments = [...documents, ...statusDocuments];
   return (
     <PreviewPanel
       eyebrow="Vorschau"
@@ -81,38 +89,39 @@ export function EntryPreview({
       onClose={onClose}
       closeLabel="Vorschau schließen"
       footer={
-        <Button variant="secondary" onClick={onOpenDetail}>
-          Vollständig öffnen
-        </Button>
-      }
-    >
-      <DocumentList
-        title="Unterlagen"
-        items={documents}
-        empty={<p>Keine hochgeladenen Unterlagen vorhanden.</p>}
-      />
-      <ActionPanel
-        variant="primary"
-        title="Nächster Schritt"
-        hint={
-          missing.length
-            ? `Es ${missing.length > 1 ? 'fehlen' : 'fehlt'} noch ${missingText}. Die Entscheidung wird protokolliert.`
-            : 'Die Entscheidung wird im Verlauf protokolliert.'
-        }
-        action={
-          nextStatus ? (
+        <div className="nb-preview-actions">
+          {nextStatus && (
             <Button
               disabled={busy}
               onClick={() => void onNextAction(nextStatus)}
             >
-              {nextStatus === 'accepted'
-                ? 'Zulassen'
-                : (next?.label.de ?? 'Status ändern')}
+              Zulassen
             </Button>
-          ) : (
-            <p>Keine weitere Statusaktion verfügbar.</p>
-          )
-        }
+          )}
+          {!nextStatus && <p>Keine weitere Statusaktion verfügbar.</p>}
+          <p className="nb-preview-hint">
+            {missing.length
+              ? `Es ${missing.length > 1 ? 'fehlen' : 'fehlt'} noch ${missingText}. Nach dem Zulassen springt die Vorschau zur nächsten offenen Nennung.`
+              : 'Nach dem Zulassen springt die Vorschau zur nächsten offenen Nennung.'}
+          </p>
+          <div className="nb-preview-secondary-actions">
+            <Button variant="secondary" disabled>
+              Nachricht
+            </Button>
+            <Button variant="secondary" onClick={onOpenDetail}>
+              Vollständig öffnen
+            </Button>
+          </div>
+          <p className="nb-preview-keyboard">
+            ↑ ↓ wechseln · Enter öffnen · Esc schließen
+          </p>
+        </div>
+      }
+    >
+      <DocumentList
+        title="Unterlagen"
+        items={allDocuments}
+        empty={<p>Keine hochgeladenen Unterlagen vorhanden.</p>}
       />
     </PreviewPanel>
   );

@@ -9,49 +9,47 @@ export function usePreviewAdvance({
   workflow,
   openEntry,
   setRefreshRevision,
+  entriesRevision = 0,
+  previewAdvance,
+  onPreviewAdvanceHandled,
 }: {
   eventId: string;
   items: Entry[];
   workflow: WorkflowView | null;
   openEntry: (id: string) => Promise<void>;
   setRefreshRevision: Dispatch<SetStateAction<number>>;
+  entriesRevision?: number;
+  previewAdvance?: { eventId: string; entryId: string } | null;
+  onPreviewAdvanceHandled?: (() => void) | undefined;
 }) {
   useEffect(() => {
-    const refresh = () => setRefreshRevision((value) => value + 1);
-    window.addEventListener('nennbox:entries-changed', refresh);
-    return () => window.removeEventListener('nennbox:entries-changed', refresh);
-  }, [setRefreshRevision]);
+    if (entriesRevision) setRefreshRevision((value) => value + 1);
+  }, [entriesRevision, setRefreshRevision]);
 
   useEffect(() => {
-    const advancePreview = (event: Event) => {
-      if (!(event instanceof CustomEvent)) return;
-      const detail: unknown = event.detail;
-      if (
-        !detail ||
-        typeof detail !== 'object' ||
-        !('eventId' in detail) ||
-        !('entryId' in detail) ||
-        detail.eventId !== eventId ||
-        typeof detail.entryId !== 'string' ||
-        !workflow
-      )
-        return;
-      const { entryId } = detail;
-      const isOpen = (item: Entry) => {
-        const category = workflow.statuses.find(
-          (status) => status.key === item.acceptanceStatus,
-        )?.category;
-        return category === 'pending' || category === 'waitlisted';
-      };
-      const currentIndex = items.findIndex((item) => item.id === entryId);
-      const following = [
-        ...items.slice(currentIndex + 1),
-        ...items.slice(0, Math.max(currentIndex, 0)),
-      ].find(isOpen);
-      if (following) void openEntry(following.id);
+    if (!previewAdvance || previewAdvance.eventId !== eventId || !workflow)
+      return;
+    const isOpen = (item: Entry) => {
+      const category = workflow.statuses.find(
+        (status) => status.key === item.acceptanceStatus,
+      )?.category;
+      return category === 'pending' || category === 'waitlisted';
     };
-    window.addEventListener('nennbox:entry-accepted', advancePreview);
-    return () =>
-      window.removeEventListener('nennbox:entry-accepted', advancePreview);
-  }, [eventId, items, openEntry, workflow]);
+    const currentIndex = items.findIndex(
+      (item) => item.id === previewAdvance.entryId,
+    );
+    const following = [
+      ...items.slice(currentIndex + 1),
+      ...items.slice(0, Math.max(currentIndex, 0)),
+    ].find(isOpen);
+    if (following) void openEntry(following.id);
+    onPreviewAdvanceHandled?.();
+  }, [
+    eventId,
+    items,
+    openEntry,
+    onPreviewAdvanceHandled,
+    previewAdvance,
+    workflow,
+  ]);
 }

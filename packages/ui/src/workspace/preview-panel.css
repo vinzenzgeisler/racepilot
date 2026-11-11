@@ -80,3 +80,32 @@
     min-height: calc(100vh - 90px);
   }
 }
+
+.nb-preview-actions {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+.nb-preview-actions > .nb-button {
+  width: 100%;
+}
+.nb-preview-hint {
+  margin: 0;
+  color: var(--color-graphite);
+}
+.nb-preview-secondary-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+}
+.nb-preview-secondary-actions > * {
+  width: 100%;
+}
+.nb-preview-keyboard {
+  margin: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-line);
+  color: var(--color-graphite);
+  font: var(--text-label);
+  text-align: center;
+}

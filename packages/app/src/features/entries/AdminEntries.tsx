@@ -25,6 +25,9 @@ type AdminEntriesProps = {
   onOpenDetail?: () => void;
   onCloseDetail?: () => void;
   onSelectionChange?: (entry: Entry | null) => void;
+  entriesRevision?: number;
+  previewAdvance?: { eventId: string; entryId: string } | null | undefined;
+  onPreviewAdvanceHandled?: () => void;
   selectedEntry?: Entry | null;
   onTotalChange?: (total: number) => void;
   eventId?: string;
@@ -48,6 +51,9 @@ function AdminEntriesView({
   onOpenDetail,
   onCloseDetail,
   onSelectionChange,
+  entriesRevision = 0,
+  previewAdvance = null,
+  onPreviewAdvanceHandled,
   selectedEntry: sharedSelectedEntry,
   onTotalChange,
   eventId: sharedEventId,
@@ -164,6 +170,9 @@ function AdminEntriesView({
     workflow,
     openEntry,
     setRefreshRevision,
+    entriesRevision,
+    previewAdvance,
+    onPreviewAdvanceHandled,
   });
   useAdminEntriesKeyboard({
     items,

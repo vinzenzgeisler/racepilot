@@ -35,6 +35,7 @@ export function AdminEntryFilters({
   ];
   return (
     <FilterBar
+      className="nb-entry-filters"
       label="Nennungen filtern"
       activeFilters={activeFilters}
       onRemoveFilter={(id) => setDraft((value) => ({ ...value, [id]: '' }))}
@@ -56,7 +57,7 @@ export function AdminEntryFilters({
           setDraft((value) => ({ ...value, classId: e.target.value }))
         }
       >
-        <option value="">Alle Klassen</option>
+        <option value="">Alle</option>
         {classes.map((item) => (
           <option key={item.id} value={item.id}>
             {item.name}
@@ -73,7 +74,7 @@ export function AdminEntryFilters({
           }))
         }
       >
-        <option value="">Alle Zahlungen</option>
+        <option value="">Alle</option>
         <option value="open">Offen</option>
         <option value="partially_paid">Teilweise bezahlt</option>
         <option value="paid">Bezahlt</option>

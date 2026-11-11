@@ -1,11 +1,5 @@
-import { Button, PreviewPanel } from '@racepilot/ui';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { Button, PreviewPanel, useWorkspacePreview } from '@racepilot/ui';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { AdminEntries } from '../entries/AdminEntries.js';
 import { AppShell } from './AppShell.js';
@@ -66,26 +60,8 @@ export function AuthenticatedAdmin() {
   );
 }
 
-declare const __WORKSPACE_PREVIEW_QUERY__: string;
-const previewQuery = __WORKSPACE_PREVIEW_QUERY__;
-/** The A6 list preview exists only on wide screens; below that, rows open detail. */
-function usePreviewViewport() {
-  return useSyncExternalStore(
-    (notify) => {
-      if (typeof window.matchMedia !== 'function') return () => undefined;
-      const query = window.matchMedia(previewQuery);
-      query.addEventListener('change', notify);
-      return () => query.removeEventListener('change', notify);
-    },
-    () =>
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia(previewQuery).matches,
-    () => false,
-  );
-}
-
 export function AdminApplication() {
-  const previewViewport = usePreviewViewport();
+  const previewViewport = useWorkspacePreview();
   const [identity, setIdentity] = useState(getAdminIdentity());
   const [events, setEvents] = useState<
     Array<{
@@ -181,6 +157,22 @@ export function AdminApplication() {
       active = false;
     };
   }, []);
+  const [entriesRevision, setEntriesRevision] = useState(0);
+  const [previewAdvance, setPreviewAdvance] = useState<{
+    eventId: string;
+    entryId: string;
+  } | null>(null);
+  const previewAccepted = useCallback(
+    ({ eventId, entryId }: { eventId: string; entryId: string }) => {
+      // The list owns advancing to the next eligible entry.
+      setPreviewAdvance({ eventId, entryId });
+    },
+    [],
+  );
+  const entriesChanged = useCallback(
+    () => setEntriesRevision((value) => value + 1),
+    [],
+  );
   const entryPreview = selectedEntry ? (
     <EntryPreview
       entry={selectedEntry}
@@ -214,13 +206,12 @@ export function AdminApplication() {
               setSelectedEntry((current) =>
                 current?.id === requestedEntry ? updated : current,
               );
-              window.dispatchEvent(
-                new CustomEvent('nennbox:entry-accepted', {
-                  detail: { eventId: requestedEvent, entryId: requestedEntry },
-                }),
-              );
+              previewAccepted({
+                eventId: requestedEvent,
+                entryId: requestedEntry,
+              });
             }
-            window.dispatchEvent(new Event('nennbox:entries-changed'));
+            entriesChanged();
           }
         } finally {
           if (activeEvent.current === requestedEvent) setPreviewBusy(false);
@@ -262,6 +253,9 @@ export function AdminApplication() {
               setPreviewOpen(true);
             }}
             onSelectionChange={handleSelectionChange}
+            entriesRevision={entriesRevision}
+            previewAdvance={previewAdvance}
+            onPreviewAdvanceHandled={() => setPreviewAdvance(null)}
             selectedEntry={selectedEntry}
           />
         ) : view === 'workflow' ? (

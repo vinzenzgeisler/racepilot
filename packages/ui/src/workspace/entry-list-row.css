@@ -110,26 +110,24 @@
     padding: 0;
     border: 0;
   }
-  .nb-entry-list-row td:nth-child(2),
-  .nb-entry-list-row td:nth-child(6),
-  .nb-entry-list-row td:nth-child(7),
-  .nb-entry-list-row td:nth-child(8) {
+  .nb-entry-list-row td[data-priority='2'],
+  .nb-entry-list-row td[data-priority='3'] {
     display: none;
   }
-  .nb-entry-list-row td:nth-child(1) {
+  .nb-entry-list-row td:first-child {
     grid-column: 1;
     grid-row: 1;
   }
-  .nb-entry-list-row td:nth-child(3) {
+  .nb-entry-list-row td[data-priority='1']:has(.nb-entry-list-number) {
     grid-column: 2;
     grid-row: 1;
     text-align: end;
   }
-  .nb-entry-list-row td:nth-child(4) {
+  .nb-entry-list-row td[data-column='status'] {
     grid-column: 1;
     grid-row: 2;
   }
-  .nb-entry-list-row td:nth-child(5) {
+  .nb-entry-list-row td[data-column='payment'] {
     grid-column: 2;
     grid-row: 2;
     text-align: end;

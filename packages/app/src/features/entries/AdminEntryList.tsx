@@ -79,8 +79,9 @@ export function AdminEntryList(props: Props) {
           'Zahlung',
           'Abnahme',
           'Haftverzicht',
-          'Aktion',
+          '',
         ]}
+        headerCellPriorities={[undefined, 2, 1, undefined, undefined, 3, 3, 1]}
         headerCellClassNames={[
           undefined,
           undefined,

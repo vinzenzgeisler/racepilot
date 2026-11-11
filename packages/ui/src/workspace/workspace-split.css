@@ -1,5 +1,6 @@
 .nb-workspace-split {
   display: grid;
+  --workspace-preview-width: 480px;
   grid-template-columns: minmax(0, 1fr);
 }
 .nb-workspace-split-filters,
@@ -15,15 +16,16 @@
   border-left: 1px solid var(--color-line);
   background: var(--color-ivory);
 }
-/* --workspace-preview-breakpoint: CSS is the source read by the app hook. */
-@media (width >= 1680px) {
-  .nb-workspace-split.has-preview {
-    grid-template-columns: minmax(0, 1fr) 480px;
+@media (width >= 768px) {
+  .nb-workspace-split[data-preview-available='true'].has-preview {
+    grid-template-columns: minmax(0, 1fr) var(--workspace-preview-width);
   }
-  .nb-workspace-split-filters {
+  .nb-workspace-split[data-preview-available='true']
+    .nb-workspace-split-filters {
     grid-column: 1 / -1;
   }
-  .nb-workspace-split-preview {
+  .nb-workspace-split[data-preview-available='true']
+    .nb-workspace-split-preview {
     display: block;
   }
 }
@@ -32,9 +34,9 @@
     grid-template-columns:
       minmax(0, var(--workspace-list-max-width))
       minmax(
-        480px,
+        var(--workspace-preview-width),
         clamp(
-          480px,
+          var(--workspace-preview-width),
           calc(100vw - var(--nb-nav-width) - var(--workspace-list-max-width)),
           var(--workspace-preview-max-width)
         )

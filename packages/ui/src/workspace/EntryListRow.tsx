@@ -46,7 +46,7 @@ export function EntryListRow({
       className={`nb-entry-list-row${selected ? ' is-selected' : ''}`}
       onClick={onOpen}
     >
-      <td>
+      <td data-column="person">
         <div className="nb-entry-list-person">
           <span
             className="nb-entry-list-select"
@@ -90,15 +90,19 @@ export function EntryListRow({
           )}
         </div>
       </td>
-      <td>{className}</td>
-      <td>
+      <td data-priority="2">{className}</td>
+      <td data-priority="1" data-column="number">
         <strong className="nb-entry-list-number">{number || '—'}</strong>
       </td>
-      <td>{status}</td>
-      <td>{payment}</td>
-      <td className="nb-entry-list-inspection">{inspection}</td>
-      <td className="nb-entry-list-waiver">{waiver}</td>
-      <td onClick={(event) => event.stopPropagation()}>
+      <td data-column="status">{status}</td>
+      <td data-column="payment">{payment}</td>
+      <td data-priority="3" className="nb-entry-list-inspection">
+        {inspection}
+      </td>
+      <td data-priority="3" className="nb-entry-list-waiver">
+        {waiver}
+      </td>
+      <td data-priority="1" data-column="actions" onClick={(event) => event.stopPropagation()}>
         {nextAction}
         {menu}
       </td>

@@ -7,6 +7,7 @@ export function DataTable({
   header,
   className = '',
   headerCellClassNames,
+  headerCellPriorities,
 }: {
   headers: string[];
   children: React.ReactNode;
@@ -14,6 +15,7 @@ export function DataTable({
   header?: React.ReactNode;
   className?: string;
   headerCellClassNames?: Array<string | undefined>;
+  headerCellPriorities?: Array<number | undefined>;
 }) {
   return (
     <div className={`nb-table-scroll ${className}`}>
@@ -25,6 +27,7 @@ export function DataTable({
                 <th
                   key={h}
                   className={headerCellClassNames?.[index]}
+                  data-priority={headerCellPriorities?.[index]}
                   scope="col"
                 >
                   {h}

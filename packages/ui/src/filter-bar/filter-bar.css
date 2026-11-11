@@ -52,3 +52,10 @@
     width: 100%;
   }
 }
+
+.nb-filter-bar.nb-entry-filters .nb-field > span,
+.nb-filter-bar.nb-entry-filters .nb-text-input > span {
+  font: var(--text-body);
+  letter-spacing: normal;
+  text-transform: none;
+}

@@ -28,14 +28,14 @@ export const APP_NAVIGATION_REGISTRY: Array<{
 }> = [
   {
     label: 'Veranstaltung',
-    items: [
-      { id: 'entries', label: 'Nennungen', icon: 'list' },
-      { id: 'workflow', label: 'Nennungsablauf', icon: 'approval' },
-    ],
+    items: [{ id: 'entries', label: 'Nennungen', icon: 'list' }],
   },
   {
     label: 'Konto',
-    items: [{ id: 'account', label: 'Einstellungen', icon: 'more' }],
+    items: [
+      { id: 'account', label: 'Einstellungen', icon: 'more' },
+      { id: 'workflow', label: 'Nennungsablauf', icon: 'approval' },
+    ],
   },
 ];
 export function AppShell({
