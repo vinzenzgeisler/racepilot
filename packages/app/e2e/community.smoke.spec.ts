@@ -148,14 +148,15 @@ test('Community registration and admin lifecycle with API setup', async ({
   const shots = async (name: string) => {
     const viewport = page.viewportSize();
     try {
-      for (const width of [1440, 390]) {
-        await page.setViewportSize({
-          width,
-          height: width === 390 ? 844 : 1000,
-        });
+      for (const [width, height] of [
+        [1440, 900],
+        [1920, 1080],
+        [2200, 1080],
+        [390, 844],
+      ]) {
+        await page.setViewportSize({ width, height });
         await page.screenshot({
           path: `packages/app/test-results/alpha/${name}-${width}.png`,
-          fullPage: true,
         });
       }
     } finally {
@@ -235,6 +236,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await row.getByRole('button', { name: 'Ada Lovelace Lotus Seven' }).click();
   const preview = page.getByRole('complementary', { name: 'Nennungsvorschau' });
   await expect(preview).toContainText('Ada Lovelace');
+  await shots('admin-entry-preview');
   await preview.getByRole('button', { name: 'Zulassen' }).click();
   await expect(preview).toContainText('Angenommen');
   await preview.getByRole('button', { name: 'Vollständig öffnen' }).click();
