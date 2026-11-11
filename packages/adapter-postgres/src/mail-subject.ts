@@ -20,6 +20,7 @@ const defaultSubjects: Record<string, Record<'de' | 'en', string>> = {
     de: 'Nennung abgelehnt: {{eventName}}',
     en: 'Entry declined: {{eventName}}',
   },
+  'message-campaign': { de: '{{subject}}', en: '{{subject}}' },
   'status-change': {
     de: 'Neuer Nennungsstatus: {{eventName}}',
     en: 'Entry status updated: {{eventName}}',

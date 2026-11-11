@@ -21,7 +21,11 @@ import {
   type MembershipBootstrap,
   type ExternalIdentity,
 } from '@racepilot/core';
-import { type RegistrationSettings, type MessageCampaignCreate, type MessageRecipientFilter } from '@racepilot/contracts';
+import {
+  type RegistrationSettings,
+  type MessageCampaignCreate,
+  type MessageRecipientFilter,
+} from '@racepilot/contracts';
 
 export interface Authenticator {
   authenticate(request: Request): Promise<ExternalIdentity | null>;
@@ -41,10 +45,45 @@ export interface ApiDeps {
   classes?: EventClassRepository;
   entries?: EntryRepository;
   messages?: {
-    preview(context: RequestContext, eventId: string, filter: MessageRecipientFilter): Promise<{ count: number; recipients: Array<{ entryId: string | null; email: string; name: string }> } | null>;
-    send(context: RequestContext, eventId: string, idempotencyKey: string, input: MessageCampaignCreate, actor: string): Promise<unknown | null>;
-    retryFailed(context: RequestContext, campaignId: string): Promise<unknown | null>;
+    preview(
+      context: RequestContext,
+      eventId: string,
+      filter: MessageRecipientFilter,
+    ): Promise<{
+      count: number;
+      recipients: Array<{
+        entryId: string | null;
+        email: string;
+        name: string;
+      }>;
+    } | null>;
+    send(
+      context: RequestContext,
+      eventId: string,
+      idempotencyKey: string,
+      input: MessageCampaignCreate,
+      actor: string,
+    ): Promise<unknown | null>;
+    retryFailed(
+      context: RequestContext,
+      campaignId: string,
+    ): Promise<unknown | null>;
     list(context: RequestContext, eventId: string): Promise<unknown[] | null>;
+    listTemplates(
+      context: RequestContext,
+      eventId: string,
+    ): Promise<unknown[] | null>;
+    saveTemplate(
+      context: RequestContext,
+      input: import('@racepilot/contracts').MessageTemplate,
+    ): Promise<unknown | null>;
+    previewTemplate(
+      context: RequestContext,
+      eventId: string,
+      filter: MessageRecipientFilter,
+      subject: string,
+      text: string,
+    ): Promise<unknown | null>;
   };
   entryDetails?: EntryDetailRepository;
   entryExports?: EntryExportRepository;

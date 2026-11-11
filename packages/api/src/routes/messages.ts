@@ -1,5 +1,9 @@
 import type { ApiRoutesContext } from './context.js';
-import { MessageCampaignCreateSchema, MessageRecipientFilterSchema } from '@racepilot/contracts';
+import {
+  MessageCampaignCreateSchema,
+  MessageRecipientFilterSchema,
+  MessageTemplateSchema,
+} from '@racepilot/contracts';
 import { z } from 'zod';
 
 export function registerMessageRoutes(context: ApiRoutesContext): void {
@@ -7,46 +11,142 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
   app.post('/admin/events/:eventId/messages/recipients/preview', async (c) => {
     const member = await resolveMemberContext(c.req.raw);
     if (!member) return c.json({ error: 'Unauthorized' }, 401);
-    if (!member.permissions.has('entry:read')) return c.json({ error: 'Forbidden' }, 403);
+    if (!member.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
     if (!deps.messages) return c.json({ error: 'Not found' }, 404);
     const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
-    const body = MessageRecipientFilterSchema.safeParse(await c.req.json().catch(() => null));
-    if (!eventId.success || !body.success) return c.json({ error: 'Invalid request' }, 400);
+    const body = MessageRecipientFilterSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (!eventId.success || !body.success)
+      return c.json({ error: 'Invalid request' }, 400);
     const result = await deps.messages.preview(member, eventId.data, body.data);
     return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
   });
+  app.get('/admin/events/:eventId/messages/templates', async (c) => {
+    const member = await resolveMemberContext(c.req.raw);
+    if (!member) return c.json({ error: 'Unauthorized' }, 401);
+    if (!member.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.messages) return c.json({ error: 'Not found' }, 404);
+    const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
+    if (!eventId.success) return c.json({ error: 'Not found' }, 404);
+    const templates = await deps.messages.listTemplates(member, eventId.data);
+    return templates
+      ? c.json({ items: templates })
+      : c.json({ error: 'Not found' }, 404);
+  });
+  app.post('/admin/events/:eventId/messages/templates', async (c) => {
+    const member = await resolveMemberContext(c.req.raw);
+    if (!member) return c.json({ error: 'Unauthorized' }, 401);
+    if (!member.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.messages) return c.json({ error: 'Not found' }, 404);
+    const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
+    const input = MessageTemplateSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (
+      !eventId.success ||
+      !input.success ||
+      (input.data.eventId !== null && input.data.eventId !== eventId.data)
+    )
+      return c.json({ error: 'Invalid request' }, 400);
+    const saved = await deps.messages.saveTemplate(member, input.data);
+    return saved
+      ? c.json(saved, input.data.id ? 200 : 201)
+      : c.json({ error: 'Invalid template or event' }, 400);
+  });
+  app.post('/admin/events/:eventId/messages/templates/preview', async (c) => {
+    const member = await resolveMemberContext(c.req.raw);
+    if (!member) return c.json({ error: 'Unauthorized' }, 401);
+    if (!member.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
+    if (!deps.messages) return c.json({ error: 'Not found' }, 404);
+    const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
+    const body = z
+      .object({
+        recipients: MessageRecipientFilterSchema,
+        subject: z.string().min(1).max(998),
+        text: z.string().min(1).max(50000),
+      })
+      .strict()
+      .safeParse(await c.req.json().catch(() => null));
+    if (!eventId.success || !body.success)
+      return c.json({ error: 'Invalid request' }, 400);
+    const preview = await deps.messages.previewTemplate(
+      member,
+      eventId.data,
+      body.data.recipients,
+      body.data.subject,
+      body.data.text,
+    );
+    return preview
+      ? c.json(preview)
+      : c.json({ error: 'No example recipient or invalid placeholder' }, 400);
+  });
+
   app.post('/admin/events/:eventId/messages/campaigns', async (c) => {
     const member = await resolveMemberContext(c.req.raw);
     if (!member) return c.json({ error: 'Unauthorized' }, 401);
-    if (!member.permissions.has('event:write')) return c.json({ error: 'Forbidden' }, 403);
+    if (!member.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
     if (!deps.messages) return c.json({ error: 'Not found' }, 404);
     const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
-    const key = z.string().trim().min(8).max(200).safeParse(c.req.header('Idempotency-Key'));
-    const body = MessageCampaignCreateSchema.safeParse(await c.req.json().catch(() => null));
-    if (!eventId.success || !key.success || !body.success || body.data.eventId !== eventId.data)
+    const key = z
+      .string()
+      .trim()
+      .min(8)
+      .max(200)
+      .safeParse(c.req.header('Idempotency-Key'));
+    const body = MessageCampaignCreateSchema.safeParse(
+      await c.req.json().catch(() => null),
+    );
+    if (
+      !eventId.success ||
+      !key.success ||
+      !body.success ||
+      body.data.eventId !== eventId.data
+    )
       return c.json({ error: 'Invalid request' }, 400);
-    const actor = member.subject ? `${member.subject.issuer}|${member.subject.subject}` : member.correlationId;
-    const campaign = await deps.messages.send(member, eventId.data, key.data, body.data, actor);
-    return campaign ? c.json(campaign, 202) : c.json({ error: 'Not found' }, 404);
+    const actor = member.subject
+      ? `${member.subject.issuer}|${member.subject.subject}`
+      : member.correlationId;
+    const campaign = await deps.messages.send(
+      member,
+      eventId.data,
+      key.data,
+      body.data,
+      actor,
+    );
+    return campaign
+      ? c.json(campaign, 202)
+      : c.json({ error: 'Not found' }, 404);
   });
   app.post('/admin/message-campaigns/:campaignId/retry', async (c) => {
     const member = await resolveMemberContext(c.req.raw);
     if (!member) return c.json({ error: 'Unauthorized' }, 401);
-    if (!member.permissions.has('event:write')) return c.json({ error: 'Forbidden' }, 403);
+    if (!member.permissions.has('event:write'))
+      return c.json({ error: 'Forbidden' }, 403);
     if (!deps.messages) return c.json({ error: 'Not found' }, 404);
     const id = z.string().uuid().safeParse(c.req.param('campaignId'));
     if (!id.success) return c.json({ error: 'Not found' }, 404);
     const campaign = await deps.messages.retryFailed(member, id.data);
-    return campaign ? c.json(campaign, 202) : c.json({ error: 'Not found' }, 404);
+    return campaign
+      ? c.json(campaign, 202)
+      : c.json({ error: 'Not found' }, 404);
   });
   app.get('/admin/events/:eventId/messages/campaigns', async (c) => {
     const member = await resolveMemberContext(c.req.raw);
     if (!member) return c.json({ error: 'Unauthorized' }, 401);
-    if (!member.permissions.has('entry:read')) return c.json({ error: 'Forbidden' }, 403);
+    if (!member.permissions.has('entry:read'))
+      return c.json({ error: 'Forbidden' }, 403);
     if (!deps.messages) return c.json({ error: 'Not found' }, 404);
     const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
     if (!eventId.success) return c.json({ error: 'Not found' }, 404);
     const campaigns = await deps.messages.list(member, eventId.data);
-    return campaigns ? c.json({ items: campaigns }) : c.json({ error: 'Not found' }, 404);
+    return campaigns
+      ? c.json({ items: campaigns })
+      : c.json({ error: 'Not found' }, 404);
   });
 }

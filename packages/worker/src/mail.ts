@@ -15,6 +15,7 @@ export const mailTemplateContracts = {
     'statusLabelDe',
     'statusLabelEn',
   ],
+  'message-campaign': ['subject', 'body'],
 } as const;
 export type MailTemplateKey = keyof typeof mailTemplateContracts;
 export type MailLocale = 'de' | 'en';
@@ -83,6 +84,10 @@ const defaultCopy: Record<MailTemplateKey, Record<MailLocale, MailTemplate>> = {
       text: 'Hello {{recipientName}}, your entry status for {{eventName}} is now {{statusLabelEn}} ({{statusKey}}).',
       html: '<p>Hello {{recipientName}},</p><p>Your entry status for {{eventName}} is now {{statusLabelEn}} (<code>{{statusKey}}</code>).</p>',
     },
+  },
+  'message-campaign': {
+    de: { subject: '{{subject}}', text: '{{body}}', html: '<p>{{body}}</p>' },
+    en: { subject: '{{subject}}', text: '{{body}}', html: '<p>{{body}}</p>' },
   },
   rejected: {
     de: {

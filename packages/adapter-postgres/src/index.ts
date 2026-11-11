@@ -64,3 +64,10 @@ export { createPublicRegistrationRateLimitSettingsRepository } from './registrat
 
 /** Event-scoped status dimensions and audited per-entry status markers. */
 export { createEntryDetailRepository } from './entry-detail.js';
+export { createMessageRepository } from './messaging-repository.js';
+export {
+  messageCampaigns,
+  messageCampaignRecipients,
+  messageCampaignAudits,
+  messageTemplates,
+} from './messaging-schema.js';

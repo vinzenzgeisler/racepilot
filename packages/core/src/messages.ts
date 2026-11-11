@@ -54,6 +54,7 @@ export function renderMessageTemplate(
 export interface MessageRecipientCandidate {
   address: string | null;
   entryId: string;
+  registrationGroupId?: string | null;
   firstName: string;
   lastName: string;
   eventName: string;

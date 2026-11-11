@@ -96,7 +96,8 @@ export function createMailOutboxRepository(
       | 'entry-received'
       | 'accepted'
       | 'rejected'
-      | 'status-change',
+      | 'status-change'
+      | 'message-campaign',
     templateVersion: row.templateVersion,
     locale: row.locale as 'de' | 'en',
     recipient: row.recipient,
@@ -221,6 +222,21 @@ export function createMailOutboxRepository(
               eq(emailOutbox.status, 'sending'),
             ),
           );
+        await tx.execute(sql`update message_campaign_recipient
+          set status = case
+            when ${outcome.outcome} = 'sent' then 'sent'
+            when ${outcome.outcome} = 'failed' then 'failed'
+            else 'planned'
+          end
+          where organization_id = ${ctx.organizationId} and outbox_id = ${id}`);
+        await tx.execute(sql`update message_campaign c
+          set status = case
+            when exists (select 1 from message_campaign_recipient r where r.organization_id = c.organization_id and r.campaign_id = c.id and r.status in ('planned','sending')) then 'sending'
+            when exists (select 1 from message_campaign_recipient r where r.organization_id = c.organization_id and r.campaign_id = c.id and r.status = 'failed') then 'failed'
+            else 'sent'
+          end
+          where c.organization_id = ${ctx.organizationId}
+            and exists (select 1 from message_campaign_recipient r where r.organization_id = c.organization_id and r.campaign_id = c.id and r.outbox_id = ${id})`);
         await tx
           .insert(emailDeliveries)
           .values({
