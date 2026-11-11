@@ -1,6 +1,7 @@
 import { desc, eq, and } from 'drizzle-orm';
 import {
   calculatePrice,
+  mapRegistrationVehicleDetails,
   normalizeRequestedStartNumber,
   MESSAGE_VERIFICATION_TOKEN_TTL_MS,
 } from '@racepilot/core';
@@ -129,10 +130,7 @@ export async function persistRegistrationSubmission(args: {
         registration: requestEntry.vehicle.registration?.trim() ?? null,
         // The type is not asked: it follows the class the vehicle starts in.
         vehicleType: classTypes.get(requestEntry.classId) ?? null,
-        displacementCc: requestEntry.vehicle.displacementCc ?? null,
-        cylinders: requestEntry.vehicle.cylinders ?? null,
-        ownerName: requestEntry.vehicle.ownerName ?? null,
-        history: requestEntry.vehicle.history ?? null,
+        ...mapRegistrationVehicleDetails(requestEntry.vehicle),
       })
       .returning({ id: vehicles.id });
     const entry = await entryRepo.create!(

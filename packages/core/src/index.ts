@@ -21,3 +21,4 @@ export {
   MESSAGE_VERIFICATION_TOKEN_TTL_MS,
 } from '@racepilot/contracts';
 export * from './registration-fields.js';
+export * from './registration-submission.js';

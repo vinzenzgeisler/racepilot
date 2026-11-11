@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { RequestContext } from '@racepilot/core';
+import {
+  mapRegistrationContactDetails,
+  type RequestContext,
+} from '@racepilot/core';
 import { eq, and, sql } from 'drizzle-orm';
 import { registrationGroups } from './schema/entries.js';
 import { registrationFormUploads } from './schema/forms.js';
@@ -89,13 +92,7 @@ export async function createRegistrationGroup(args: {
         : null,
       customAnswers: safeCustomAnswers,
       // Contact data belongs to this registration, never to the organization-wide person.
-      phone: payload.person.phone ?? null,
-      street: payload.person.street ?? null,
-      postalCode: payload.person.postalCode ?? null,
-      city: payload.person.city ?? null,
-      emergencyContactName: payload.person.emergencyContactName ?? null,
-      emergencyContactPhone: payload.person.emergencyContactPhone ?? null,
-      publicationPreference: payload.person.publicationPreference ?? null,
+      ...mapRegistrationContactDetails(payload.person),
     })
     .returning({ id: registrationGroups.id });
   for (const upload of customFileUploads) {
