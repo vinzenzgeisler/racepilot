@@ -7,6 +7,7 @@ import {
 import type { EntryDocumentErrorCode } from '@racepilot/core';
 import {
   decideEntryDocument,
+  getEntryDocumentProjection,
   uploadEntryDocument,
   setEntryDocumentTypes,
 } from '@racepilot/core';
@@ -116,40 +117,23 @@ export function registerEntryDocumentRoutes({
     if (!deps.entryDocuments) return c.json({ error: 'Not found' }, 404);
     const entryId = uuid.safeParse(c.req.param('entryId'));
     if (!entryId.success) return c.json({ error: 'Invalid entry' }, 400);
-    const entry = await deps.entryDocuments.getEntry(
+    const projection = await getEntryDocumentProjection(
       guard.context,
       entryId.data,
+      { documents: deps.entryDocuments },
     );
-    if (!entry) return c.json({ error: 'Not found' }, 404);
-    const [types, documents] = await Promise.all([
-      deps.entryDocuments.listTypes(guard.context, entry.eventId),
-      deps.entryDocuments.listByEntry(guard.context, entry.id),
-    ]);
-    if (!documents.ok) return c.json({ error: 'Not found' }, 404);
-    const latest = new Map<string, (typeof documents.value)[number]>();
-    for (const document of documents.value)
-      if (!latest.has(document.typeKey)) latest.set(document.typeKey, document);
-    const uploadLines = types.map((type) => ({
-      kind: 'upload' as const,
-      key: type.key,
-      label: type.name,
-      required: type.required,
-      hint: type.hint,
-      document: latest.get(type.key) ?? null,
-      status: latest.get(type.key)?.status ?? ('missing' as const),
-    }));
-    const required = uploadLines.filter((line) => line.required);
-    const uploadedRequiredCount = required.filter(
-      (line) => line.status === 'uploaded' || line.status === 'reviewed',
-    ).length;
+    if (!projection.ok) {
+      const mapped = responseFor(projection.reason);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
     const entryView = deps.entries
-      ? await deps.entries.getById(guard.context, entry.id)
+      ? await deps.entries.getById(guard.context, entryId.data)
       : null;
     const dimensions = entryView?.statusProjection?.dimensions ?? [];
     const waiver = dimensions.find((item) => item.key === 'waiver');
     const payment = dimensions.find((item) => item.key === 'payment');
     const lines = [
-      ...uploadLines,
+      ...projection.value.lines,
       ...(waiver
         ? [
             {
@@ -172,9 +156,7 @@ export function registerEntryDocumentRoutes({
         : []),
     ];
     return c.json({
-      complete: required.length === uploadedRequiredCount,
-      requiredCount: required.length,
-      uploadedRequiredCount,
+      ...projection.value,
       lines,
     });
   });
