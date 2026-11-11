@@ -316,12 +316,11 @@ test('admin records payment from entry detail UI', async ({
     .filter({ hasText: 'Ada Lovelace' })
     .locator('button[data-entry-action]')
     .click();
-  await expect(page.locator('button[data-selected-entry]')).toBeVisible();
-  await page.keyboard.press('Enter');
   const entryDetail = page.getByRole('region', {
     name: 'Nennung im Detail',
     exact: true,
   });
+  await expect(entryDetail).toBeVisible();
   await expect(entryDetail).toContainText(shared.participant);
 
   // The invoice is open until the payment is recorded in the UI.
