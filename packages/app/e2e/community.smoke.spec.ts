@@ -206,10 +206,15 @@ test('Community registration and admin lifecycle with API setup', async ({
   await page.getByLabel('Besitzer').fill('Ada Lovelace');
   await page.getByLabel('Fahrzeughistorie').fill('Neuaufbau 2019');
   await shots('public-vehicle-step');
-  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Weiter zur Prüfung', exact: true })
+    .click();
+  await expect(
+    page.getByRole('heading', { name: 'Bitte prüfen' }),
+  ).toBeVisible();
   await expect(page.getByText(consent)).toBeVisible();
   await page.getByRole('checkbox').check();
-  await shots('public-consent-step');
+  await shots('public-review-step');
   await page.getByRole('button', { name: 'Nennung absenden' }).click();
   await expect(page.getByRole('status')).toContainText('Bitte bestätige');
   let mail: { ID: string };

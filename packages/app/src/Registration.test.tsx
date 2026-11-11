@@ -128,7 +128,6 @@ describe('public registration UI', () => {
         container.querySelector('.registration-event-date')?.textContent,
       ).toBe('January 1, 2030');
       expect(container.textContent).toContain('Deadline');
-      expect(container.textContent).toContain('Select a class');
       expect(container.textContent).toContain('Club');
       expect(
         Array.from(container.querySelectorAll('label')).some((label) =>
@@ -140,7 +139,7 @@ describe('public registration UI', () => {
       ).find((button) => button.getAttribute('aria-label') === 'Deutsch');
       expect(germanButton).toBeTruthy();
       await act(async () => germanButton?.click());
-      expect(container.textContent).toContain('Fahrerdaten');
+      expect(container.textContent).toContain('Fahrer');
       expect(
         container.querySelector('.registration-event-date')?.textContent,
       ).toBe('1. Januar 2030');

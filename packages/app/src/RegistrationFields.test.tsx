@@ -243,7 +243,7 @@ describe('public registration contact and vehicle fields', () => {
       }),
     );
     await press('Weiter');
-    await press('Weiter');
+    await press('Weiter zur Prüfung');
     await press('Nennung absenden');
     expect(submissions).toHaveLength(1);
     const body = submissions[0] as {
