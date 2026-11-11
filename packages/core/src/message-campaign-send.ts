@@ -1,7 +1,7 @@
 import type { RequestContext } from './context.js';
+import { messageCampaignDelivery } from './message-campaign-delivery.js';
 import {
   fingerprintMessageRequest,
-  renderMessageTemplate,
   validateMessageTemplate,
 } from './messages.js';
 import type {
@@ -19,6 +19,36 @@ export type MessageCampaignSendErrorCode =
   | 'event-not-found'
   | 'storage-unavailable'
   | 'verification-unavailable';
+
+export type MessagePreviewErrorCode =
+  'event-not-found' | 'no-recipients' | 'invalid-template';
+export type MessagePreviewResult<T> =
+  | { ok: true; value: T }
+  | {
+      ok: false;
+      error: {
+        code: MessagePreviewErrorCode;
+        message: string;
+        details?: string[];
+      };
+    };
+
+export interface MessageCampaignData {
+  campaign: {
+    id: string;
+    eventId: string;
+    subject: string;
+    status: string;
+    createdAt: Date;
+  };
+  recipients: readonly {
+    id: string;
+    entryId: string | null;
+    email: string;
+    subject: string;
+    status: string;
+  }[];
+}
 
 export type MessageCampaignSendResult<Campaign = unknown> =
   | { ok: true; campaign: Campaign; replayed?: boolean }
@@ -43,11 +73,7 @@ export interface MessageCampaignRecipient {
   readonly entryNumber: string;
 }
 
-export interface MessageCampaignTransaction<
-  Campaign,
-  CampaignRecipient,
-  Response = unknown,
-> {
+export interface MessageCampaignTransaction<Campaign, CampaignRecipient> {
   resolveRecipients(
     eventId: string,
     filter: MessageRecipientFilter,
@@ -66,7 +92,7 @@ export interface MessageCampaignTransaction<
     actor: string;
   }): Promise<Campaign | null>;
   recordAudit(campaign: Campaign, actor: string, action: string): Promise<void>;
-  enqueueVerificationRecipient?(input: {
+  enqueueVerificationRecipient(input: {
     campaign: Campaign;
     eventId: string;
     recipient: MessageCampaignRecipient;
@@ -86,46 +112,81 @@ export interface MessageCampaignTransaction<
   }): Promise<CampaignRecipient>;
   markSending(campaign: Campaign): Promise<void>;
   listRecipients(campaign: Campaign): Promise<readonly CampaignRecipient[]>;
-  toResponse(
-    campaign: Campaign,
-    recipients: readonly CampaignRecipient[],
-  ): Response;
 }
 
-export interface MessageCampaignSendPorts<
-  Campaign,
-  CampaignRecipient,
-  Response = unknown,
-> {
+export interface MessageCampaignDeliveryStrategy<Campaign, CampaignRecipient> {
+  readonly auditAction: string;
+  validateRecipients(recipients: readonly MessageCampaignRecipient[]):
+    | { ok: true }
+    | {
+        ok: false;
+        error: { code: MessageCampaignSendErrorCode; message: string };
+      };
+  enqueue(
+    transaction: MessageCampaignTransaction<Campaign, CampaignRecipient>,
+    input: {
+      campaign: Campaign;
+      eventId: string;
+      recipient: MessageCampaignRecipient;
+      locale: string;
+      input: MessageCampaignCreate;
+      correlationId: string;
+    },
+  ): Promise<
+    | { ok: true; recipient: CampaignRecipient }
+    | {
+        ok: false;
+        error: {
+          code: MessageCampaignSendErrorCode;
+          message: string;
+          details?: string[];
+        };
+      }
+  >;
+}
+
+export interface MessageCampaignSendPorts<Campaign, CampaignRecipient> {
   readonly maxAttachments: number;
   hashRequest(fingerprint: string): string;
   validateAttachments(
     attachments: readonly { objectId: string; filename: string }[],
-  ): Promise<MessageCampaignSendResult | null>;
+  ): Promise<MessageCampaignSendResult | { ok: true }>;
   transaction(
     context: RequestContext,
     work: (
-      tx: MessageCampaignTransaction<Campaign, CampaignRecipient, Response>,
-    ) => Promise<MessageCampaignSendResult<Response>>,
-  ): Promise<MessageCampaignSendResult<Response>>;
+      tx: MessageCampaignTransaction<Campaign, CampaignRecipient>,
+    ) => Promise<
+      MessageCampaignSendResult<{
+        campaign: Campaign;
+        recipients: readonly CampaignRecipient[];
+      }>
+    >,
+  ): Promise<
+    MessageCampaignSendResult<{
+      campaign: Campaign;
+      recipients: readonly CampaignRecipient[];
+    }>
+  >;
 }
 
 /** Core orchestration for campaign creation; adapters provide transaction-scoped persistence only. */
-export async function sendMessageCampaign<
-  Campaign,
-  CampaignRecipient,
-  Response,
->(
+export async function sendMessageCampaign<Campaign, CampaignRecipient>(
   context: RequestContext,
   eventId: string,
   idempotencyKey: string,
   input: MessageCampaignCreate,
   actor: string,
-  ports: MessageCampaignSendPorts<Campaign, CampaignRecipient, Response>,
-  mode: { kind: 'campaign' | 'verification'; auditAction?: string } = {
-    kind: 'campaign',
-  },
-): Promise<MessageCampaignSendResult<Response>> {
+  ports: MessageCampaignSendPorts<Campaign, CampaignRecipient>,
+  strategy: MessageCampaignDeliveryStrategy<
+    Campaign,
+    CampaignRecipient
+  > = messageCampaignDelivery<Campaign, CampaignRecipient>(),
+): Promise<
+  MessageCampaignSendResult<{
+    campaign: Campaign;
+    recipients: readonly CampaignRecipient[];
+  }>
+> {
   const templateErrors = validateMessageTemplate(input.subject, input.text);
   if (templateErrors.length)
     return {
@@ -142,8 +203,7 @@ export async function sendMessageCampaign<
       error: { code: 'too-many-attachments', message: 'Too many attachments' },
     };
   const attachmentError = await ports.validateAttachments(input.attachments);
-  if (attachmentError && !attachmentError.ok)
-    return { ok: false, error: attachmentError.error };
+  if (!attachmentError.ok) return { ok: false, error: attachmentError.error };
   const requestHash = ports.hashRequest(fingerprintMessageRequest(input));
   return ports.transaction(context, async (tx) => {
     const resolved = await tx.resolveRecipients(eventId, input.recipients);
@@ -160,6 +220,8 @@ export async function sendMessageCampaign<
           message: 'No recipients match the selection',
         },
       };
+    const recipientValidation = strategy.validateRecipients(resolved);
+    if (!recipientValidation.ok) return recipientValidation;
     const existing = await tx.findByIdempotencyKey(idempotencyKey);
     if (existing) {
       if (existing.requestHash !== requestHash)
@@ -173,7 +235,10 @@ export async function sendMessageCampaign<
         };
       return {
         ok: true,
-        campaign: tx.toResponse(existing.campaign, existing.recipients),
+        campaign: {
+          campaign: existing.campaign,
+          recipients: existing.recipients,
+        },
         replayed: true,
       };
     }
@@ -190,7 +255,10 @@ export async function sendMessageCampaign<
       if (concurrent?.requestHash === requestHash)
         return {
           ok: true,
-          campaign: tx.toResponse(concurrent.campaign, concurrent.recipients),
+          campaign: {
+            campaign: concurrent.campaign,
+            recipients: concurrent.recipients,
+          },
           replayed: true,
         };
       return {
@@ -201,46 +269,24 @@ export async function sendMessageCampaign<
         },
       };
     }
-    await tx.recordAudit(campaign, actor, mode.auditAction ?? 'send');
+    await tx.recordAudit(campaign, actor, strategy.auditAction);
     const locale = await tx.getLocale();
-    const attachments = input.attachments.map((item) => ({
-      objectId: item.objectId,
-      filename: item.filename,
-    }));
     for (const recipient of resolved) {
-      if (mode.kind === 'verification') {
-        if (!tx.enqueueVerificationRecipient)
-          throw new Error('Verification delivery is unavailable');
-        await tx.enqueueVerificationRecipient({
-          campaign,
-          eventId,
-          recipient,
-          locale,
-          correlationId: context.correlationId,
-        });
-      } else {
-        const rendered = renderMessageTemplate(
-          input.subject,
-          input.text,
-          recipient,
-        );
-        await tx.enqueueRecipient({
-          campaign,
-          eventId,
-          recipient,
-          subject: rendered.subject,
-          text: rendered.text,
-          locale,
-          attachmentRefs: attachments,
-          correlationId: context.correlationId,
-        });
-      }
+      const result = await strategy.enqueue(tx, {
+        campaign,
+        eventId,
+        recipient,
+        locale,
+        input,
+        correlationId: context.correlationId,
+      });
+      if (!result.ok) return result;
     }
     await tx.markSending(campaign);
     const recipients = await tx.listRecipients(campaign);
     return {
       ok: true,
-      campaign: tx.toResponse(campaign, recipients),
+      campaign: { campaign, recipients },
     };
   });
 }

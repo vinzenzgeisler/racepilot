@@ -2,7 +2,9 @@ import { and, eq } from 'drizzle-orm';
 import type {
   MessageCampaignCreate,
   MessageCampaignSendPorts,
+  MessageCampaignDeliveryStrategy,
   MessageCampaignSendResult,
+  MessageCampaignData,
   MessageCampaignTransaction,
   ObjectStorageProvider,
   RequestContext,
@@ -10,6 +12,7 @@ import type {
 import {
   MESSAGE_ATTACHMENT_LIMITS,
   sendMessageCampaign,
+  messageCampaignDelivery,
 } from '@racepilot/core';
 import { validateMessageAttachmentMetadata } from './messaging-attachments.js';
 import type { Database } from './database.js';
@@ -25,15 +28,10 @@ import {
   messageCampaigns,
 } from './messaging-schema.js';
 import { resolveMessageRecipients } from './messaging-recipients.js';
-import {
-  digestMessage,
-  messageCampaignResponse,
-  messageLocale,
-} from './messaging-utils.js';
+import { digestMessage, messageLocale } from './messaging-utils.js';
 
 type Campaign = typeof messageCampaigns.$inferSelect;
 type CampaignRecipient = typeof messageCampaignRecipients.$inferSelect;
-type CampaignResponse = ReturnType<typeof messageCampaignResponse>;
 
 export function createMessageSender(
   db: Database,
@@ -46,15 +44,12 @@ export function createMessageSender(
     idempotencyKey: string,
     input: MessageCampaignCreate,
     actor: string,
-    mode: { kind: 'campaign' | 'verification'; auditAction?: string } = {
-      kind: 'campaign',
-    },
-  ): Promise<MessageCampaignSendResult<CampaignResponse>> => {
-    const ports: MessageCampaignSendPorts<
+    strategy: MessageCampaignDeliveryStrategy<
       Campaign,
-      CampaignRecipient,
-      CampaignResponse
-    > = {
+      CampaignRecipient
+    > = messageCampaignDelivery<Campaign, CampaignRecipient>(),
+  ): Promise<MessageCampaignSendResult<MessageCampaignData>> => {
+    const ports: MessageCampaignSendPorts<Campaign, CampaignRecipient> = {
       maxAttachments: MESSAGE_ATTACHMENT_LIMITS.maxCount,
       hashRequest: digestMessage,
       validateAttachments: (attachments) =>
@@ -67,8 +62,7 @@ export function createMessageSender(
         db.transaction(async (tx) => {
           const transaction: MessageCampaignTransaction<
             Campaign,
-            CampaignRecipient,
-            CampaignResponse
+            CampaignRecipient
           > = {
             resolveRecipients: async (requestedEventId, filter) => {
               const resolved = await resolveMessageRecipients(
@@ -144,7 +138,7 @@ export function createMessageSender(
             },
             enqueueVerificationRecipient: async (value) => {
               if (!canonicalBaseUrl || !value.recipient.registrationGroupId)
-                throw new Error('Registration verification is unavailable');
+                throw new Error('Verification strategy precondition failed');
               const now = new Date();
               const token = createRegistrationVerificationToken(now);
               await persistRegistrationVerificationToken(tx, {
@@ -191,7 +185,8 @@ export function createMessageSender(
                   status: 'planned',
                 })
                 .returning();
-              return row!;
+              if (!row) throw new Error('Message recipient insert failed');
+              return row;
             },
             enqueueRecipient: async (value) => {
               const outboxId = await enqueueMailOutbox(
@@ -227,7 +222,8 @@ export function createMessageSender(
                   status: 'planned',
                 })
                 .returning();
-              return row!;
+              if (!row) throw new Error('Message recipient insert failed');
+              return row;
             },
             markSending: async (campaign) => {
               await tx
@@ -253,22 +249,18 @@ export function createMessageSender(
                     eq(messageCampaignRecipients.campaignId, campaign.id),
                   ),
                 ),
-            toResponse: (campaign, recipients) =>
-              messageCampaignResponse({ ...campaign, status: 'sending' }, [
-                ...recipients,
-              ]),
           };
           return work(transaction);
         }),
     };
-    return sendMessageCampaign<Campaign, CampaignRecipient, CampaignResponse>(
+    return sendMessageCampaign<Campaign, CampaignRecipient>(
       ctx,
       eventId,
       idempotencyKey,
       input,
       actor,
       ports,
-      mode,
+      strategy,
     );
   };
 }

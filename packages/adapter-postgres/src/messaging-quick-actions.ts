@@ -1,5 +1,6 @@
 import type { RequestContext } from '@racepilot/core';
 import { createMessageSender } from './messaging-send.js';
+import { messageCampaignDelivery } from '@racepilot/core';
 import type { Database } from './database.js';
 
 export type MessageQuickAction = 'resend-verification' | 'remind-open-payments';
@@ -59,8 +60,33 @@ export function createMessageQuickActions(
       input,
       actor,
       action === 'resend-verification'
-        ? { kind: 'verification', auditAction: action }
-        : { kind: 'campaign', auditAction: action },
+        ? {
+            auditAction: action,
+            validateRecipients: (recipients) =>
+              canonicalBaseUrl &&
+              recipients.every((recipient) => recipient.registrationGroupId)
+                ? { ok: true as const }
+                : {
+                    ok: false as const,
+                    error: {
+                      code: 'verification-unavailable' as const,
+                      message: 'Registration verification is unavailable',
+                    },
+                  },
+            enqueue: async (tx, value) => {
+              const recipient = await tx.enqueueVerificationRecipient(value);
+              return recipient
+                ? { ok: true as const, recipient }
+                : {
+                    ok: false as const,
+                    error: {
+                      code: 'verification-unavailable' as const,
+                      message: 'Registration verification is unavailable',
+                    },
+                  };
+            },
+          }
+        : { ...messageCampaignDelivery(), auditAction: action },
     );
   };
 }
