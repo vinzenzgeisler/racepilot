@@ -4,6 +4,7 @@ import {
   EntryDocumentTypeSchema,
   ENTRY_DOCUMENT_MAX_BYTES,
 } from '@racepilot/contracts';
+import type { EntryDocumentErrorCode } from '@racepilot/core';
 import {
   decideEntryDocument,
   uploadEntryDocument,
@@ -20,16 +21,33 @@ const actorFor = (context: {
   context.subject
     ? `${context.subject.issuer}#${context.subject.subject}`
     : context.correlationId;
-const responseFor = (error: string) => {
-  if (error === 'forbidden')
-    return { status: 403 as const, message: 'Forbidden' };
-  if (error.endsWith('_not_found'))
-    return { status: 404 as const, message: 'Not found' };
-  if (error.includes('conflict') || error.includes('not_uploaded'))
-    return { status: 409 as const, message: error };
-  if (error === 'file_invalid' || error.includes('type_'))
-    return { status: 422 as const, message: error };
-  return { status: 422 as const, message: error };
+const responseFor = (error: EntryDocumentErrorCode) => {
+  switch (error) {
+    case 'actor_required':
+    case 'decision_reason_required':
+    case 'document_types_invalid':
+    case 'file_content_invalid':
+    case 'file_invalid':
+    case 'file_metadata_invalid':
+    case 'storage_tenant_mismatch':
+    case 'storage_unavailable':
+    case 'document_persistence_failed':
+    case 'document_type_unavailable':
+      return { status: 422 as const, message: error };
+    case 'document_not_uploaded':
+      return { status: 409 as const, message: error };
+    case 'document_not_found':
+    case 'entry_not_found':
+    case 'event_not_found':
+      return { status: 404 as const, message: 'Not found' };
+    case 'entry_read_required':
+    case 'entry_write_required':
+      return { status: 403 as const, message: 'Forbidden' };
+    default: {
+      const exhaustive: never = error;
+      return exhaustive;
+    }
+  }
 };
 
 export function registerEntryDocumentRoutes({

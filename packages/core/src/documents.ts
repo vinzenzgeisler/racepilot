@@ -36,13 +36,31 @@ export interface EntryDocument {
   readonly rejectionReason: string | null;
 }
 
+export type EntryDocumentErrorCode =
+  | 'actor_required'
+  | 'decision_reason_required'
+  | 'document_not_found'
+  | 'document_not_uploaded'
+  | 'document_persistence_failed'
+  | 'document_type_unavailable'
+  | 'document_types_invalid'
+  | 'entry_not_found'
+  | 'entry_read_required'
+  | 'entry_write_required'
+  | 'event_not_found'
+  | 'file_content_invalid'
+  | 'file_invalid'
+  | 'file_metadata_invalid'
+  | 'storage_tenant_mismatch'
+  | 'storage_unavailable';
+
 export type EntryDocumentResult<T> =
   | { readonly ok: true; readonly value: T }
   | {
       readonly ok: false;
       readonly error:
         'not_found' | 'conflict' | 'invalid' | 'forbidden' | 'unavailable';
-      readonly reason: string;
+      readonly reason: EntryDocumentErrorCode;
     };
 
 export interface EntryDocumentsRepository {
