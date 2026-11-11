@@ -35,6 +35,7 @@ export * from './workspace/EntryListRow.js';
 export * from './workspace/PreviewPanel.js';
 export * from './workspace/ActionPanel.js';
 export * from './workspace/DocumentList.js';
+export * from './workspace/KeyboardHintBar.js';
 export * from './workspace/HistoryTimeline.js';
 export * from './detail/DetailLayout.js';
 export * from './detail/DetailHeader.js';

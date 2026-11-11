@@ -1,6 +1,5 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-
 const source = (pkg: string) =>
   fileURLToPath(new URL(`./packages/${pkg}/src/index.ts`, import.meta.url));
 

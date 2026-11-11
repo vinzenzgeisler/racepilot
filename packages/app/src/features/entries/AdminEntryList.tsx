@@ -15,6 +15,7 @@ type Selection = { eventId: string; ids: Set<string> };
 type Props = {
   preview?: ReactNode;
   mobilePreviewOpen?: boolean | undefined;
+  wide?: boolean | undefined;
   eventId: string;
   apiState: ApiState;
   draft: EntryQuery;
@@ -29,7 +30,6 @@ type Props = {
   selectedIds: Set<string>;
   setSelection: Dispatch<SetStateAction<Selection>>;
   openEntry: (id: string) => Promise<void>;
-  openEntryDetail: (id: string) => Promise<void>;
   eligibleSelectedItems: Entry[];
   busy: boolean;
   clearSelection: () => void;
@@ -42,6 +42,7 @@ export function AdminEntryList(props: Props) {
   const {
     preview,
     mobilePreviewOpen,
+    wide,
     eventId,
     apiState,
     draft,
@@ -56,7 +57,6 @@ export function AdminEntryList(props: Props) {
     selectedIds,
     setSelection,
     openEntry,
-    openEntryDetail,
     eligibleSelectedItems,
     busy,
     clearSelection,
@@ -72,7 +72,6 @@ export function AdminEntryList(props: Props) {
       <AdminEntryListStatus apiState={apiState} total={total} />
       <DataTable
         headers={[
-          'Auswahl',
           'Nennung',
           'Klasse',
           'Nr.',
@@ -80,7 +79,18 @@ export function AdminEntryList(props: Props) {
           'Zahlung',
           'Abnahme',
           'Haftverzicht',
-          'Aktion',
+          '',
+        ]}
+        headerCellPriorities={[undefined, 2, 1, undefined, undefined, 3, 3, 1]}
+        headerCellClassNames={[
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          'nb-entry-list-inspection',
+          'nb-entry-list-waiver',
+          undefined,
         ]}
       >
         {apiState === 'ready' &&
@@ -95,12 +105,11 @@ export function AdminEntryList(props: Props) {
               classes={classes}
               workflow={workflow}
               openEntry={openEntry}
-              openEntryDetail={openEntryDetail}
             />
           ))}
         {apiState === 'ready' && !items.length && (
           <tr>
-            <td colSpan={9}>Keine Nennungen für diese Filter.</td>
+            <td colSpan={8}>Keine Nennungen für diese Filter.</td>
           </tr>
         )}
       </DataTable>
@@ -126,6 +135,7 @@ export function AdminEntryList(props: Props) {
       previewLabel="Nennungsvorschau"
       preview={preview}
       mobilePreviewOpen={mobilePreviewOpen}
+      wide={wide}
       filters={
         <AdminEntryFilters
           draft={draft}

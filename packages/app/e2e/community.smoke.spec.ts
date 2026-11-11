@@ -4,6 +4,8 @@ import { mkdirSync, readFileSync } from 'node:fs';
 
 // The payment test continues with the entry that the lifecycle test registered.
 test.describe.configure({ mode: 'serial' });
+const apiBaseUrl = process.env.RACEPILOT_API_URL ?? 'http://127.0.0.1:3000';
+const mailpitUrl = process.env.RACEPILOT_MAILPIT_URL ?? 'http://127.0.0.1:8025';
 const shared: { eventId: string; participant: string } = {
   eventId: '',
   participant: '',
@@ -19,7 +21,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   request,
 }) => {
   // Includes SMTP/job polling and desktop/mobile evidence for the whole lifecycle.
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const email = process.env.COMMUNITY_ADMIN_EMAIL ?? 'admin@nennbox.local';
   const password = process.env.COMMUNITY_ADMIN_PASSWORD;
   if (!password) throw new Error('COMMUNITY_ADMIN_PASSWORD is required');
@@ -33,7 +35,9 @@ test('Community registration and admin lifecycle with API setup', async ({
     if (auth?.startsWith('Bearer ')) token = auth.slice(7);
   });
   await page.locator('#kc-login').click();
-  await expect(page.getByRole('heading', { name: 'Nennungen' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Nennungen' }),
+  ).toBeVisible();
   await expect.poll(() => token).not.toBe('');
 
   // Labelled test setup via the logged-in admin API.
@@ -43,7 +47,7 @@ test('Community registration and admin lifecycle with API setup', async ({
     data?: unknown,
     headers: Record<string, string> = {},
   ) =>
-    request.fetch(`http://127.0.0.1:3000${path}`, {
+    request.fetch(`${apiBaseUrl}${path}`, {
       method,
       headers: {
         authorization: ['Bearer', token].join(' '),
@@ -144,14 +148,15 @@ test('Community registration and admin lifecycle with API setup', async ({
   const shots = async (name: string) => {
     const viewport = page.viewportSize();
     try {
-      for (const width of [1440, 390]) {
-        await page.setViewportSize({
-          width,
-          height: width === 390 ? 844 : 1000,
-        });
+      for (const [width, height] of [
+        [1440, 900],
+        [1920, 1080],
+        [2200, 1080],
+        [390, 844],
+      ]) {
+        await page.setViewportSize({ width, height });
         await page.screenshot({
           path: `packages/app/test-results/alpha/${name}-${width}.png`,
-          fullPage: true,
         });
       }
     } finally {
@@ -190,7 +195,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await expect
     .poll(
       async () => {
-        const res = await request.get('http://127.0.0.1:8025/api/v1/messages');
+        const res = await request.get(`${mailpitUrl}/api/v1/messages`);
         if (!res.ok()) return false;
         const body = (await res.json()) as {
           messages?: Array<{ ID: string; To?: unknown }>;
@@ -204,7 +209,7 @@ test('Community registration and admin lifecycle with API setup', async ({
     )
     .toBe(true);
   const fullMailResponse = await request.get(
-    `http://127.0.0.1:8025/api/v1/message/${mail.ID}`,
+    `${mailpitUrl}/api/v1/message/${mail.ID}`,
   );
   expect(
     fullMailResponse.ok(),
@@ -231,7 +236,12 @@ test('Community registration and admin lifecycle with API setup', async ({
   await row.getByRole('button', { name: 'Ada Lovelace Lotus Seven' }).click();
   const preview = page.getByRole('complementary', { name: 'Nennungsvorschau' });
   await expect(preview).toContainText('Ada Lovelace');
-  await preview.getByRole('button', { name: 'Zulassen' }).click();
+  await shots('admin-entry-preview');
+  const nextActionButton = preview
+    .locator('.nb-preview-actions > button')
+    .first();
+  await expect(nextActionButton).toBeVisible();
+  await nextActionButton.click();
   await expect(preview).toContainText('Angenommen');
   await preview.getByRole('button', { name: 'Vollständig öffnen' }).click();
   const entryDetail = page.getByRole('region', {
@@ -256,6 +266,33 @@ test('Community registration and admin lifecycle with API setup', async ({
   await expect(
     entryDetail.getByRole('button', { name: 'Zulassen' }),
   ).toHaveCount(0);
+
+  const demoEvents = (await call('/admin/events', 'GET', undefined)) as Array<{
+    id: string;
+    slug: string;
+  }>;
+  const demoEvent = demoEvents.find(
+    (candidate) => candidate.slug === 'historischer-bergpreis-2027',
+  );
+  expect(
+    demoEvent,
+    'Historischer Bergpreis demo seed is available',
+  ).toBeTruthy();
+  await page.goto('/app');
+  await page
+    .getByRole('combobox', { name: 'Veranstaltung' })
+    .selectOption(demoEvent!.id);
+  const demoRows = page.getByRole('row');
+  await expect
+    .poll(() => demoRows.count(), { timeout: 90_000 })
+    .toBeGreaterThan(12);
+  await shots('demo-historic-list');
+  await demoRows.nth(1).locator('button[data-entry-action]').click();
+  const demoPreview = page.getByRole('complementary', {
+    name: 'Nennungsvorschau',
+  });
+  await expect(demoPreview).toBeVisible();
+  await shots('demo-historic-preview');
 
   const csvRequest = await api(
     `/admin/events/${event.id}/entries.csv`,
@@ -314,12 +351,11 @@ test('admin records payment from entry detail UI', async ({
     .filter({ hasText: 'Ada Lovelace' })
     .locator('button[data-entry-action]')
     .click();
-  await expect(page.locator('button[data-selected-entry]')).toBeVisible();
-  await page.keyboard.press('Enter');
   const entryDetail = page.getByRole('region', {
     name: 'Nennung im Detail',
     exact: true,
   });
+  await expect(entryDetail).toBeVisible();
   await expect(entryDetail).toContainText(shared.participant);
 
   // The invoice is open until the payment is recorded in the UI.
@@ -346,7 +382,7 @@ test('admin records payment from entry detail UI', async ({
   ).toHaveCount(0);
   expect(token, 'bearer token captured from admin requests').not.toBe('');
   const detail = await request.fetch(
-    `http://127.0.0.1:3000/admin/entries?eventId=${shared.eventId}`,
+    `${apiBaseUrl}/admin/entries?eventId=${shared.eventId}`,
     { headers: { authorization: ['Bearer', token].join(' ') } },
   );
   expect(await detail.text()).toMatch(/"paidCents":1000/);

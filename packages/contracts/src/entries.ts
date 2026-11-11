@@ -181,6 +181,9 @@ export const EntryStatusMeaningSchema = z.enum([
   'rejected',
   'not_relevant',
 ]);
+/** Closed set of entry workflow categories; mirrors `entryWorkflowCategories` in core. */
+export type EntryWorkflowCategory =
+  'pending' | 'accepted' | 'rejected' | 'waitlisted' | 'withdrawn';
 const EntryStatusDimensionValueSchema = z
   .object({
     key: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),

@@ -1,12 +1,7 @@
-import { Button, PreviewPanel } from '@racepilot/ui';
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { Button, PreviewPanel, useWorkspacePreview } from '@racepilot/ui';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
+import type { WorkflowView } from '../entries/AdminEntriesModel.js';
 import { AdminEntries } from '../entries/AdminEntries.js';
 import { AppShell } from './AppShell.js';
 import { EntryPreview } from './EntryPreview.js';
@@ -66,25 +61,8 @@ export function AuthenticatedAdmin() {
   );
 }
 
-const narrowQuery = '(width < 768px)';
-/** Below 768px the list is the start view; a preview would cover it. */
-function useNarrowViewport() {
-  return useSyncExternalStore(
-    (notify) => {
-      if (typeof window.matchMedia !== 'function') return () => undefined;
-      const query = window.matchMedia(narrowQuery);
-      query.addEventListener('change', notify);
-      return () => query.removeEventListener('change', notify);
-    },
-    () =>
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia(narrowQuery).matches,
-    () => false,
-  );
-}
-
 export function AdminApplication() {
-  const narrow = useNarrowViewport();
+  const previewViewport = useWorkspacePreview();
   const [identity, setIdentity] = useState(getAdminIdentity());
   const [events, setEvents] = useState<
     Array<{
@@ -98,6 +76,9 @@ export function AdminApplication() {
   const [selectedEvent, setSelectedEvent] = useState('');
 
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
+  const [previewWorkflow, setPreviewWorkflow] = useState<WorkflowView | null>(
+    null,
+  );
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(true);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -180,9 +161,26 @@ export function AdminApplication() {
       active = false;
     };
   }, []);
+  const [entriesRevision, setEntriesRevision] = useState(0);
+  const [previewAdvance, setPreviewAdvance] = useState<{
+    eventId: string;
+    entryId: string;
+  } | null>(null);
+  const previewAccepted = useCallback(
+    ({ eventId, entryId }: { eventId: string; entryId: string }) => {
+      // The list owns advancing to the next eligible entry.
+      setPreviewAdvance({ eventId, entryId });
+    },
+    [],
+  );
+  const entriesChanged = useCallback(
+    () => setEntriesRevision((value) => value + 1),
+    [],
+  );
   const entryPreview = selectedEntry ? (
     <EntryPreview
       entry={selectedEntry}
+      workflow={previewWorkflow}
       busy={previewBusy}
       onClose={closePreview}
       onOpenDetail={() => {
@@ -209,11 +207,16 @@ export function AdminApplication() {
           if (response.ok) {
             const updated = (await response.json()) as Entry;
             // The answer may only update the entry that is still open in the same event.
-            if (activeEvent.current === requestedEvent)
+            if (activeEvent.current === requestedEvent) {
               setSelectedEntry((current) =>
                 current?.id === requestedEntry ? updated : current,
               );
-            window.dispatchEvent(new Event('nennbox:entries-changed'));
+              previewAccepted({
+                eventId: requestedEvent,
+                entryId: requestedEntry,
+              });
+            }
+            entriesChanged();
           }
         } finally {
           if (activeEvent.current === requestedEvent) setPreviewBusy(false);
@@ -245,7 +248,7 @@ export function AdminApplication() {
             onEventChange={changeEvent}
             onTotalChange={setEntryCount}
             detailOpen={detailOpen}
-            autoPreview={!narrow}
+            autoPreview={previewViewport}
             onOpenDetail={() => {
               setDetailOpen(true);
               setPreviewOpen(false);
@@ -255,6 +258,10 @@ export function AdminApplication() {
               setPreviewOpen(true);
             }}
             onSelectionChange={handleSelectionChange}
+            onWorkflowChange={setPreviewWorkflow}
+            entriesRevision={entriesRevision}
+            previewAdvance={previewAdvance}
+            onPreviewAdvanceHandled={() => setPreviewAdvance(null)}
             selectedEntry={selectedEntry}
           />
         ) : view === 'workflow' ? (

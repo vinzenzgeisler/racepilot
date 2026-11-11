@@ -28,8 +28,8 @@
   min-height: var(--target-min);
   padding: var(--space-2);
   border: 1px solid var(--overlay-sidebar-border);
-  background: var(--color-white);
-  color: var(--color-ink);
+  background: transparent;
+  color: var(--color-white);
   font: var(--text-body);
 }
 .nb-admin-nav nav {
@@ -104,7 +104,8 @@
   padding-top: var(--space-4);
   border-top: 1px solid var(--overlay-sidebar-border);
 }
-.nb-admin-mobile-nav {
+.nb-admin-mobile-nav,
+.nb-admin-mobile-event-picker {
   display: none;
 }
 @media (width < 1280px) and (width >= 768px) {
@@ -127,6 +128,15 @@
 @media (width < 768px) {
   .nb-admin-nav {
     display: none;
+  }
+  .nb-admin-mobile-event-picker {
+    display: block;
+    padding: var(--space-3);
+    background: var(--color-green);
+  }
+  .nb-admin-mobile-event-picker .nb-admin-event-picker select {
+    background: transparent;
+    color: var(--color-white);
   }
   .nb-admin-mobile-nav {
     position: fixed;

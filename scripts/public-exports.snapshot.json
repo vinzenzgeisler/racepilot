@@ -128,6 +128,7 @@
     "EntryStatusDimensionConfigSchema",
     "EntryStatusMeaningSchema",
     "EntryVehicleUpdateRequest",
+    "EntryWorkflowCategory",
     "EventClassSchema",
     "EventPublicRegistrationRateLimitOverrides",
     "EventPublicRegistrationRateLimitOverridesSchema",
@@ -450,6 +451,8 @@
     "Icon",
     "IconName",
     "Inline",
+    "KeyboardHintBar",
+    "KeyboardHintItem",
     "MediaDetail",
     "Menu",
     "MenuItem",
@@ -484,6 +487,7 @@
     "Textarea",
     "TextareaProps",
     "Toast",
+    "WORKSPACE_PREVIEW_BREAKPOINT",
     "Wordmark",
     "WorkspaceSplit",
     "colors",
@@ -491,7 +495,8 @@
     "motion",
     "shape",
     "spacing",
-    "typography"
+    "typography",
+    "useWorkspacePreview"
   ],
   "packages/worker/src/index.ts": [
     "MailLocale",

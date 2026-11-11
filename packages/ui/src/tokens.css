@@ -1,4 +1,6 @@
 :root {
+  --workspace-list-max-width: 1440px;
+  --workspace-preview-max-width: 880px;
   --surface-page: var(--color-ivory);
   --surface-panel: var(--color-white);
   --brand-action: var(--color-green);

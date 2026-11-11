@@ -44,7 +44,10 @@ export {
   EntryVehicleUpdateRequest,
   EntryMessagesResponse,
 } from './entry-detail.js';
-export type { EntryStatusDimensionConfig } from './entries.js';
+export type {
+  EntryStatusDimensionConfig,
+  EntryWorkflowCategory,
+} from './entries.js';
 export {
   OrganizationResponse,
   UpdateOrganizationRequest,

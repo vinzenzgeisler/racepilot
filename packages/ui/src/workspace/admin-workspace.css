@@ -1,5 +1,5 @@
 .nb-admin-workspace {
-  --nb-nav-width: 280px;
+  --nb-nav-width: 248px;
 
   display: grid;
   grid-template-columns: var(--nb-nav-width) minmax(0, 1fr);

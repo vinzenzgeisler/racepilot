@@ -8,7 +8,9 @@ const eventA = '10000000-0000-4000-8000-000000000001';
 const eventB = '10000000-0000-4000-8000-000000000002';
 const classA = '20000000-0000-4000-8000-000000000001';
 const entryA = '30000000-0000-4000-8000-000000000001';
+const entryB = '30000000-0000-4000-8000-000000000002';
 const invoiceA = '90000000-0000-4000-8000-000000000001';
+const invoiceB = '90000000-0000-4000-8000-000000000002';
 const orgId = '40000000-0000-4000-8000-000000000001';
 const events = [
   { id: eventA, name: 'Bergpreis', slug: 'bergpreis' },
@@ -72,10 +74,21 @@ const alex = {
     hints: [],
   },
 };
+const nextAlex = {
+  ...alex,
+  id: entryB,
+  adminDetails: {
+    ...alex.adminDetails,
+    driver: { ...alex.adminDetails.driver, name: 'Sam Driver' },
+    invoice: { ...alex.adminDetails.invoice, id: invoiceB },
+  },
+};
 
+let listedEntries: unknown[] = [alex];
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot> | undefined;
 let narrow = false;
+let previewAvailable = true;
 const pending: Record<string, (response: Response) => void> = {};
 function deferred(key: string) {
   return new Promise<Response>((resolve) => {
@@ -133,7 +146,7 @@ async function mount(slow: Array<'driver' | 'payment' | 'status'> = []) {
       return Response.json([{ id: classA, name: 'Touring A' }]);
     if (url.startsWith('/admin/entries?'))
       return url.includes(`eventId=${eventA}`)
-        ? listFor(eventA, [alex])
+        ? listFor(eventA, listedEntries)
         : listFor(eventB, []);
     if (url === `/admin/entries/${entryA}/driver` && method === 'PATCH')
       return slow.includes('driver') ? deferred('driver') : Response.json(alex);
@@ -145,7 +158,13 @@ async function mount(slow: Array<'driver' | 'payment' | 'status'> = []) {
       return slow.includes('status')
         ? deferred('status')
         : Response.json(acceptedAlex());
-    if (url === `/admin/entries/${entryA}`) return Response.json(alex);
+    if (url === `/admin/entries/${entryA}`)
+      return Response.json(
+        listedEntries.find(
+          (entry) => (entry as { id?: string }).id === entryA,
+        ) ?? alex,
+      );
+    if (url === `/admin/entries/${entryB}`) return Response.json(nextAlex);
     if (url.endsWith('/messages')) return Response.json({ items: [] });
     return new Response('{}', { status: 404 });
   });
@@ -167,9 +186,10 @@ async function click(predicate: (button: HTMLButtonElement) => boolean) {
 const byText = (text: string) => (button: HTMLButtonElement) =>
   button.textContent?.trim() === text;
 async function switchEvent(id: string) {
-  const select = container.querySelector<HTMLSelectElement>(
-    '.nb-admin-event-picker select',
-  )!;
+  const selector = narrow
+    ? '.nb-admin-mobile-event-picker select'
+    : '.nb-admin-event-picker select';
+  const select = container.querySelector<HTMLSelectElement>(selector)!;
   await act(async () => {
     select.value = id;
     select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -179,10 +199,7 @@ async function switchEvent(id: string) {
 }
 const textOf = () => container.textContent ?? '';
 async function openDetailWide() {
-  await click(
-    (button) =>
-      button.getAttribute('aria-label') === 'Alex Driver vollständig öffnen',
-  );
+  await click(byText('Vollständig öffnen'));
   expect(container.querySelector('.nb-detail')).not.toBeNull();
 }
 function expectEmptyEventView() {
@@ -200,8 +217,10 @@ beforeEach(() => {
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   narrow = false;
+  previewAvailable = true;
+  listedEntries = [alex];
   window.matchMedia = ((query: string) => ({
-    matches: narrow && query.includes('768'),
+    matches: previewAvailable && !narrow && query.includes('1680'),
     media: query,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
@@ -297,19 +316,28 @@ describe('AdminApplication event switch and detail access', () => {
       expectEmptyEventView();
     });
 
-  it('keeps the list as the start view on a narrow screen and reaches the detail from the preview', async () => {
+  it('opens details directly from a row on compact screens and keeps event switching available', async () => {
     narrow = true;
     await mount();
     // No preview opens by itself; the list stays the start view.
     expect(container.querySelector('.is-mobile-open')).toBeNull();
     expect(textOf()).toContain('Alex Driver');
+    expect(
+      container.querySelector('.nb-admin-mobile-event-picker select'),
+    ).not.toBeNull();
     await click((button) => button.hasAttribute('data-entry-action'));
-    expect(container.querySelector('.is-mobile-open')).not.toBeNull();
-    await click(byText('Vollständig öffnen'));
+    expect(container.querySelector('.is-mobile-open')).toBeNull();
     expect(container.querySelector('.nb-detail')).not.toBeNull();
     await switchEvent(eventB);
     expectEmptyEventView();
     expect(container.querySelector('.is-mobile-open')).toBeNull();
+  });
+
+  it('opens the detail directly from a row in the 1280–1679 viewport band', async () => {
+    previewAvailable = false;
+    await mount();
+    await click((button) => button.hasAttribute('data-entry-action'));
+    expect(container.querySelector('.nb-detail')).not.toBeNull();
   });
 
   it('carries a successful preview status into the detail record and actions', async () => {
@@ -325,10 +353,55 @@ describe('AdminApplication event switch and detail access', () => {
     expect(container.querySelector('.nb-preview-panel')?.textContent).toContain(
       'Keine weitere Statusaktion verfügbar.',
     );
+    expect(container.querySelector('.nb-preview-hint')).toBeNull();
     await click(byText('Vollständig öffnen'));
     const detail = container.querySelector('.nb-detail')!;
     expect(detail.textContent).toContain('Zugelassen');
     expect(detail.textContent).not.toContain('Zulassen');
+  });
+
+  it('does not offer a destructive workflow category as the preview primary action', async () => {
+    listedEntries = [
+      {
+        ...alex,
+        acceptanceStatus: 'accepted',
+        statusProjection: {
+          ...alex.statusProjection,
+          dimensions: alex.statusProjection.dimensions.map((dimension) =>
+            dimension.key === 'entry'
+              ? {
+                  ...dimension,
+                  nextAction: {
+                    key: 'entry:withdrawn',
+                    label: { de: 'Als abgesagt markieren', en: 'Withdraw' },
+                  },
+                }
+              : dimension,
+          ),
+        },
+      },
+    ];
+    await mount();
+
+    expect(textOf()).toContain('Keine weitere Statusaktion verfügbar.');
+    expect(
+      [...container.querySelectorAll('.nb-preview-actions button')].some(
+        (button) => button.textContent?.includes('Als abgesagt markieren'),
+      ),
+    ).toBe(false);
+  });
+
+  it('opens the next open entry after accepting the preview entry', async () => {
+    listedEntries = [alex, nextAlex];
+    await mount();
+    expect(container.querySelector('.nb-preview-panel h2')?.textContent).toBe(
+      'Alex Driver',
+    );
+    await click(byText('Zulassen'));
+    await flush();
+    expect(container.querySelector('.nb-preview-panel h2')?.textContent).toBe(
+      'Sam Driver',
+    );
   });
 
   it('ignores a late preview action after switching events', async () => {
@@ -355,5 +428,94 @@ describe('AdminApplication event switch and detail access', () => {
     );
     expect(container.querySelector('.nb-detail')).toBeNull();
     await openDetailWide();
+  });
+
+  it('keeps workflow navigation in the account group but out of mobile navigation', async () => {
+    narrow = true;
+    await mount();
+
+    expect(
+      container.querySelector('.nb-admin-nav-group[aria-label="Konto"]')
+        ?.textContent,
+    ).toContain('Nennungsablauf');
+    expect(
+      container.querySelector('.nb-admin-mobile-nav')?.textContent,
+    ).not.toContain('Nennungsablauf');
+  });
+
+  it('uses the actual next transition label and omits the acceptance hint for other actions', async () => {
+    const entryWithOtherTransition = {
+      ...alex,
+      statusProjection: {
+        ...alex.statusProjection,
+        dimensions: alex.statusProjection.dimensions.map((dimension) =>
+          dimension.key === 'entry'
+            ? {
+                ...dimension,
+                nextAction: {
+                  key: 'entry:waitlisted',
+                  label: { de: 'Auf Warteliste setzen', en: 'Waitlist' },
+                },
+              }
+            : dimension,
+        ),
+      },
+    };
+    listedEntries = [entryWithOtherTransition];
+    await mount();
+
+    expect(textOf()).toContain('Auf Warteliste setzen');
+    expect(textOf()).not.toContain('Zulassen');
+    expect(textOf()).not.toContain('Nach dem Zulassen springt');
+    expect(container.querySelector('.nb-preview-hint')).toBeNull();
+
+    await click(byText('Auf Warteliste setzen'));
+    const transitionRequest = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([url, init]) =>
+          String(url) === `/admin/entries/${entryA}/transitions` &&
+          init?.method === 'POST',
+      );
+    expect(JSON.parse(String(transitionRequest?.[1]?.body))).toMatchObject({
+      status: 'waitlisted',
+    });
+  });
+
+  it('labels status document rows by dimension and keeps the status in the chip', async () => {
+    listedEntries = [
+      {
+        ...alex,
+        statusProjection: {
+          ...alex.statusProjection,
+          dimensions: [
+            ...alex.statusProjection.dimensions,
+            {
+              key: 'payment',
+              value: 'open',
+              label: { de: 'Offen', en: 'Open' },
+              meaning: 'missing',
+              required: true,
+              nextAction: null,
+            },
+            {
+              key: 'waiver',
+              value: 'f_pending',
+              label: { de: 'F · Ausstehend', en: 'F · Pending' },
+              meaning: 'missing',
+              required: true,
+              nextAction: null,
+            },
+          ],
+        },
+      },
+    ];
+    await mount();
+
+    const documentRows = [
+      ...container.querySelectorAll('.nb-document-list li'),
+    ].map((row) => row.textContent);
+    expect(documentRows).toContain('StartgeldOffen');
+    expect(documentRows).toContain('Haftverzicht FahrerF · Ausstehend');
   });
 });
