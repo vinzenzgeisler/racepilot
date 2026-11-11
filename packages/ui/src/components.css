@@ -36,6 +36,8 @@
 @import url('./workspace/preview-panel.css');
 @import url('./workspace/action-panel.css');
 @import url('./workspace/document-list.css');
+@import url('./workspace/keyboard-hint-bar.css');
+@import url('./workspace/keyboard-hint-bar.css');
 @import url('./workspace/history-timeline.css');
 @import url('./detail/detail-layout.css');
 @import url('./detail/detail-header.css');

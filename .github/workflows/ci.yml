@@ -182,7 +182,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Start local Community stack
         run: |
-          COMMUNITY_PRINT_PASSWORD=0 bash scripts/community-up.sh > /tmp/community-up.log 2>&1 &
+          COMMUNITY_PRINT_PASSWORD=0 COMMUNITY_SEED_DEMO=1 bash scripts/community-up.sh > /tmp/community-up.log 2>&1 &
           echo $! > /tmp/community-up.pid
           for attempt in {1..120}; do
             if curl -fsS http://127.0.0.1:3000/health >/dev/null && curl -fsS http://127.0.0.1:5173/app >/dev/null; then exit 0; fi

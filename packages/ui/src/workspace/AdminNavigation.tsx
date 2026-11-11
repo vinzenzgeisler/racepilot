@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react';
 import { Icon, type IconName } from '../icon/Icon.js';
 
-type NavItem = { id: string; label: string; icon: IconName; count?: number };
+type NavItem = {
+  id: string;
+  label: string;
+  icon: IconName;
+  count?: number;
+  mobile?: boolean;
+};
 export type NavGroup = { label: string; items: NavItem[] };
 export type EventChoice = { id: string; label: string };
 export function AdminNavigation({
@@ -31,7 +37,9 @@ export function AdminNavigation({
   ariaLabel: string;
   compact?: boolean;
 }) {
-  const items = groups.flatMap((group) => group.items);
+  const items = groups
+    .flatMap((group) => group.items)
+    .filter((entry) => entry.mobile !== false);
   const eventPicker = (
     <label className="nb-admin-event-picker">
       <span className="nb-visually-hidden">{eventLabel}</span>

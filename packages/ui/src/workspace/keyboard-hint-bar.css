@@ -1,0 +1,14 @@
+.nb-keyboard-hint-bar {
+  margin: 0;
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--color-line);
+  color: var(--color-graphite);
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.nb-keyboard-hint-bar kbd {
+  font: inherit;
+}

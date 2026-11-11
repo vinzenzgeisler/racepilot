@@ -263,6 +263,31 @@ test('Community registration and admin lifecycle with API setup', async ({
     entryDetail.getByRole('button', { name: 'Zulassen' }),
   ).toHaveCount(0);
 
+  const demoEvents = (await call('/admin/events', 'GET', undefined)) as Array<{
+    id: string;
+    slug: string;
+  }>;
+  const demoEvent = demoEvents.find(
+    (candidate) => candidate.slug === 'historischer-bergpreis-2027',
+  );
+  expect(
+    demoEvent,
+    'Historischer Bergpreis demo seed is available',
+  ).toBeTruthy();
+  await page.goto('/app');
+  await page
+    .getByRole('combobox', { name: 'Veranstaltung' })
+    .selectOption(demoEvent!.id);
+  const demoRows = page.getByRole('row');
+  await expect.poll(() => demoRows.count()).toBeGreaterThan(12);
+  await shots('demo-historic-list');
+  await demoRows.nth(1).locator('button[data-entry-action]').click();
+  const demoPreview = page.getByRole('complementary', {
+    name: 'Nennungsvorschau',
+  });
+  await expect(demoPreview).toBeVisible();
+  await shots('demo-historic-preview');
+
   const csvRequest = await api(
     `/admin/events/${event.id}/entries.csv`,
     'GET',

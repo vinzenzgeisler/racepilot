@@ -403,6 +403,8 @@
     "Icon",
     "IconName",
     "Inline",
+    "KeyboardHintBar",
+    "KeyboardHintItem",
     "MediaDetail",
     "Menu",
     "MenuItem",

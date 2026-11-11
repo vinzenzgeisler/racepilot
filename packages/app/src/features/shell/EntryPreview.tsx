@@ -1,5 +1,20 @@
 import type { EntryResponse as Entry } from '@racepilot/contracts';
-import { Button, DocumentList, PreviewPanel, StatusLabel } from '@racepilot/ui';
+import {
+  Button,
+  DocumentList,
+  KeyboardHintBar,
+  PreviewPanel,
+  StatusLabel,
+} from '@racepilot/ui';
+
+const STATUS_DOCUMENT_KEYS = ['waiver', 'payment'] as const;
+const STATUS_DOCUMENT_LABELS: Record<
+  (typeof STATUS_DOCUMENT_KEYS)[number],
+  string
+> = {
+  waiver: 'Haftverzicht Fahrer',
+  payment: 'Startgeld',
+};
 
 export function EntryPreview({
   entry,
@@ -18,6 +33,7 @@ export function EntryPreview({
   const status = entry.statusProjection?.dimensions;
   const next = status?.find((item) => item.key === 'entry')?.nextAction;
   const nextStatus = next?.key.startsWith('entry:') ? next.key.slice(6) : null;
+  const canAcceptNext = next?.label.de === 'Zulassen';
   const missing =
     status
       ?.filter(
@@ -49,10 +65,13 @@ export function EntryPreview({
       })) ?? [];
   const statusDocuments =
     status
-      ?.filter((item) => ['waiver', 'payment'].includes(item.key))
+      ?.filter((item) => STATUS_DOCUMENT_KEYS.some((key) => key === item.key))
       .map((item) => ({
         id: item.key,
-        label: item.label.de,
+        label:
+          STATUS_DOCUMENT_LABELS[
+            item.key as keyof typeof STATUS_DOCUMENT_LABELS
+          ],
         status: (
           <StatusLabel
             status={item.meaning === 'not_relevant' ? 'empty' : item.meaning}
@@ -90,20 +109,22 @@ export function EntryPreview({
       closeLabel="Vorschau schließen"
       footer={
         <div className="nb-preview-actions">
-          {nextStatus && (
+          {nextStatus && next && (
             <Button
               disabled={busy}
               onClick={() => void onNextAction(nextStatus)}
             >
-              Zulassen
+              {next.label.de}
             </Button>
           )}
           {!nextStatus && <p>Keine weitere Statusaktion verfügbar.</p>}
-          <p className="nb-preview-hint">
-            {missing.length
-              ? `Es ${missing.length > 1 ? 'fehlen' : 'fehlt'} noch ${missingText}. Nach dem Zulassen springt die Vorschau zur nächsten offenen Nennung.`
-              : 'Nach dem Zulassen springt die Vorschau zur nächsten offenen Nennung.'}
-          </p>
+          {nextStatus && canAcceptNext && (
+            <p className="nb-preview-hint">
+              {missing.length
+                ? `Es ${missing.length > 1 ? 'fehlen' : 'fehlt'} noch ${missingText}. Nach dem Zulassen springt die Vorschau zur nächsten offenen Nennung.`
+                : 'Nach dem Zulassen springt die Vorschau zur nächsten offenen Nennung.'}
+            </p>
+          )}
           <div className="nb-preview-secondary-actions">
             <Button variant="secondary" disabled>
               Nachricht
@@ -112,9 +133,13 @@ export function EntryPreview({
               Vollständig öffnen
             </Button>
           </div>
-          <p className="nb-preview-keyboard">
-            ↑ ↓ wechseln · Enter öffnen · Esc schließen
-          </p>
+          <KeyboardHintBar
+            items={[
+              { keys: '↑ ↓', label: 'wechseln' },
+              { keys: 'Enter', label: 'öffnen' },
+              { keys: 'Esc', label: 'schließen' },
+            ]}
+          />
         </div>
       }
     >

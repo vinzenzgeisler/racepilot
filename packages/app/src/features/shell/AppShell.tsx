@@ -21,7 +21,7 @@ type EventOption = {
   registrationClosesAt?: string | null;
 };
 type View = 'entries' | 'workflow' | 'account';
-type NavItem = { id: View; label: string; icon: IconName };
+type NavItem = { id: View; label: string; icon: IconName; mobile?: boolean };
 export const APP_NAVIGATION_REGISTRY: Array<{
   label: string;
   items: NavItem[];
@@ -34,7 +34,12 @@ export const APP_NAVIGATION_REGISTRY: Array<{
     label: 'Konto',
     items: [
       { id: 'account', label: 'Einstellungen', icon: 'more' },
-      { id: 'workflow', label: 'Nennungsablauf', icon: 'approval' },
+      {
+        id: 'workflow',
+        label: 'Nennungsablauf',
+        icon: 'approval',
+        mobile: false,
+      },
     ],
   },
 ];

@@ -44,6 +44,9 @@ export SMTP_FROM='noreply@nennbox.local'
 export STORAGE_PROVIDER=local STORAGE_LOCAL_ROOT="$PWD/.community-local/uploads"
 mkdir -p "$STORAGE_LOCAL_ROOT"
 node scripts/community-init.mjs
+if [[ "${COMMUNITY_SEED_DEMO:-0}" == 1 ]]; then
+  COMMUNITY_DEMO_SEED=I_UNDERSTAND npm run community:demo-seed
+fi
 node packages/api/dist/server.js & api_pid=$!
 node packages/worker/dist/server.js & worker_pid=$!
 npm run dev --workspace @racepilot/app -- --host 127.0.0.1 & app_pid=$!

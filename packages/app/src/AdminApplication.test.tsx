@@ -158,7 +158,12 @@ async function mount(slow: Array<'driver' | 'payment' | 'status'> = []) {
       return slow.includes('status')
         ? deferred('status')
         : Response.json(acceptedAlex());
-    if (url === `/admin/entries/${entryA}`) return Response.json(alex);
+    if (url === `/admin/entries/${entryA}`)
+      return Response.json(
+        listedEntries.find(
+          (entry) => (entry as { id?: string }).id === entryA,
+        ) ?? alex,
+      );
     if (url === `/admin/entries/${entryB}`) return Response.json(nextAlex);
     if (url.endsWith('/messages')) return Response.json({ items: [] });
     return new Response('{}', { status: 404 });
@@ -348,6 +353,7 @@ describe('AdminApplication event switch and detail access', () => {
     expect(container.querySelector('.nb-preview-panel')?.textContent).toContain(
       'Keine weitere Statusaktion verfügbar.',
     );
+    expect(container.querySelector('.nb-preview-hint')).toBeNull();
     await click(byText('Vollständig öffnen'));
     const detail = container.querySelector('.nb-detail')!;
     expect(detail.textContent).toContain('Zugelassen');
@@ -391,5 +397,94 @@ describe('AdminApplication event switch and detail access', () => {
     );
     expect(container.querySelector('.nb-detail')).toBeNull();
     await openDetailWide();
+  });
+
+  it('keeps workflow navigation in the account group but out of mobile navigation', async () => {
+    narrow = true;
+    await mount();
+
+    expect(
+      container.querySelector('.nb-admin-nav-group[aria-label="Konto"]')
+        ?.textContent,
+    ).toContain('Nennungsablauf');
+    expect(
+      container.querySelector('.nb-admin-mobile-nav')?.textContent,
+    ).not.toContain('Nennungsablauf');
+  });
+
+  it('uses the actual next transition label and omits the acceptance hint for other actions', async () => {
+    const entryWithOtherTransition = {
+      ...alex,
+      statusProjection: {
+        ...alex.statusProjection,
+        dimensions: alex.statusProjection.dimensions.map((dimension) =>
+          dimension.key === 'entry'
+            ? {
+                ...dimension,
+                nextAction: {
+                  key: 'entry:waitlisted',
+                  label: { de: 'Auf Warteliste setzen', en: 'Waitlist' },
+                },
+              }
+            : dimension,
+        ),
+      },
+    };
+    listedEntries = [entryWithOtherTransition];
+    await mount();
+
+    expect(textOf()).toContain('Auf Warteliste setzen');
+    expect(textOf()).not.toContain('Zulassen');
+    expect(textOf()).not.toContain('Nach dem Zulassen springt');
+    expect(container.querySelector('.nb-preview-hint')).toBeNull();
+
+    await click(byText('Auf Warteliste setzen'));
+    const transitionRequest = vi
+      .mocked(fetch)
+      .mock.calls.find(
+        ([url, init]) =>
+          String(url) === `/admin/entries/${entryA}/transitions` &&
+          init?.method === 'POST',
+      );
+    expect(JSON.parse(String(transitionRequest?.[1]?.body))).toMatchObject({
+      status: 'waitlisted',
+    });
+  });
+
+  it('labels status document rows by dimension and keeps the status in the chip', async () => {
+    listedEntries = [
+      {
+        ...alex,
+        statusProjection: {
+          ...alex.statusProjection,
+          dimensions: [
+            ...alex.statusProjection.dimensions,
+            {
+              key: 'payment',
+              value: 'open',
+              label: { de: 'Offen', en: 'Open' },
+              meaning: 'missing',
+              required: true,
+              nextAction: null,
+            },
+            {
+              key: 'waiver',
+              value: 'f_pending',
+              label: { de: 'F · Ausstehend', en: 'F · Pending' },
+              meaning: 'missing',
+              required: true,
+              nextAction: null,
+            },
+          ],
+        },
+      },
+    ];
+    await mount();
+
+    const documentRows = [
+      ...container.querySelectorAll('.nb-document-list li'),
+    ].map((row) => row.textContent);
+    expect(documentRows).toContain('StartgeldOffen');
+    expect(documentRows).toContain('Haftverzicht FahrerF · Ausstehend');
   });
 });
