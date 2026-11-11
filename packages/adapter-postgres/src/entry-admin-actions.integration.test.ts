@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { and, eq, inArray } from 'drizzle-orm';
 import {
   createDatabase,
+  migrate,
   createEntryAdminActionsRepository,
   createEntryRepository,
   createEntryWorkflowRepository,
@@ -31,6 +32,7 @@ const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('entry admin actions', () => {
   it('enforces tenant/version/capacity, recalculates price, audits notes and soft-deletes', async () => {
     if (!url) throw new Error('RACEPILOT_TEST_DATABASE_URL is required');
+    await migrate(url);
     await runMigrations({ connectionString: url });
     const { db, pool } = await createDatabase(url);
     const suffix = crypto.randomUUID();
@@ -217,6 +219,9 @@ describe.skipIf(!url)('entry admin actions', () => {
       const [move, concurrentA, concurrentB] = tenantA.entries;
       if (!move || !concurrentA || !concurrentB)
         throw new Error('Entry seed missing');
+      expect(
+        await actions.availableActions(tenantA.context, move.id),
+      ).toContain(`change_class:${tenantA.targetClass.id}`);
 
       expect(
         await actions.perform(
@@ -285,6 +290,11 @@ describe.skipIf(!url)('entry admin actions', () => {
         status: 'conflict',
         reason: 'capacity',
       });
+      const remainingEntry =
+        concurrentResults[0]?.status === 'conflict' ? concurrentA : concurrentB;
+      expect(
+        await actions.availableActions(tenantA.context, remainingEntry.id),
+      ).not.toContain(`change_class:${tenantA.targetClass.id}`);
 
       const adjusted = await actions.perform(
         tenantA.context,

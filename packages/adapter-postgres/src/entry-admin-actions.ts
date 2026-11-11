@@ -48,9 +48,12 @@ export function createEntryAdminActionsRepository(
             ne(eventClasses.id, entry.classId),
           ),
         );
+      const eligibleClasses: string[] = [];
       for (const target of classes) {
-        if (target.maxParticipants === null)
-          return [...actions, 'change_class'];
+        if (target.maxParticipants === null) {
+          eligibleClasses.push(target.id);
+          continue;
+        }
         const [occupancy] = await db
           .select({ count: sql<number>`count(*)::int` })
           .from(entries)
@@ -63,9 +66,15 @@ export function createEntryAdminActionsRepository(
             ),
           );
         if ((occupancy?.count ?? 0) < target.maxParticipants)
-          return [...actions, 'change_class'];
+          eligibleClasses.push(target.id);
       }
-      return actions;
+      return eligibleClasses.length
+        ? [
+            ...actions,
+            'change_class',
+            ...eligibleClasses.map((id) => `change_class:${id}`),
+          ]
+        : actions;
     },
     perform: async (ctx, entryId, action, actor) =>
       db.transaction(async (tx): Promise<EntryAdminActionResult> => {
