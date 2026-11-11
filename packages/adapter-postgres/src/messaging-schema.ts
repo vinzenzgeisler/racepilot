@@ -5,6 +5,7 @@ import {
   timestamp,
   foreignKey,
   unique,
+  uniqueIndex,
   index,
 } from 'drizzle-orm/pg-core';
 import { organizations, events } from './schema/organization.js';
@@ -26,6 +27,11 @@ export const messageTemplates = pgTable(
   },
   (table) => [
     unique('message_template_org_id_unique').on(table.organizationId, table.id),
+    uniqueIndex('message_template_org_event_name_unique').on(
+      table.organizationId,
+      table.eventId,
+      table.name,
+    ),
     foreignKey({
       columns: [table.organizationId],
       foreignColumns: [organizations.id],

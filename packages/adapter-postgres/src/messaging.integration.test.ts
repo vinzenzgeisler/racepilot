@@ -128,6 +128,15 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
       expect(
         await repo.preview(foreignContext, owner.event.id, filter),
       ).toBeNull();
+      const templates = await repo.listTemplates(context, owner.event.id);
+      expect(templates).toEqual([
+        expect.objectContaining({
+          eventId: owner.event.id,
+          name: 'General update',
+          subject: 'An update about {{eventName}}',
+        }),
+      ]);
+      expect(await repo.listTemplates(context, owner.event.id)).toHaveLength(1);
       const preview = await repo.preview(context, owner.event.id, filter);
       expect(preview).toMatchObject({
         count: 1,

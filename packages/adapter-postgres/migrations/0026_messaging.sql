@@ -16,6 +16,7 @@ CREATE TABLE message_template (
   UNIQUE (organization_id, id),
   FOREIGN KEY (organization_id, event_id) REFERENCES event(organization_id, id) ON DELETE CASCADE
 );
+CREATE UNIQUE INDEX message_template_org_event_name_unique ON message_template(organization_id, event_id, name);
 
 CREATE TABLE message_campaign (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
