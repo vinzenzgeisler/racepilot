@@ -35,7 +35,7 @@ function appFor(permissions = context.permissions) {
       actor,
       organizationId: requestContext.organizationId,
     });
-    return { id: `campaign-${input.eventId}` };
+    return { ok: true, campaign: { id: `campaign-${input.eventId}` } };
   };
   const send = vi.fn(sendImplementation);
   const messages: NonNullable<ApiDeps['messages']> = {
@@ -160,5 +160,37 @@ describe('message campaign routes', () => {
       key: 'test-key-001',
       organizationId: orgId,
     });
+  });
+
+  it('maps idempotency conflicts to 409 and validation failures to 422', async () => {
+    const { app, send } = appFor();
+    const request = (key: string) =>
+      app.request(`/admin/events/${eventId}/messages/campaigns`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'Idempotency-Key': key },
+        body: JSON.stringify({
+          eventId,
+          recipients: {},
+          subject: 'Hi',
+          text: 'Body',
+          attachments: [],
+        }),
+      });
+    send.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'idempotency-conflict', message: 'Key reused' },
+    });
+    const conflict = await request('conflict-001');
+    expect(conflict.status).toBe(409);
+    expect(await conflict.json()).toMatchObject({
+      code: 'idempotency-conflict',
+    });
+    send.mockResolvedValueOnce({
+      ok: false,
+      error: { code: 'no-recipients', message: 'No recipients' },
+    });
+    const invalid = await request('invalid-001');
+    expect(invalid.status).toBe(422);
+    expect(await invalid.json()).toMatchObject({ code: 'no-recipients' });
   });
 });

@@ -2,6 +2,7 @@ import { and, eq } from 'drizzle-orm';
 import type {
   MessageCampaignCreate,
   ObjectStorageProvider,
+  MessageCampaignSendResult,
   RequestContext,
 } from '@racepilot/core';
 import {
@@ -37,11 +38,24 @@ export function createMessageSender(
     input: MessageCampaignCreate,
     actor: string,
   ) => {
-    if (
-      validateMessageTemplate(input.subject, input.text).length ||
-      input.attachments.length > MESSAGE_ATTACHMENT_LIMITS.maxCount
-    )
-      return null;
+    const templateErrors = validateMessageTemplate(input.subject, input.text);
+    if (templateErrors.length)
+      return {
+        ok: false,
+        error: {
+          code: 'invalid-template',
+          message: 'Message template is invalid',
+          details: templateErrors,
+        },
+      } satisfies MessageCampaignSendResult;
+    if (input.attachments.length > MESSAGE_ATTACHMENT_LIMITS.maxCount)
+      return {
+        ok: false,
+        error: {
+          code: 'too-many-attachments',
+          message: 'Too many attachments',
+        },
+      } satisfies MessageCampaignSendResult;
     const attachmentRefs: Array<{ objectId: string; filename: string }> = [];
     let attachmentBytes = 0;
     for (const attachment of input.attachments) {
@@ -49,9 +63,23 @@ export function createMessageSender(
         ctx.organizationId,
         attachment.objectId,
       );
-      if (!object || object.ref.contentType !== 'application/pdf') return null;
+      if (!object || object.ref.contentType !== 'application/pdf')
+        return {
+          ok: false,
+          error: {
+            code: 'attachment-unavailable',
+            message: 'Attachment is unavailable or not a PDF',
+          },
+        } satisfies MessageCampaignSendResult;
       attachmentBytes += object.ref.size;
-      if (attachmentBytes > MESSAGE_ATTACHMENT_LIMITS.maxBytes) return null;
+      if (attachmentBytes > MESSAGE_ATTACHMENT_LIMITS.maxBytes)
+        return {
+          ok: false,
+          error: {
+            code: 'attachment-too-large',
+            message: 'Attachments exceed the configured size limit',
+          },
+        } satisfies MessageCampaignSendResult;
       attachmentRefs.push({
         objectId: attachment.objectId,
         filename: attachment.filename,
@@ -63,7 +91,19 @@ export function createMessageSender(
       eventId,
       input.recipients,
     );
-    if (!resolved || !resolved.count) return null;
+    if (!resolved)
+      return {
+        ok: false,
+        error: { code: 'event-not-found', message: 'Event not found' },
+      } satisfies MessageCampaignSendResult;
+    if (!resolved.count)
+      return {
+        ok: false,
+        error: {
+          code: 'no-recipients',
+          message: 'No recipients match the selection',
+        },
+      } satisfies MessageCampaignSendResult;
     const requestHash = digestMessage(fingerprintMessageRequest(input));
     const sendingStatus = transitionMessageCampaign('planned', 'sending');
     return db.transaction(async (tx) => {
@@ -92,7 +132,15 @@ export function createMessageSender(
             ),
           )
           .limit(1);
-        if (!existing || existing.requestHash !== requestHash) return null;
+        if (!existing || existing.requestHash !== requestHash)
+          return {
+            ok: false,
+            error: {
+              code: 'idempotency-conflict',
+              message:
+                'Idempotency key was already used with a different request',
+            },
+          } satisfies MessageCampaignSendResult;
         const recipients = await tx
           .select()
           .from(messageCampaignRecipients)
@@ -102,7 +150,11 @@ export function createMessageSender(
               eq(messageCampaignRecipients.campaignId, existing.id),
             ),
           );
-        return messageCampaignResponse(existing, recipients);
+        return {
+          ok: true,
+          campaign: messageCampaignResponse(existing, recipients),
+          replayed: true,
+        } satisfies MessageCampaignSendResult;
       }
       await tx.insert(messageCampaignAudits).values({
         organizationId: ctx.organizationId,
@@ -169,10 +221,13 @@ export function createMessageSender(
         .select()
         .from(messageCampaignRecipients)
         .where(eq(messageCampaignRecipients.campaignId, campaign.id));
-      return messageCampaignResponse(
-        { ...campaign, status: sendingStatus },
-        recipients,
-      );
+      return {
+        ok: true,
+        campaign: messageCampaignResponse(
+          { ...campaign, status: sendingStatus },
+          recipients,
+        ),
+      } satisfies MessageCampaignSendResult;
     });
   };
 }

@@ -174,8 +174,12 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         payload,
         'integration-test',
       );
-      expect(first).toMatchObject({ total: 1, status: 'sending' });
-      expect(replay).toMatchObject({ id: first?.id });
+      expect(first).toMatchObject({
+        ok: true,
+        campaign: { total: 1, status: 'sending' },
+      });
+      if (!first.ok || !replay.ok) throw new Error('Campaign send failed');
+      expect(replay.campaign).toMatchObject({ id: first.campaign.id });
       expect(
         await repo.send(
           context,
@@ -184,7 +188,7 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
           { ...payload, subject: 'different' },
           'integration-test',
         ),
-      ).toBeNull();
+      ).toMatchObject({ ok: false, error: { code: 'idempotency-conflict' } });
       const campaigns = await db
         .select()
         .from(messageCampaigns)
@@ -209,8 +213,7 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         subject: 'Hello Ada',
         body: 'Welcome Event owner',
       });
-      const sentCampaign = first;
-      if (!sentCampaign) throw new Error('Campaign was not created');
+      const sentCampaign = first.campaign;
       await db
         .update(messageCampaigns)
         .set({ status: 'failed' })

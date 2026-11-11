@@ -21,6 +21,7 @@ import {
   type MembershipBootstrap,
   type ExternalIdentity,
   type MessageCampaignCreate,
+  type MessageCampaignSendResult,
   type MessageRecipientFilter,
   type MessageTemplate,
 } from '@racepilot/core';
@@ -62,7 +63,7 @@ export interface ApiDeps {
       idempotencyKey: string,
       input: MessageCampaignCreate,
       actor: string,
-    ): Promise<unknown | null>;
+    ): Promise<MessageCampaignSendResult>;
     retryFailed(
       context: RequestContext,
       campaignId: string,

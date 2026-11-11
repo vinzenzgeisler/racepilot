@@ -200,9 +200,21 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
       body.data,
       actor,
     );
-    return campaign
-      ? c.json(campaign, 202)
-      : c.json({ error: 'Not found' }, 404);
+    if (campaign.ok) return c.json(campaign.campaign, 202);
+    const status =
+      campaign.error.code === 'idempotency-conflict'
+        ? 409
+        : campaign.error.code === 'event-not-found'
+          ? 404
+          : 422;
+    return c.json(
+      {
+        error: campaign.error.message,
+        code: campaign.error.code,
+        ...(campaign.error.details ? { details: campaign.error.details } : {}),
+      },
+      status,
+    );
   });
   app.post('/admin/message-campaigns/:campaignId/retry', async (c) => {
     const member = await resolveMemberContext(c.req.raw);

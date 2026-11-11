@@ -219,3 +219,24 @@ export function fingerprintMessageRequest(value: unknown): string {
   };
   return JSON.stringify(canonicalize(value));
 }
+
+export type MessageCampaignSendErrorCode =
+  | 'invalid-template'
+  | 'too-many-attachments'
+  | 'attachment-unavailable'
+  | 'attachment-too-large'
+  | 'no-recipients'
+  | 'idempotency-conflict'
+  | 'event-not-found'
+  | 'storage-unavailable';
+
+export type MessageCampaignSendResult =
+  | { ok: true; campaign: unknown; replayed?: boolean }
+  | {
+      ok: false;
+      error: {
+        code: MessageCampaignSendErrorCode;
+        message: string;
+        details?: string[];
+      };
+    };

@@ -111,7 +111,7 @@ describe.skipIf(!databaseUrl)(
           capabilities: new Set(),
           correlationId: suffix,
         });
-        const campaign = await createMessageRepository(db).send(
+        const sendResult = await createMessageRepository(db).send(
           requestContext,
           eventId,
           `key-${suffix}`,
@@ -130,6 +130,8 @@ describe.skipIf(!databaseUrl)(
           },
           'worker-test',
         );
+        if (!sendResult.ok) throw new Error('Campaign send failed');
+        const campaign = sendResult.campaign;
         expect(campaign).toMatchObject({ total: 1, status: 'sending' });
         const [outbox] = await db
           .select()
@@ -163,11 +165,11 @@ describe.skipIf(!databaseUrl)(
         const [updatedCampaign] = await db
           .select()
           .from(messageCampaigns)
-          .where(eq(messageCampaigns.id, campaign!.id));
+          .where(eq(messageCampaigns.id, campaign.id));
         const [recipient] = await db
           .select()
           .from(messageCampaignRecipients)
-          .where(eq(messageCampaignRecipients.campaignId, campaign!.id));
+          .where(eq(messageCampaignRecipients.campaignId, campaign.id));
         expect(updatedCampaign?.status).toBe('sent');
         expect(recipient?.status).toBe('sent');
         const detailMessages = await createEntryDetailRepository(
