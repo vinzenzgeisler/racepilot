@@ -50,7 +50,8 @@ export * from './schema/modules.js';
 
 export { createModuleActivationRepository } from './module-activation.js';
 
-export { artifactJobs, createArtifactJobRepository } from './artifact-jobs.js';
+export { createArtifactJobRepository } from './artifact-jobs.js';
+export { artifactJobs, artifactJobAudit } from './artifact-job-schema.js';
 
 export type { Database } from './database.js';
 export { createPostgresRegistrationRateLimiter } from './registration-rate-limits.js';
@@ -73,3 +74,5 @@ export {
 } from './messaging-schema.js';
 export { createEntryDocumentsRepository } from './entry-documents.js';
 export * from './schema/documents.js';
+
+export { createOverviewRepository } from './event-overview.js';

@@ -148,22 +148,6 @@ export interface RegistrationGroupRepository {
   ): Promise<RegistrationGroup>;
 }
 
-export interface EntryExportRow {
-  readonly driver: string;
-  readonly vehicle: string;
-  readonly class: string;
-  readonly startNumber: string | null;
-  readonly status: EntryAcceptanceStatus;
-  readonly priceCents: number | null;
-}
-
-export interface EntryExportRepository {
-  listByEvent(
-    ctx: RequestContext,
-    eventId: string,
-  ): Promise<readonly EntryExportRow[]>;
-}
-
 export interface EntryRepository {
   create?(
     ctx: RequestContext,

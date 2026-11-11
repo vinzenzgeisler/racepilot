@@ -22,8 +22,10 @@ export function csvSafeCell(value: string | number | null | undefined): string {
 
 export function renderEntryCsv(
   rows: readonly (readonly (string | number | null | undefined)[])[],
+  delimiter: ',' | ';' = ';',
 ): string {
   return (
-    rows.map((row) => row.map(csvSafeCell).join(',')).join('\r\n') + '\r\n'
+    rows.map((row) => row.map(csvSafeCell).join(delimiter)).join('\r\n') +
+    '\r\n'
   );
 }

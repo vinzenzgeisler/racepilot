@@ -1,5 +1,7 @@
 import type { ApiRoutesContext } from './context.js';
 import { registerArtifactRoutes } from './artifact.js';
+import { registerEntryExportRoutes } from './entry-exports.js';
+import { registerOverviewRoutes } from './overview.js';
 import { z } from 'zod';
 import { registerEntryDocumentRoutes } from './documents.js';
 import {
@@ -16,6 +18,8 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
   const { app, deps, resolveMemberContext } = context;
   registerArtifactRoutes(context);
   registerEntryDocumentRoutes(context);
+  registerEntryExportRoutes(context);
+  registerOverviewRoutes(context);
 
   app.get('/admin/entries', async (c) => {
     const context = await resolveMemberContext(c.req.raw);
