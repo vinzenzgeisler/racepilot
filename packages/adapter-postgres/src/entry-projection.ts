@@ -186,23 +186,11 @@ export async function projectEntryRows(
   const invoiceMap = new Map(
     invoiceRows.map((row) => [row.registrationGroupId, row.status]),
   );
-  const typeMap = new Map(
-    documentTypes.map((type) => [
-      type.eventId,
-      [
-        ...documentTypes.filter(
-          (candidate) => candidate.eventId === type.eventId,
-        ),
-      ],
-    ]),
-  );
-  const latestDocumentMap = new Map<
-    string,
-    typeof entryDocuments.$inferSelect
-  >();
-  for (const document of documentRows) {
-    const key = `${document.entryId}:${document.typeKey}`;
-    if (!latestDocumentMap.has(key)) latestDocumentMap.set(key, document);
+  const typeMap = new Map<string, typeof documentTypes>();
+  for (const type of documentTypes) {
+    const types = typeMap.get(type.eventId) ?? [];
+    types.push(type);
+    typeMap.set(type.eventId, types);
   }
   const closeMap = new Map(
     eventRows.map((row) => [row.id, row.registrationClosesAt]),
