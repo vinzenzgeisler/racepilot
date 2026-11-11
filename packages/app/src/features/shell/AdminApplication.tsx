@@ -66,25 +66,25 @@ export function AuthenticatedAdmin() {
   );
 }
 
-const narrowQuery = '(width < 768px)';
-/** Below 768px the list is the start view; a preview would cover it. */
-function useNarrowViewport() {
+const previewQuery = '(width >= 1680px)';
+/** The A6 list preview exists only on wide screens; below that, rows open detail. */
+function usePreviewViewport() {
   return useSyncExternalStore(
     (notify) => {
       if (typeof window.matchMedia !== 'function') return () => undefined;
-      const query = window.matchMedia(narrowQuery);
+      const query = window.matchMedia(previewQuery);
       query.addEventListener('change', notify);
       return () => query.removeEventListener('change', notify);
     },
     () =>
       typeof window.matchMedia === 'function' &&
-      window.matchMedia(narrowQuery).matches,
+      window.matchMedia(previewQuery).matches,
     () => false,
   );
 }
 
 export function AdminApplication() {
-  const narrow = useNarrowViewport();
+  const previewViewport = usePreviewViewport();
   const [identity, setIdentity] = useState(getAdminIdentity());
   const [events, setEvents] = useState<
     Array<{
@@ -209,10 +209,16 @@ export function AdminApplication() {
           if (response.ok) {
             const updated = (await response.json()) as Entry;
             // The answer may only update the entry that is still open in the same event.
-            if (activeEvent.current === requestedEvent)
+            if (activeEvent.current === requestedEvent) {
               setSelectedEntry((current) =>
                 current?.id === requestedEntry ? updated : current,
               );
+              window.dispatchEvent(
+                new CustomEvent('nennbox:entry-accepted', {
+                  detail: { eventId: requestedEvent, entryId: requestedEntry },
+                }),
+              );
+            }
             window.dispatchEvent(new Event('nennbox:entries-changed'));
           }
         } finally {
@@ -245,7 +251,7 @@ export function AdminApplication() {
             onEventChange={changeEvent}
             onTotalChange={setEntryCount}
             detailOpen={detailOpen}
-            autoPreview={!narrow}
+            autoPreview={previewViewport}
             onOpenDetail={() => {
               setDetailOpen(true);
               setPreviewOpen(false);

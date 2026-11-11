@@ -14,6 +14,7 @@ import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
 import { useAdminEntriesKeyboard } from './useAdminEntriesKeyboard.js';
 import { useOpenEntryDetail } from './useOpenEntryDetail.js';
+import { usePreviewAdvance } from './usePreviewAdvance.js';
 import { useSharedSelection } from './useSharedSelection.js';
 type AdminEntriesProps = {
   detailOpen?: boolean;
@@ -156,11 +157,7 @@ function AdminEntriesView({
     );
     void openEntry((firstPending ?? items[0]!).id);
   }, [autoPreview, eventId, items, workflow, openEntry]);
-  useEffect(() => {
-    const refresh = () => setRefreshRevision((value) => value + 1);
-    window.addEventListener('nennbox:entries-changed', refresh);
-    return () => window.removeEventListener('nennbox:entries-changed', refresh);
-  }, []);
+  usePreviewAdvance({ eventId, items, workflow, openEntry, setRefreshRevision });
   useAdminEntriesKeyboard({
     items,
     selected,

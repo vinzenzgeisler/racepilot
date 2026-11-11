@@ -8,7 +8,9 @@ const eventA = '10000000-0000-4000-8000-000000000001';
 const eventB = '10000000-0000-4000-8000-000000000002';
 const classA = '20000000-0000-4000-8000-000000000001';
 const entryA = '30000000-0000-4000-8000-000000000001';
+const entryB = '30000000-0000-4000-8000-000000000002';
 const invoiceA = '90000000-0000-4000-8000-000000000001';
+const invoiceB = '90000000-0000-4000-8000-000000000002';
 const orgId = '40000000-0000-4000-8000-000000000001';
 const events = [
   { id: eventA, name: 'Bergpreis', slug: 'bergpreis' },
@@ -72,7 +74,17 @@ const alex = {
     hints: [],
   },
 };
+const nextAlex = {
+  ...alex,
+  id: entryB,
+  adminDetails: {
+    ...alex.adminDetails,
+    driver: { ...alex.adminDetails.driver, name: 'Sam Driver' },
+    invoice: { ...alex.adminDetails.invoice, id: invoiceB },
+  },
+};
 
+let listedEntries: unknown[] = [alex];
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot> | undefined;
 let narrow = false;
@@ -133,7 +145,7 @@ async function mount(slow: Array<'driver' | 'payment' | 'status'> = []) {
       return Response.json([{ id: classA, name: 'Touring A' }]);
     if (url.startsWith('/admin/entries?'))
       return url.includes(`eventId=${eventA}`)
-        ? listFor(eventA, [alex])
+        ? listFor(eventA, listedEntries)
         : listFor(eventB, []);
     if (url === `/admin/entries/${entryA}/driver` && method === 'PATCH')
       return slow.includes('driver') ? deferred('driver') : Response.json(alex);
@@ -146,6 +158,7 @@ async function mount(slow: Array<'driver' | 'payment' | 'status'> = []) {
         ? deferred('status')
         : Response.json(acceptedAlex());
     if (url === `/admin/entries/${entryA}`) return Response.json(alex);
+    if (url === `/admin/entries/${entryB}`) return Response.json(nextAlex);
     if (url.endsWith('/messages')) return Response.json({ items: [] });
     return new Response('{}', { status: 404 });
   });
@@ -200,8 +213,9 @@ beforeEach(() => {
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   narrow = false;
+  listedEntries = [alex];
   window.matchMedia = ((query: string) => ({
-    matches: narrow && query.includes('768'),
+    matches: !narrow && query.includes('1680'),
     media: query,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
@@ -329,6 +343,19 @@ describe('AdminApplication event switch and detail access', () => {
     const detail = container.querySelector('.nb-detail')!;
     expect(detail.textContent).toContain('Zugelassen');
     expect(detail.textContent).not.toContain('Zulassen');
+  });
+
+  it('opens the next open entry after accepting the preview entry', async () => {
+    listedEntries = [alex, nextAlex];
+    await mount();
+    expect(container.querySelector('.nb-preview-panel h2')?.textContent).toBe(
+      'Alex Driver',
+    );
+    await click(byText('Zulassen'));
+    await flush();
+    expect(container.querySelector('.nb-preview-panel h2')?.textContent).toBe(
+      'Sam Driver',
+    );
   });
 
   it('ignores a late preview action after switching events', async () => {
