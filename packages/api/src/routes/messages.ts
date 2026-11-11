@@ -162,9 +162,17 @@ export function registerMessageRoutes(context: ApiRoutesContext): void {
       action.data,
       actor,
     );
-    return campaign
-      ? c.json(campaign, 202)
-      : c.json({ error: 'No matching recipients or unavailable action' }, 404);
+    if (campaign.ok) return c.json(campaign.campaign, 202);
+    const status =
+      campaign.error.code === 'verification-unavailable'
+        ? 503
+        : campaign.error.code === 'event-not-found'
+          ? 404
+          : 422;
+    return c.json(
+      { error: campaign.error.message, code: campaign.error.code },
+      status,
+    );
   });
 
   app.post('/admin/events/:eventId/messages/campaigns', async (c) => {

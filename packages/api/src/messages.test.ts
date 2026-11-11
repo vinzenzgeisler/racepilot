@@ -46,7 +46,10 @@ function appFor(permissions = context.permissions) {
     listTemplates: async () => [],
     saveTemplate: async () => null,
     previewTemplate: async () => null,
-    quickAction: async () => null,
+    quickAction: async () => ({
+      ok: false,
+      error: { code: 'no-recipients', message: 'No matching recipients' },
+    }),
   };
   const objectStorage: ObjectStorageProvider = {
     put: async ({ organizationId: tenantId, body, contentType }) => ({

@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import type {
   MessageCampaignCreate,
   MessageCampaignSendPorts,
@@ -9,8 +9,10 @@ import type {
 } from '@racepilot/core';
 import { sendMessageCampaign } from '@racepilot/core';
 import { MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/contracts';
-import type { Database, TransactionDatabase } from './database.js';
+import type { Database } from './database.js';
 import { organizations } from './schema/organization.js';
+import { groupEmailVerifications } from './schema/public-registration.js';
+import { createRegistrationVerificationToken } from './registration-verification-token.js';
 import { enqueueMailOutbox } from './mail-outbox.js';
 import {
   messageCampaignAudits,
@@ -31,6 +33,7 @@ type CampaignResponse = ReturnType<typeof messageCampaignResponse>;
 export function createMessageSender(
   db: Database,
   storage?: ObjectStorageProvider,
+  canonicalBaseUrl?: string,
 ) {
   return async (
     ctx: RequestContext,
@@ -38,6 +41,9 @@ export function createMessageSender(
     idempotencyKey: string,
     input: MessageCampaignCreate,
     actor: string,
+    mode: { kind: 'campaign' | 'verification'; auditAction?: string } = {
+      kind: 'campaign',
+    },
   ): Promise<MessageCampaignSendResult<CampaignResponse>> => {
     const ports: MessageCampaignSendPorts<
       Campaign,
@@ -143,12 +149,12 @@ export function createMessageSender(
                 .returning();
               return campaign ?? null;
             },
-            recordAudit: async (campaign, auditActor) => {
+            recordAudit: async (campaign, auditActor, action) => {
               await tx.insert(messageCampaignAudits).values({
                 organizationId: context.organizationId,
                 campaignId: campaign.id,
                 actor: auditActor,
-                action: 'send',
+                action,
               });
             },
             getLocale: async () => {
@@ -158,6 +164,73 @@ export function createMessageSender(
                 .where(eq(organizations.id, context.organizationId))
                 .limit(1);
               return organization?.locale ?? 'de';
+            },
+            enqueueVerificationRecipient: async (value) => {
+              if (!canonicalBaseUrl || !value.recipient.registrationGroupId)
+                throw new Error('Registration verification is unavailable');
+              const now = new Date();
+              await tx
+                .update(groupEmailVerifications)
+                .set({ consumedAt: now })
+                .where(
+                  and(
+                    eq(
+                      groupEmailVerifications.organizationId,
+                      context.organizationId,
+                    ),
+                    eq(groupEmailVerifications.eventId, value.eventId),
+                    eq(
+                      groupEmailVerifications.registrationGroupId,
+                      value.recipient.registrationGroupId,
+                    ),
+                    isNull(groupEmailVerifications.consumedAt),
+                  ),
+                );
+              const token = createRegistrationVerificationToken(now);
+              await tx.insert(groupEmailVerifications).values({
+                organizationId: context.organizationId,
+                eventId: value.eventId,
+                registrationGroupId: value.recipient.registrationGroupId,
+                tokenHash: token.tokenHash,
+                expiresAt: token.expiresAt,
+              });
+              const verificationUrl = new URL(
+                `/registration/verify?token=${encodeURIComponent(token.token)}`,
+                canonicalBaseUrl,
+              ).href;
+              const outboxId = await enqueueMailOutbox(
+                db,
+                context.organizationId,
+                {
+                  eventId: value.eventId,
+                  registrationGroupId: value.recipient.registrationGroupId,
+                  templateKey: 'verification',
+                  templateVersion: 1,
+                  locale: messageLocale(value.locale),
+                  recipient: value.recipient.email,
+                  idempotencyKey: `message-campaign:${value.campaign.id}:${value.recipient.registrationGroupId}`,
+                  variables: {
+                    recipientName: value.recipient.fullName,
+                    verificationUrl,
+                  },
+                  correlationId: value.correlationId,
+                },
+                tx,
+              );
+              const [row] = await tx
+                .insert(messageCampaignRecipients)
+                .values({
+                  organizationId: context.organizationId,
+                  campaignId: value.campaign.id,
+                  eventId: value.eventId,
+                  entryId: value.recipient.entryId,
+                  outboxId,
+                  email: value.recipient.email,
+                  subject: value.campaign.subject,
+                  status: 'planned',
+                })
+                .returning();
+              return row!;
             },
             enqueueRecipient: async (value) => {
               const outboxId = await enqueueMailOutbox(
@@ -234,6 +307,7 @@ export function createMessageSender(
       input,
       actor,
       ports,
+      mode,
     );
   };
 }

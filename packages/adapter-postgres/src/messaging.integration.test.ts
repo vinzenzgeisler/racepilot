@@ -234,7 +234,10 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         'resend-verification',
         'integration-test',
       );
-      expect(verification).toMatchObject({ status: 'sending', total: 1 });
+      expect(verification).toMatchObject({
+        ok: true,
+        campaign: { status: 'sending', total: 1 },
+      });
       await db.insert(invoices).values({
         organizationId: owner.org.id,
         eventId: owner.event.id,
@@ -249,7 +252,10 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
         'remind-open-payments',
         'integration-test',
       );
-      expect(paymentReminder).toMatchObject({ status: 'sending', total: 1 });
+      expect(paymentReminder).toMatchObject({
+        ok: true,
+        campaign: { status: 'sending', total: 1 },
+      });
       const allCampaigns = await db
         .select()
         .from(messageCampaigns)

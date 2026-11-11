@@ -230,7 +230,8 @@ export type MessageCampaignSendErrorCode =
   | 'no-recipients'
   | 'idempotency-conflict'
   | 'event-not-found'
-  | 'storage-unavailable';
+  | 'storage-unavailable'
+  | 'verification-unavailable';
 
 export type MessageCampaignSendResult<Campaign = unknown> =
   | { ok: true; campaign: Campaign; replayed?: boolean }
@@ -277,7 +278,14 @@ export interface MessageCampaignTransaction<
     text: string;
     actor: string;
   }): Promise<Campaign | null>;
-  recordAudit(campaign: Campaign, actor: string): Promise<void>;
+  recordAudit(campaign: Campaign, actor: string, action: string): Promise<void>;
+  enqueueVerificationRecipient?(input: {
+    campaign: Campaign;
+    eventId: string;
+    recipient: MessageCampaignRecipient;
+    locale: string;
+    correlationId: string;
+  }): Promise<CampaignRecipient>;
   getLocale(): Promise<string>;
   enqueueRecipient(input: {
     campaign: Campaign;
@@ -326,6 +334,9 @@ export async function sendMessageCampaign<
   input: MessageCampaignCreate,
   actor: string,
   ports: MessageCampaignSendPorts<Campaign, CampaignRecipient, Response>,
+  mode: { kind: 'campaign' | 'verification'; auditAction?: string } = {
+    kind: 'campaign',
+  },
 ): Promise<MessageCampaignSendResult<Response>> {
   const templateErrors = validateMessageTemplate(input.subject, input.text);
   if (templateErrors.length)
@@ -394,28 +405,40 @@ export async function sendMessageCampaign<
           message: 'Idempotency key was concurrently used',
         },
       };
-    await tx.recordAudit(campaign, actor);
+    await tx.recordAudit(campaign, actor, mode.auditAction ?? 'send');
     const locale = await tx.getLocale();
     const attachments = input.attachments.map((item) => ({
       objectId: item.objectId,
       filename: item.filename,
     }));
     for (const recipient of resolved) {
-      const rendered = renderMessageTemplate(
-        input.subject,
-        input.text,
-        recipient,
-      );
-      await tx.enqueueRecipient({
-        campaign,
-        eventId,
-        recipient,
-        subject: rendered.subject,
-        text: rendered.text,
-        locale,
-        attachmentRefs: attachments,
-        correlationId: context.correlationId,
-      });
+      if (mode.kind === 'verification') {
+        if (!tx.enqueueVerificationRecipient)
+          throw new Error('Verification delivery is unavailable');
+        await tx.enqueueVerificationRecipient({
+          campaign,
+          eventId,
+          recipient,
+          locale,
+          correlationId: context.correlationId,
+        });
+      } else {
+        const rendered = renderMessageTemplate(
+          input.subject,
+          input.text,
+          recipient,
+        );
+        await tx.enqueueRecipient({
+          campaign,
+          eventId,
+          recipient,
+          subject: rendered.subject,
+          text: rendered.text,
+          locale,
+          attachmentRefs: attachments,
+          correlationId: context.correlationId,
+        });
+      }
     }
     await tx.markSending(campaign);
     const recipients = await tx.listRecipients(campaign);

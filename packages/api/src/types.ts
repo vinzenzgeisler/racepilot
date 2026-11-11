@@ -89,7 +89,7 @@ export interface ApiDeps {
       eventId: string,
       action: 'resend-verification' | 'remind-open-payments',
       actor: string,
-    ): Promise<unknown | null>;
+    ): Promise<MessageCampaignSendResult>;
   };
   entryDetails?: EntryDetailRepository;
   entryExports?: EntryExportRepository;
