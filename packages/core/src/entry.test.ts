@@ -290,7 +290,7 @@ describe('entry domain rules', () => {
         'acceptance',
         'accepted',
         'member',
-        '',
+        'reviewed',
         { entries, workflows: workflows as never },
       ),
     ).rejects.toThrow(/Forbidden/);
@@ -304,7 +304,7 @@ describe('entry domain rules', () => {
         'acceptance',
         'accepted',
         'member',
-        '',
+        'reviewed',
         { entries, workflows: workflows as never },
       ),
     ).resolves.toBe(entry);
@@ -323,7 +323,7 @@ describe('entry domain rules', () => {
         'acceptance',
         'accepted',
         'member',
-        '',
+        'reviewed',
         { entries, workflows: workflows as never },
       ),
     ).rejects.toThrow(/Forbidden/);
@@ -332,6 +332,26 @@ describe('entry domain rules', () => {
     expect(normalizeEmail('  JANE@Example.COM ')).toBe('jane@example.com');
     expect(normalizeRequestedStartNumber('  a-01 ')).toBe('A-01');
     expect(normalizeRequestedStartNumber(' ')).toBeNull();
+  });
+  it('requires a reason even when the configured workflow does not', async () => {
+    await expect(
+      transitionEntry(ctx, 'e', 'acceptance', 'rejected', 'admin', '', {
+        entries: {
+          getById: async () => entry,
+          transition: async () => entry,
+          softDelete: async () => null,
+        },
+        workflows: {
+          getPinnedForEntry: async () => ({
+            id: 'revision-1',
+            organizationId: ctx.organizationId,
+            eventId: 'ev',
+            version: 1,
+            workflow: defaultEntryWorkflow,
+          }),
+        } as never,
+      }),
+    ).rejects.toThrow('Transition reason is required');
   });
   it('requires actor and reason before an auditable transition', async () => {
     const entries = {

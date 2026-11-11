@@ -50,6 +50,7 @@ export async function transitionEntry(
   // grant tenant-wide write access to entries.
   if (!ctx.permissions.has('entry:write')) throw new Error('Forbidden');
   if (!actor.trim()) throw new Error('Transition actor is required');
+  if (!reason.trim()) throw new Error('Transition reason is required');
   const current = await deps.entries.getById(ctx, id);
   if (!current) return null;
   const from =
@@ -95,7 +96,6 @@ export async function transitionEntry(
     }
   } else {
     assertEntryTransition(kind, from, to);
-    if (!reason.trim()) throw new Error('Transition reason is required');
   }
   return deps.entries.transition(
     ctx,
