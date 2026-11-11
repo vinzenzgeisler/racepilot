@@ -9,6 +9,8 @@ import {
 } from '@racepilot/ui';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { Outcome, WorkflowView } from './AdminEntriesModel.js';
+import type { AdminActionKind } from './detail/EntryAdminActionDialog.js';
+import { EntryAdminActionDialog } from './detail/EntryAdminActionDialog.js';
 import { statusMeaning } from './EntryStatusBadge.js';
 import { EntryActionRail, type StatusStep } from './detail/EntryActionRail.js';
 import {
@@ -38,7 +40,8 @@ type Pending =
   | { kind: 'status'; step: StatusStep }
   | { kind: 'verify' }
   | { kind: 'dimension'; action: DimensionAction }
-  | { kind: 'payment' };
+  | { kind: 'payment' }
+  | { kind: 'admin'; action: AdminActionKind };
 
 const HINT_NAMES = {
   double_starter: 'Doppelstarter',
@@ -48,6 +51,7 @@ const HINT_NAMES = {
 
 export function AdminEntryDetail({
   selected,
+  classes,
   workflow,
   busy,
   error,
@@ -56,6 +60,7 @@ export function AdminEntryDetail({
   onUpdated,
 }: {
   selected: Entry;
+  classes: Array<{ id: string; name: string; closed?: boolean }>;
   workflow: WorkflowView | null;
   busy: boolean;
   error: string;
@@ -65,7 +70,7 @@ export function AdminEntryDetail({
     reason: string,
   ) => Promise<Outcome>;
   onBack: () => void;
-  onUpdated: (entry: Entry) => void;
+  onUpdated: (entry: Entry | null, refresh?: boolean) => void;
 }) {
   const api = useEntryDetailApi(selected, onUpdated);
   const messages = useEntryMessages(selected);
@@ -143,6 +148,16 @@ export function AdminEntryDetail({
     if (result?.ok) close();
     else if (result) setDialogError(result.message);
   }
+  async function confirmAdminAction(
+    action: Parameters<typeof api.performAdminAction>[0],
+  ) {
+    const result = await api.performAdminAction(action);
+    if (!result.ok) setDialogError(result.message);
+    else if (action.kind === 'delete') {
+      onUpdated(null);
+      onBack();
+    } else close();
+  }
   const dialog =
     pending?.kind === 'status'
       ? {
@@ -192,6 +207,7 @@ export function AdminEntryDetail({
             onVerify={() => setPending({ kind: 'verify' })}
             onPayment={() => setPending({ kind: 'payment' })}
             onDimension={(action) => setPending({ kind: 'dimension', action })}
+            onAdminAction={(action) => setPending({ kind: 'admin', action })}
           />
         }
       >
@@ -237,6 +253,17 @@ export function AdminEntryDetail({
           busy={busy || api.busy}
           error={dialogError}
           onConfirm={(reason) => void confirm(reason)}
+          onClose={close}
+        />
+      )}
+      {pending?.kind === 'admin' && (
+        <EntryAdminActionDialog
+          kind={pending.action}
+          entry={selected}
+          classes={classes}
+          busy={api.busy}
+          error={dialogError}
+          onConfirm={(action) => void confirmAdminAction(action)}
           onClose={close}
         />
       )}

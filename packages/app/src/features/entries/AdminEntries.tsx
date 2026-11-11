@@ -8,6 +8,7 @@ import {
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { SelectField } from '@racepilot/ui';
 import {
+  applyEntrySort,
   initialQuery,
   request,
   type EntryQuery,
@@ -21,6 +22,7 @@ import { useAdminEntriesData } from './useAdminEntriesData.js';
 import { useAdminEntriesKeyboard } from './useAdminEntriesKeyboard.js';
 import { usePreviewAdvance } from './usePreviewAdvance.js';
 import { useOpenEntryDetail } from './useOpenEntryDetail.js';
+import { useEntryChangesRefresh } from './useEntryChangesRefresh.js';
 import { useSharedSelection } from './useSharedSelection.js';
 type AdminEntriesProps = {
   detailOpen?: boolean;
@@ -40,11 +42,8 @@ type AdminEntriesProps = {
   onEventChange?: (id: string) => void;
 };
 
-/**
- * Everything the view holds belongs to one event: selection, filters, page, open detail,
- * requests in flight. A different shared event therefore mounts a fresh view, which aborts
- * the old requests and cannot show or update the previous event's entries.
- */
+/** Event changes reset view state and cancel requests scoped to the previous event. */
+
 export function AdminEntries(props: AdminEntriesProps = {}) {
   return <AdminEntriesView key={props.eventId ?? 'standalone'} {...props} />;
 }
@@ -182,6 +181,7 @@ function AdminEntriesView({
     previewAdvance,
     onPreviewAdvanceHandled,
   });
+  useEntryChangesRefresh(setRefreshRevision);
   useAdminEntriesKeyboard({
     items,
     selected,
@@ -220,18 +220,14 @@ function AdminEntriesView({
   }
 
   function changeSort(nextSort: string, nextDirection = draft.direction) {
-    setDraft((value) => ({
-      ...value,
-      sort: nextSort,
-      direction: nextDirection,
-    }));
-    setPage(1);
-    clearSelection();
-    setApplied((value) => ({
-      ...value,
-      sort: nextSort,
-      direction: nextDirection,
-    }));
+    applyEntrySort(
+      nextSort,
+      nextDirection,
+      setDraft,
+      setPage,
+      clearSelection,
+      setApplied,
+    );
   }
 
   if (events.length === 0 && apiState !== 'ready')
@@ -292,14 +288,15 @@ function AdminEntriesView({
         <AdminEntryDetail
           key={selected.id}
           selected={selected}
+          classes={classes}
           workflow={workflow}
           busy={busy}
           error={actionError}
           transition={transition}
           onBack={closeDetail}
-          onUpdated={(entry) => {
+          onUpdated={(entry, refresh = true) => {
             setSelected(entry);
-            setRefreshRevision((value) => value + 1);
+            if (refresh) setRefreshRevision((value) => value + 1);
           }}
         />
       )}

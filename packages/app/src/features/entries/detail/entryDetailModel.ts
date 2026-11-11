@@ -226,6 +226,36 @@ function describe(
   status: (key: string) => string,
 ): Pick<TimelineItem, 'title' | 'tone'> & { detail?: string } {
   const detail = event.detail || undefined;
+  if (event.label === 'internal_note')
+    return {
+      title: 'Interne Notiz',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'driver_note')
+    return {
+      title: 'Fahrernotiz',
+      tone: 'accent',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'class_changed')
+    return {
+      title: 'Klasse geändert',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'amount_adjusted')
+    return {
+      title: 'Betrag angepasst',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'deleted')
+    return {
+      title: 'Nennung gelöscht',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
   if (event.kind === 'payment')
     return {
       title:

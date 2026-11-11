@@ -94,7 +94,7 @@ test('Community registration and admin lifecycle with API setup', async ({
     },
     201,
   );
-  await call(
+  const betaClass = await call(
     `/admin/events/${event.id}/classes`,
     'POST',
     {
@@ -107,12 +107,17 @@ test('Community registration and admin lifecycle with API setup', async ({
     },
     201,
   );
-  await call(`/admin/events/${event.id}/pricing/${cls.id}`, 'PUT', {
-    baseCents: 1000,
-    additionalEntryAdjustmentCents: 0,
-    earlyBirdDeadline: null,
-    earlyBirdDiscountCents: 0,
-  });
+  for (const [classId, baseCents] of [
+    [cls.id, 1000],
+    [betaClass.id, 1500],
+  ]) {
+    await call(`/admin/events/${event.id}/pricing/${classId}`, 'PUT', {
+      baseCents,
+      additionalEntryAdjustmentCents: 0,
+      earlyBirdDeadline: null,
+      earlyBirdDiscountCents: 0,
+    });
+  }
   await call(`/admin/events/${event.id}/registration-form-config`, 'PUT', {
     welcomeText: 'Alpha E2E registration',
     // The event asks for a phone number, hides the city and requires the engine size.
@@ -409,7 +414,7 @@ test('admin records payment from entry detail UI', async ({
     .getByRole('button', { name: 'Zahlung erfassen' })
     .first()
     .click();
-  const dialog = page.getByRole('dialog');
+  let dialog = page.getByRole('dialog');
   await expect(dialog.getByLabel(/Betrag/)).toHaveValue('10,00');
   await dialog
     .getByLabel('Begründung (für das Protokoll erforderlich)')
@@ -431,6 +436,60 @@ test('admin records payment from entry detail UI', async ({
     { headers: { authorization: ['Bearer', token].join(' ') } },
   );
   expect(await detail.text()).toMatch(/"paidCents":1000/);
+
+  await entryDetail.getByRole('button', { name: 'Klasse ändern' }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Neue Klasse').selectOption({ label: 'Beta Class' });
+  await dialog
+    .getByLabel('Begründung (für das Protokoll erforderlich)')
+    .fill('Alpha E2E class change');
+  await dialog.getByRole('button', { name: 'Klasse ändern' }).click();
+  await expect(entryDetail).toContainText('Klasse Beta Class');
+  await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
+    'Klasse geändert',
+  );
+
+  await entryDetail.getByRole('button', { name: 'Betrag anpassen' }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByLabel(/Neuer Betrag/).fill('12,00');
+  await dialog
+    .getByLabel('Begründung (für das Protokoll erforderlich)')
+    .fill('Alpha E2E amount correction');
+  await dialog.getByRole('button', { name: 'Betrag anpassen' }).click();
+  await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
+    'Betrag angepasst',
+  );
+
+  await entryDetail.getByRole('button', { name: 'Notiz hinzufügen' }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Sichtbarkeit').selectOption('internal');
+  await dialog.getByLabel('Notiz').fill('Alpha internal note');
+  await dialog.getByRole('button', { name: 'Notiz speichern' }).click();
+  await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
+    'Alpha internal note',
+  );
+  await entryDetail.getByRole('button', { name: 'Notiz hinzufügen' }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Sichtbarkeit').selectOption('driver');
+  await dialog.getByLabel('Notiz').fill('Alpha driver note');
+  await dialog.getByRole('button', { name: 'Notiz speichern' }).click();
+  await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
+    'Fahrernotiz',
+  );
+  await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
+    'Alpha driver note',
+  );
+
+  await entryDetail.getByRole('button', { name: 'Nennung löschen …' }).click();
+  dialog = page.getByRole('dialog');
+  await dialog
+    .getByLabel('Begründung (für das Protokoll erforderlich)')
+    .fill('Alpha E2E delete');
+  await dialog.getByRole('button', { name: 'Nennung löschen' }).click();
+  await expect(entryDetail).toHaveCount(0);
+  await expect(
+    page.getByRole('row').filter({ hasText: 'Ada Lovelace' }),
+  ).toHaveCount(0);
 });
 test.fixme('admin starts CSV export from Nennungen screen', async () => {
   /* API/worker exist; export control absent. */

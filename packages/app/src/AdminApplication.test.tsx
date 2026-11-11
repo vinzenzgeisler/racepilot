@@ -12,9 +12,23 @@ const entryB = '30000000-0000-4000-8000-000000000002';
 const invoiceA = '90000000-0000-4000-8000-000000000001';
 const invoiceB = '90000000-0000-4000-8000-000000000002';
 const orgId = '40000000-0000-4000-8000-000000000001';
+const event = (id: string, name: string, slug: string) => ({
+  id,
+  organizationId: orgId,
+  name,
+  slug,
+  startsOn: '2026-01-01',
+  endsOn: '2026-01-02',
+  status: 'open',
+  registrationOpensAt: null,
+  registrationClosesAt: null,
+  openedAt: null,
+  closedAt: null,
+  archivedAt: null,
+});
 const events = [
-  { id: eventA, name: 'Bergpreis', slug: 'bergpreis' },
-  { id: eventB, name: 'Testveranstaltung', slug: 'test' },
+  event(eventA, 'Bergpreis', 'bergpreis'),
+  event(eventB, 'Testveranstaltung', 'test'),
 ];
 const alex = {
   id: entryA,
