@@ -19,6 +19,7 @@ export function Field({
       <input
         {...props}
         id={id}
+        aria-label={props['aria-label'] ?? label}
         aria-invalid={!!error || undefined}
         aria-describedby={
           error ? `${id}-error` : hint ? `${id}-hint` : undefined
