@@ -60,7 +60,7 @@ export function RegistrationContactFields({
     <FormGrid variant="registration">
       <FormWide>
         <FormSection title={t.address} variant="registration">
-          <FormGrid variant="registration">
+          <FormGrid variant="registration-address">
             {text('street', 'street')}
             {text('postalCode', 'postalCode')}
             {text('city', 'city')}
@@ -116,28 +116,44 @@ export function RegistrationContactFields({
           </FormSection>
         </FormWide>
       )}
-      {state('publicationPreference') !== 'hidden' && (
-        <FormWide>
-          <FormSection title={t.aboutYou} variant="registration">
-            <FormGrid variant="registration">
-              <SelectField
-                label={t.publicationPreference}
-                required={state('publicationPreference') === 'required'}
-                value={values.publicationPreference}
-                onChange={(event) =>
-                  set('publicationPreference')(event.target.value)
-                }
-              >
-                <option value="">{t.publicationNotGiven}</option>
-                <option value="name_visible">{t.publicationNameVisible}</option>
-                <option value="initials">{t.publicationInitials}</option>
-                <option value="hidden">{t.publicationHidden}</option>
-              </SelectField>
-            </FormGrid>
-          </FormSection>
-        </FormWide>
-      )}
     </FormGrid>
+  );
+}
+
+export function RegistrationPublicationField({
+  config,
+  values,
+  onChange,
+  t,
+}: {
+  config: RegistrationFormConfig;
+  values: DriverContact;
+  onChange: (patch: Partial<DriverContact>) => void;
+  t: Words;
+}) {
+  const state = fieldState(config, 'publicationPreference');
+  if (state === 'hidden') return null;
+  return (
+    <SelectField
+      label={t.publicationPreference}
+      required={state === 'required'}
+      value={values.publicationPreference}
+      onChange={(event) => {
+        const value = event.target.value;
+        if (
+          value === '' ||
+          value === 'name_visible' ||
+          value === 'initials' ||
+          value === 'hidden'
+        )
+          onChange({ publicationPreference: value });
+      }}
+    >
+      <option value="">{t.publicationNotGiven}</option>
+      <option value="name_visible">{t.publicationNameVisible}</option>
+      <option value="initials">{t.publicationInitials}</option>
+      <option value="hidden">{t.publicationHidden}</option>
+    </SelectField>
   );
 }
 

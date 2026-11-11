@@ -48,7 +48,7 @@ export function useRegistrationState({
     publicationPreference: initialDraft?.publicationPreference ?? '',
   });
   const [vehicles, setVehicles] = useState<VehicleEntry[]>(
-    initialDraft?.vehicles ?? [emptyVehicle()],
+    initialDraft?.vehicles.length ? initialDraft.vehicles : [emptyVehicle()],
   );
   const [accepted, setAccepted] = useState<Record<string, boolean>>(
     initialDraft?.accepted ?? {},

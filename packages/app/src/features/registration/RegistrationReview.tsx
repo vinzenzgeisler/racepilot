@@ -20,67 +20,55 @@ export function RegistrationReview({
   return (
     <div className="registration-review">
       <section className="registration-review-card">
-        <header>
-          <h3>{de ? 'Fahrer' : 'Driver'}</h3>
-          <Button type="button" variant="text" onClick={onEditDriver}>
-            {de ? 'Ändern' : 'Edit'}
-          </Button>
-        </header>
-        <p>{driverName}</p>
-        <p>{values.email || '—'}</p>
-        {values.dateOfBirth && <p>{values.dateOfBirth}</p>}
-        {values.phone && <p>{values.phone}</p>}
+        <h3>{de ? 'Fahrer' : 'Driver'}</h3>
+        <strong>{driverName}</strong>
+        <p className="registration-review-detail">
+          {[values.email, values.dateOfBirth, values.phone]
+            .filter(Boolean)
+            .join(' · ') || '—'}
+        </p>
         {guardianRequired && (
-          <p>
+          <p className="registration-review-detail">
             {values.guardianName || '—'} · {values.guardianEmail || '—'}
           </p>
         )}
+        {values.emergencyContactName && (
+          <p className="registration-review-detail">
+            {de ? 'Notfallkontakt' : 'Emergency contact'} ·{' '}
+            {values.emergencyContactName}
+            {values.emergencyContactPhone &&
+              ` · ${values.emergencyContactPhone}`}
+          </p>
+        )}
+        <Button type="button" variant="text" onClick={onEditDriver}>
+          {de ? 'Ändern' : 'Edit'}
+        </Button>
       </section>
       <section className="registration-review-card">
-        <header>
-          <h3>{de ? 'Startmeldungen' : 'Entries'}</h3>
-          <Button type="button" variant="text" onClick={onEditEntries}>
-            {de ? 'Ändern' : 'Edit'}
-          </Button>
-        </header>
+        <h3>
+          {de ? 'Startmeldungen' : 'Entries'} · {vehicles.length}
+        </h3>
         {vehicles.map((vehicle, index) => {
           const selectedClass = payload.classes.find(
             (item) => item.id === vehicle.classId,
           );
           return (
-            <div
+            <p
               className="registration-review-entry"
               key={`${vehicle.classId}:${index}`}
             >
-              <p>
-                <strong>
-                  {selectedClass?.name ??
-                    (de ? 'Klasse nicht gewählt' : 'Class not selected')}
-                </strong>
-              </p>
-              <p>
-                {[vehicle.make, vehicle.model, vehicle.year]
-                  .filter(Boolean)
-                  .join(' ') || '—'}
-              </p>
-              {vehicle.registration && (
-                <p>
-                  {de ? 'Kennzeichen' : 'Registration'}: {vehicle.registration}
-                </p>
-              )}
-              {vehicle.requestedStartNumber && (
-                <p>
-                  {de ? 'Wunsch-Startnummer' : 'Requested number'}:{' '}
-                  {vehicle.requestedStartNumber}
-                </p>
-              )}
-            </div>
+              <strong>{vehicle.requestedStartNumber || index + 1}</strong> ·{' '}
+              {[vehicle.make, vehicle.model, vehicle.year]
+                .filter(Boolean)
+                .join(' ') || '—'}{' '}
+              · {selectedClass?.code ?? (de ? 'Klasse offen' : 'Class pending')}
+            </p>
           );
         })}
-        <p>
-          {de ? 'Voraussichtliches Startgeld' : 'Estimated entry fee'}:{' '}
-          {model.estimateMessage}
-        </p>
+        <p className="registration-review-detail">{model.estimateMessage}</p>
+        <Button type="button" variant="text" onClick={onEditEntries}>
+          {de ? 'Ändern' : 'Edit'}
+        </Button>
       </section>
       {payload.registrationFormConfig.organizerNotice && (
         <section className="registration-review-card registration-review-wide">

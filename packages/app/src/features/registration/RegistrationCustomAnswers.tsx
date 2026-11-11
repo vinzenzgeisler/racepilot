@@ -9,7 +9,6 @@ function textAnswer(answer: Answer | undefined): string {
 }
 
 export function RegistrationCustomAnswers({
-  isDriver,
   fields,
   locale,
   customAnswers,
@@ -17,7 +16,6 @@ export function RegistrationCustomAnswers({
   uploadedNames,
   uploadCustomField,
 }: {
-  isDriver: boolean;
   fields: RegistrationCustomField[];
   locale: 'de' | 'en';
   customAnswers: Record<string, Answer>;
@@ -25,14 +23,8 @@ export function RegistrationCustomAnswers({
   uploadedNames: Record<string, string>;
   uploadCustomField: (fieldKey: string, file: File) => Promise<void>;
 }) {
-  if (!isDriver) return null;
   return (
     <>
-      {fields.some((field) => field.key === 'biography') && (
-        <h3 className="registration-custom-section-title">
-          {locale === 'de' ? 'Über dich' : 'About you'}
-        </h3>
-      )}
       {fields.map((field) => (
         <div
           className={

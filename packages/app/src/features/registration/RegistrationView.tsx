@@ -7,7 +7,7 @@ import {
   RegistrationSummary,
 } from './RegistrationChrome.js';
 import { RegistrationVehicleFields } from './RegistrationVehicleFields.js';
-import { RegistrationCustomAnswers } from './RegistrationCustomAnswers.js';
+import { RegistrationAboutFields } from './RegistrationAboutFields.js';
 import {
   RegistrationContactFields,
   RegistrationPhoneField,
@@ -19,6 +19,14 @@ import {
   driverFieldValue,
   updateDriverField,
 } from './RegistrationDriverField.js';
+
+const DRIVER_FIELD_RANK: Record<string, number> = {
+  firstName: 0,
+  lastName: 1,
+  dateOfBirth: 2,
+  email: 3,
+};
+
 export function RegistrationView({
   model,
   actions,
@@ -47,9 +55,6 @@ export function RegistrationView({
     setAccepted,
     values,
     setValues,
-    customAnswers,
-    setCustomAnswers,
-    uploadedNames,
     guardianRequired,
     error,
     step,
@@ -57,7 +62,15 @@ export function RegistrationView({
     steps,
     draftMessage,
   } = model;
-  const { submit, uploadCustomField } = actions;
+  const { submit } = actions;
+  const displayFields =
+    currentStep?.id === 'driver'
+      ? [...currentStep.fields].sort(
+          (left, right) =>
+            (DRIVER_FIELD_RANK[left.key] ?? 99) -
+            (DRIVER_FIELD_RANK[right.key] ?? 99),
+        )
+      : currentStep?.fields;
   const brandStyle: CSSProperties & Record<`--brand-${string}`, string> = {
     '--brand-primary': contrastColors.primarySurface,
     '--brand-accent': contrastColors.accentSurface,
@@ -145,7 +158,7 @@ export function RegistrationView({
                   onEditEntries={() => setStep(1)}
                 />
               ) : (
-                currentStep?.fields.map((field) => {
+                displayFields?.map((field) => {
                   if (field.key === 'entries')
                     return (
                       <RegistrationVehicleFields
@@ -157,11 +170,14 @@ export function RegistrationView({
                         setVehicles={setVehicles}
                         payload={payload}
                         t={t}
-                        numberLookup={numberLookup}
+                        numberLookupRef={numberLookup}
                         numberAvailability={numberAvailability}
                         setNumberAvailability={setNumberAvailability}
                         organizationId={organizationId}
                         eventSlug={eventSlug}
+                        validateCurrent={() =>
+                          formRef.current?.reportValidity() ?? true
+                        }
                       />
                     );
                   if (field.key === 'consent')
@@ -202,7 +218,7 @@ export function RegistrationView({
                         }
                       />
                       {field.key === 'dateOfBirth' &&
-                        currentStep.id === 'driver' && (
+                        currentStep?.id === 'driver' && (
                           <RegistrationPhoneField
                             config={payload.registrationFormConfig}
                             values={values}
@@ -226,15 +242,9 @@ export function RegistrationView({
                   t={t}
                 />
               )}
-              <RegistrationCustomAnswers
-                isDriver={currentStep?.id === 'driver'}
-                fields={payload.registrationFormConfig.customFields}
-                locale={locale}
-                customAnswers={customAnswers}
-                setCustomAnswers={setCustomAnswers}
-                uploadedNames={uploadedNames}
-                uploadCustomField={uploadCustomField}
-              />
+              {currentStep?.id === 'driver' && (
+                <RegistrationAboutFields model={model} actions={actions} />
+              )}
               {currentStep?.id === 'driver' && guardianRequired && (
                 <div className="guardian-fields">
                   <>

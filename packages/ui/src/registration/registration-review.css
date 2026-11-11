@@ -51,27 +51,34 @@
   border-top: 1px solid var(--color-line);
   background: transparent;
 }
-.registration-review-card header {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
-  margin-bottom: var(--space-3);
+.registration-review-card:not(.registration-review-wide) {
+  padding: var(--space-4);
+  border: 1px solid var(--color-line);
 }
 .registration-review-card h3 {
   margin: 0;
-  font: var(--text-heading-4);
+  font: var(--text-app-h2);
 }
 .registration-review-card > h3 {
   padding-bottom: var(--space-3);
   border-bottom: 1px solid var(--color-line);
 }
-.registration-review-card header h3 {
+.registration-review-card:not(.registration-review-wide) > h3 {
+  padding-bottom: 0;
+  border: 0;
+  margin-bottom: var(--space-3);
   font: var(--text-label);
   text-transform: uppercase;
 }
-.registration-review-card header + p {
-  font-weight: 600;
+.registration-review-card > strong {
+  display: block;
+}
+.registration-review-card > .nb-button {
+  margin-top: var(--space-2);
+}
+.registration-review-detail {
+  color: var(--color-graphite);
+  font: 400 var(--type-small-size)/var(--type-small-line) var(--font-plex);
 }
 .registration-review-consents h4 {
   margin: 0 0 var(--space-3);
@@ -88,8 +95,7 @@
   margin-top: var(--space-2);
 }
 .registration-review-card .registration-review-entry {
-  padding-block: var(--space-3);
-  border-top: 1px solid var(--color-line);
+  margin: 0;
 }
 .registration-organizer-notice {
   padding: var(--space-3) 0;

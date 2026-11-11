@@ -154,7 +154,7 @@
   border: 1px solid var(--color-line);
   background: var(--surface-panel);
 }
-.registration-form fieldset {
+.registration-form > fieldset {
   display: grid;
   grid-template-columns: repeat(
     auto-fit,
@@ -189,7 +189,10 @@
   min-width: 0;
   width: 100%;
 }
-.registration .nb-form-section.is-registration .nb-form-grid {
+.registration .nb-form-grid.is-registration > .registration-wide {
+  grid-column: 1 / -1;
+}
+.registration .nb-form-grid.is-registration.is-address {
   grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 .registration-step-description {
@@ -197,33 +200,23 @@
   margin: 0;
   color: var(--color-graphite);
 }
-.registration-custom-section-title {
-  grid-column: 1 / -1;
-  margin: var(--space-4) 0 0;
-  font: var(--text-heading-4);
-}
-.registration-form fieldset > .nb-form-grid,
-.registration-form fieldset > .nb-form-section,
-.registration-form fieldset > .registration-vehicle-fields,
-.registration-form fieldset > .consent-list,
-.registration-form fieldset > .guardian-fields,
-.registration-form fieldset > .registration-wide,
-.registration-form fieldset > .registration-review {
+.registration-form > fieldset > .nb-form-grid,
+.registration-form > fieldset > .nb-form-section,
+.registration-form > fieldset > .registration-vehicle-fields,
+.registration-form > fieldset > .consent-list,
+.registration-form > fieldset > .guardian-fields,
+.registration-form > fieldset > .registration-wide,
+.registration-form > fieldset > .registration-review {
   grid-column: 1 / -1;
 }
-.registration-form fieldset > .nb-form-grid,
-.registration-form fieldset > .nb-form-section,
-.registration-form fieldset > .registration-vehicle-fields,
-.registration-form fieldset > .consent-list,
-.registration-form fieldset > .guardian-fields,
-.registration-form fieldset > .registration-wide {
+.registration-form > fieldset > .nb-form-section,
+.registration-form > fieldset > .registration-vehicle-fields,
+.registration-form > fieldset > .consent-list,
+.registration-form > fieldset > .guardian-fields,
+.registration-form > fieldset > .registration-wide {
   margin-top: var(--space-8);
   padding-top: var(--space-6);
   border-top: 1px solid var(--color-line);
-}
-.registration-form .vehicle-card {
-  border: 1px solid var(--color-line);
-  background: var(--surface-panel);
 }
 @media (width <= 48rem) {
   .registration-header-inner {
@@ -252,11 +245,11 @@
     grid-template-columns: minmax(0, 1fr);
     gap: var(--space-6);
   }
-  .registration-form fieldset {
+  .registration-form > fieldset {
     grid-template-columns: minmax(0, 1fr);
   }
   .registration .nb-form-grid.is-registration,
-  .registration .nb-form-section.is-registration .nb-form-grid {
+  .registration .nb-form-grid.is-registration.is-address {
     grid-template-columns: minmax(0, 1fr);
   }
   .registration-summary {
@@ -275,9 +268,9 @@
   white-space: normal;
 }
 .registration .nb-form-section.is-registration {
-  gap: var(--space-4);
-  margin-block: var(--space-6);
-  padding: var(--space-6) 0;
+  display: block;
+  margin-block: var(--space-6) 0;
+  padding: var(--space-6) 0 0;
   border: 0;
   border-top: 1px solid var(--color-line);
 }
@@ -290,9 +283,9 @@
   white-space: nowrap;
 }
 .registration .nb-form-section.is-registration > h3 {
-  margin: 0;
+  margin: 0 0 var(--space-4);
   padding: 0;
-  font: var(--text-heading-4);
+  font: var(--text-app-h2);
 }
 .registration .nb-form-section.is-registration > div {
   display: block;

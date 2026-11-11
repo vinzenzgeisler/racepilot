@@ -266,4 +266,24 @@ describe('public registration contact and vehicle fields', () => {
       history: null,
     });
   });
+
+  it('keeps collapsed startmeldungen editable and does not hide an incomplete entry from validation', async () => {
+    await mount(form({}), draftWith());
+    await press('Weiter zu Startmeldungen');
+    await press('Startmeldung übernehmen');
+    await press('Weiteres Fahrzeug hinzufügen');
+    await press('Startmeldung übernehmen');
+    expect(control('Klasse')).toBeTruthy();
+    await fill('Klasse', classId);
+    await fill('Hersteller', 'Kawasaki');
+    await fill('Modell', 'ZXR 750');
+    await press('Startmeldung übernehmen');
+    expect(
+      container.querySelectorAll('.registration-vehicle-summary'),
+    ).toHaveLength(2);
+    await press('Bearbeiten');
+    expect(control('Hersteller')?.value).toBe('NSU');
+    await press('Weiter zur Prüfung');
+    expect(container.textContent).toContain('Kawasaki');
+  });
 });

@@ -49,5 +49,6 @@
 @import url('./detail/evidence-list.css');
 
 @import url('./registration/public-registration.css');
+@import url('./registration/registration-vehicle.css');
 @import url('./registration/registration-review.css');
 @import url('./registration/registration-footer.css');

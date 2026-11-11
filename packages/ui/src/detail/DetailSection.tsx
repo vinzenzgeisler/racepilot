@@ -45,11 +45,11 @@ export function FormGrid({
   variant = 'default',
 }: {
   children: ReactNode;
-  variant?: 'default' | 'registration';
+  variant?: 'default' | 'registration' | 'registration-address';
 }) {
   return (
     <div
-      className={`nb-form-grid${variant === 'registration' ? ' is-registration' : ''}`}
+      className={`nb-form-grid${variant === 'default' ? '' : ' is-registration'}${variant === 'registration-address' ? ' is-address' : ''}`}
     >
       {children}
     </div>
