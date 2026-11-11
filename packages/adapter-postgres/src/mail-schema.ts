@@ -77,6 +77,10 @@ export const emailOutbox = pgTable(
     locale: text('locale').notNull(),
     recipient: text('recipient').notNull(),
     idempotencyKey: text('idempotency_key').notNull(),
+    attachmentRefs: jsonb('attachment_refs')
+      .$type<Array<{ objectId: string; filename: string }>>()
+      .notNull()
+      .default([]),
     variables: jsonb('variables')
       .$type<Record<string, string>>()
       .notNull()

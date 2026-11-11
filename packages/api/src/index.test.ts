@@ -854,6 +854,7 @@ describe('event CSV export', () => {
         put: async () => {
           throw new Error('Must not store in request');
         },
+        head: async () => null,
         get: async () => null,
         delete: async () => {},
       },

@@ -59,6 +59,7 @@ function appFor(permissions = context.permissions) {
       size: body.length,
       sha256: 'a'.repeat(64),
     }),
+    head: async () => null,
     get: async () => null,
     delete: async () => {},
   };

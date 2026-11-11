@@ -29,6 +29,7 @@ export interface NewMailOutboxMessage {
   recipient: string;
   idempotencyKey: string;
   variables: Record<string, string>;
+  attachmentRefs?: readonly { objectId: string; filename: string }[];
   correlationId?: string;
 }
 
@@ -51,6 +52,7 @@ export async function enqueueMailOutbox(
       recipient: input.recipient,
       idempotencyKey: input.idempotencyKey,
       variables: input.variables,
+      attachmentRefs: input.attachmentRefs ? [...input.attachmentRefs] : [],
     })
     .onConflictDoNothing({
       target: [emailOutbox.organizationId, emailOutbox.idempotencyKey],
@@ -105,6 +107,7 @@ export function createMailOutboxRepository(
     recipient: row.recipient,
     idempotencyKey: row.idempotencyKey,
     variables: row.variables,
+    attachmentRefs: row.attachmentRefs,
     status: row.status as 'pending' | 'sending' | 'sent' | 'failed',
     attempts: row.attempts,
   });

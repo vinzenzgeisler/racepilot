@@ -313,10 +313,10 @@ describe('campaign attachment storage delivery', () => {
       variables: {
         subject: 'Hello',
         body: 'See attached',
-        attachments: JSON.stringify([{ objectId, filename: 'rules.pdf' }]),
       },
       status: 'pending',
       attempts: 0,
+      attachmentRefs: [{ objectId, filename: 'rules.pdf' }],
     };
     const repository: MailOutboxRepository = {
       get: async () => row,
@@ -332,6 +332,17 @@ describe('campaign attachment storage delivery', () => {
       put: async () => {
         throw new Error('not used');
       },
+      head: async (requestedTenant, requestedObject) =>
+        requestedTenant === organizationId(tenantId) &&
+        requestedObject === objectId
+          ? {
+              organizationId: organizationId(tenantId),
+              objectId,
+              contentType: 'application/pdf',
+              size: 5,
+              sha256: 'a'.repeat(64),
+            }
+          : null,
       get: async (requestedTenant, requestedObject) =>
         requestedTenant === organizationId(tenantId) &&
         requestedObject === objectId

@@ -50,6 +50,22 @@ export function createLocalObjectStorage(root: string): ObjectStorageProvider {
       }
       return ref;
     },
+    async head(organizationId, objectId) {
+      const path = objectPath(organizationId, objectId);
+      try {
+        const metadata = await readFile(`${path}.json`, 'utf8');
+        const ref = JSON.parse(metadata) as StoredObjectRef;
+        if (ref.organizationId !== organizationId || ref.objectId !== objectId)
+          throw new ProviderError('forbidden', 'Object ownership check failed');
+        return ref;
+      } catch (cause) {
+        if (cause instanceof ProviderError) throw cause;
+        if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        throw new ProviderError('unavailable', 'Object metadata read failed', {
+          cause,
+        });
+      }
+    },
     async get(organizationId, objectId) {
       const path = objectPath(organizationId, objectId);
       try {

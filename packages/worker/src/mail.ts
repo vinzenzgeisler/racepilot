@@ -4,6 +4,7 @@ import type {
   MailProvider,
   MailAttachment,
   ObjectStorageProvider,
+  MailAttachmentReference,
 } from '@racepilot/core';
 import { JobEnvelope, MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/contracts';
 import { createJobContext } from './index.js';
@@ -165,6 +166,7 @@ export interface MailOutboxRecord {
   recipient: string;
   idempotencyKey: string;
   variables: Record<string, string>;
+  attachmentRefs?: readonly MailAttachmentReference[];
   status: 'pending' | 'sending' | 'sent' | 'failed';
   attempts: number;
   attachments?: readonly MailAttachment[];
@@ -324,10 +326,8 @@ export function createMailOutboxTask(deps: {
       return;
     }
     const variables = { ...row.variables };
-    const attachmentReferences = variables.attachments;
-    const expectsAttachments = Boolean(
-      attachmentReferences && attachmentReferences !== '[]',
-    );
+    const attachmentReferences = row.attachmentRefs ?? [];
+    const expectsAttachments = attachmentReferences.length > 0;
     if (
       row.templateKey === 'message-campaign' &&
       expectsAttachments &&
@@ -382,12 +382,12 @@ export function createMailOutboxTask(deps: {
 async function loadMessageAttachments(
   storage: ObjectStorageProvider,
   tenantId: string,
-  encoded: string | undefined,
+  references: readonly MailAttachmentReference[],
 ): Promise<MailAttachment[]> {
-  if (!encoded) return [];
+  if (!references.length) return [];
   let refs: Array<{ objectId: string; filename: string }>;
   try {
-    const parsed: unknown = JSON.parse(encoded);
+    const parsed: unknown = references;
     if (
       !Array.isArray(parsed) ||
       !parsed.every(

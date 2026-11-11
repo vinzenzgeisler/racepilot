@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import {
   GetObjectCommand,
+  HeadObjectCommand,
   PutObjectCommand,
   DeleteObjectCommand,
   S3Client,
@@ -61,6 +62,37 @@ export function createS3ObjectStorage(
         size: body.byteLength,
         sha256,
       } satisfies StoredObjectRef;
+    },
+    async head(owner, objectId) {
+      const key = keyFor(owner, objectId);
+      try {
+        const result = await client.send(
+          new HeadObjectCommand({ Bucket: config.bucket, Key: key }),
+        );
+        if (
+          result.Metadata?.organizationid !== owner ||
+          result.Metadata?.objectid !== objectId
+        )
+          throw new ProviderError('forbidden', 'Object ownership check failed');
+        return {
+          organizationId: organizationId(owner),
+          objectId,
+          contentType: result.ContentType ?? 'application/octet-stream',
+          size: result.ContentLength ?? 0,
+          sha256: result.Metadata.sha256 ?? '',
+        } satisfies StoredObjectRef;
+      } catch (cause) {
+        if (cause instanceof ProviderError) throw cause;
+        if (
+          (cause as { name?: string }).name === 'NotFound' ||
+          (cause as { $metadata?: { httpStatusCode?: number } }).$metadata
+            ?.httpStatusCode === 404
+        )
+          return null;
+        throw new ProviderError('unavailable', 'Object metadata read failed', {
+          cause,
+        });
+      }
     },
     async get(owner, objectId) {
       const key = keyFor(owner, objectId);

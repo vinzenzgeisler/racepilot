@@ -52,7 +52,7 @@ export function createMessageSender(
     > = {
       maxAttachments: MESSAGE_ATTACHMENT_LIMITS.maxCount,
       validateAttachments: async (attachments) => {
-        if (attachments.length && !storage)
+        if (attachments.length && (!storage || !storage.head))
           return {
             ok: false,
             error: {
@@ -62,11 +62,11 @@ export function createMessageSender(
           };
         let totalBytes = 0;
         for (const attachment of attachments) {
-          const object = await storage!.get(
+          const object = await storage!.head!(
             ctx.organizationId,
             attachment.objectId,
           );
-          if (!object || object.ref.contentType !== 'application/pdf')
+          if (!object || object.contentType !== 'application/pdf')
             return {
               ok: false,
               error: {
@@ -74,7 +74,7 @@ export function createMessageSender(
                 message: 'Attachment is unavailable or not a PDF',
               },
             };
-          totalBytes += object.ref.size;
+          totalBytes += object.size;
           if (totalBytes > MESSAGE_ATTACHMENT_LIMITS.maxBytes)
             return {
               ok: false,
@@ -247,9 +247,9 @@ export function createMessageSender(
                   variables: {
                     subject: value.subject,
                     body: value.text,
-                    attachments: JSON.stringify(value.attachmentRefs),
                   },
                   correlationId: value.correlationId,
+                  attachmentRefs: value.attachmentRefs,
                 },
                 tx,
               );
