@@ -98,6 +98,7 @@ export interface MessageCampaignSendPorts<
   Response = unknown,
 > {
   readonly maxAttachments: number;
+  hashRequest(fingerprint: string): string;
   validateAttachments(
     attachments: readonly { objectId: string; filename: string }[],
   ): Promise<MessageCampaignSendResult | null>;
@@ -143,7 +144,7 @@ export async function sendMessageCampaign<
   const attachmentError = await ports.validateAttachments(input.attachments);
   if (attachmentError && !attachmentError.ok)
     return { ok: false, error: attachmentError.error };
-  const requestHash = fingerprintMessageRequest(input);
+  const requestHash = ports.hashRequest(fingerprintMessageRequest(input));
   return ports.transaction(context, async (tx) => {
     const resolved = await tx.resolveRecipients(eventId, input.recipients);
     if (!resolved)

@@ -202,6 +202,7 @@ describe('message campaign send use case', () => {
   };
   const ports: TestPorts = {
     maxAttachments: 1,
+    hashRequest: (fingerprint) => fingerprint,
     validateAttachments: async () => null,
     transaction: async (_context, work) => {
       transactionCalls.push('begin');
@@ -289,6 +290,51 @@ describe('message campaign send use case', () => {
       error: { code: 'no-recipients' },
     });
     expect(transactionCalls).toEqual(['begin', 'resolve']);
+  });
+
+  it('replays the existing campaign when the normalized request hash matches', async () => {
+    const { sendMessageCampaign } = await import('./message-campaign-send.js');
+    const matchingPorts: TestPorts = {
+      ...ports,
+      hashRequest: () => 'same-hash',
+      transaction: async (_context, work) =>
+        work({
+          ...transaction,
+          resolveRecipients: async (): Promise<
+            import('./message-campaign-send.js').MessageCampaignRecipient[]
+          > => [
+            {
+              entryId: 'entry-a',
+              registrationGroupId: 'group-a',
+              email: 'ada@example.test',
+              firstName: 'Ada',
+              lastName: 'Lovelace',
+              fullName: 'Ada Lovelace',
+              eventName: 'Run',
+              className: 'Open',
+              entryNumber: '1',
+            },
+          ],
+          findByIdempotencyKey: async () => ({
+            requestHash: 'same-hash',
+            campaign: { id: 'campaign-a' },
+            recipients: [{ id: 'recipient-a' }],
+          }),
+        }),
+    };
+    const result = await sendMessageCampaign(
+      context,
+      input.eventId,
+      'key-001',
+      input,
+      'actor',
+      matchingPorts,
+    );
+    expect(result).toMatchObject({
+      ok: true,
+      replayed: true,
+      campaign: { id: 'response-a' },
+    });
   });
 
   it('returns an idempotency conflict instead of an absent campaign', async () => {

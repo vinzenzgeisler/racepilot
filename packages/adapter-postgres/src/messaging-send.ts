@@ -56,6 +56,7 @@ export function createMessageSender(
       CampaignResponse
     > = {
       maxAttachments: MESSAGE_ATTACHMENT_LIMITS.maxCount,
+      hashRequest: digestMessage,
       validateAttachments: (attachments) =>
         validateMessageAttachmentMetadata(
           storage,
