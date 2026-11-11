@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
 import {
   createRequestContext,
@@ -147,11 +147,38 @@ describe.skipIf(!url)(
         expect(codes.every((code) => /^RACE-[0-9A-Z]{5}$/.test(code))).toBe(
           true,
         );
+        const backfillRows = await db.execute(sql`
+          WITH numbered AS (
+            SELECT e.id, e.organization_id, e.event_id,
+              COALESCE(NULLIF(upper(trim(ev.orga_code_prefix)), ''),
+                NULLIF(left(regexp_replace(upper(ev.slug), '[^A-Z0-9]', '', 'g'), 8), ''),
+                'NEN') AS prefix,
+              row_number() OVER (
+                PARTITION BY e.organization_id, e.event_id
+                ORDER BY e.created_at, e.id
+              ) AS sequence
+            FROM entry e
+            JOIN event ev ON ev.organization_id=e.organization_id AND ev.id=e.event_id
+            WHERE e.organization_id=${tenantA.organization.id} AND e.event_id=${tenantA.event.id}
+          )
+          SELECT prefix || '-' || lpad(
+            (SELECT string_agg(
+              substr('0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ',
+                ((numbered.sequence / (36::numeric ^ power))::bigint % 36)::integer + 1, 1),
+              '' ORDER BY power DESC)
+             FROM generate_series(0, floor(log(36, numbered.sequence))::integer) AS powers(power)),
+            5, '0') AS code
+          FROM numbered
+        `);
+        const sqlBackfillCodes = backfillRows.rows.map((row) =>
+          String(row.code),
+        );
         const expectedBackfillCodes = Array.from(
           { length: codes.length },
           (_, index) =>
             formatOrgaCode(deriveOrgaCodePrefix(tenantA.event), index + 1),
         );
+        expect(sqlBackfillCodes.sort()).toEqual(expectedBackfillCodes.sort());
         expect([...codes].sort()).toEqual(expectedBackfillCodes.sort());
 
         const repository = createEntryDocumentsRepository(db);

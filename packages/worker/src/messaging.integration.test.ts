@@ -103,6 +103,7 @@ describe.skipIf(!databaseUrl)(
           registrationGroupId: group!.id,
           driverPersonId: person!.id,
           vehicleId: vehicle!.id,
+          orgaCode: `TEST-${crypto.randomUUID()}`,
         });
         const requestContext = createRequestContext({
           deploymentMode: 'cloud',
