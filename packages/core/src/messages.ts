@@ -1,3 +1,34 @@
+export interface MessageRecipientFilter {
+  classIds: string[];
+  statuses: string[];
+  emailVerified?: boolean | undefined;
+  payment: 'any' | 'paid' | 'open' | 'unpaid';
+  entryIds: string[];
+  additionalAddresses: string[];
+}
+
+export interface MessageTemplate {
+  id?: string | undefined;
+  eventId: string | null;
+  name: string;
+  subject: string;
+  text: string;
+}
+
+export interface MessageCampaignCreate {
+  eventId: string;
+  recipients: MessageRecipientFilter;
+  subject: string;
+  text: string;
+  attachments: Array<{ objectId: string; filename: string }>;
+}
+
+export const MESSAGE_ATTACHMENT_LIMITS = Object.freeze({
+  maxCount: 5,
+  maxBytes: 10 * 1024 * 1024,
+});
+export const MESSAGE_VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+
 export const messagePlaceholderNames = [
   'firstName',
   'lastName',
@@ -7,6 +38,9 @@ export const messagePlaceholderNames = [
   'className',
   'entryNumber',
 ] as const;
+const messagePlaceholderNameSet: ReadonlySet<string> = new Set(
+  messagePlaceholderNames,
+);
 export type MessagePlaceholder = (typeof messagePlaceholderNames)[number];
 export type MessageRecipient = Readonly<Record<MessagePlaceholder, string>>;
 
@@ -22,7 +56,7 @@ export function validateMessageTemplate(
   text: string,
 ): string[] {
   const unknown = messagePlaceholders(subject, text).filter(
-    (name) => !(messagePlaceholderNames as readonly string[]).includes(name),
+    (name) => !messagePlaceholderNameSet.has(name),
   );
   if (
     /[{}]/.test(
@@ -54,12 +88,44 @@ export function renderMessageTemplate(
 export interface MessageRecipientCandidate {
   address: string | null;
   entryId: string;
+  classId: string;
+  verificationStatus: string;
+  acceptanceStatus: string;
+  paymentStatus: 'paid' | 'open' | 'unpaid';
   registrationGroupId?: string | null;
   firstName: string;
   lastName: string;
   eventName: string;
   className: string;
   entryNumber: string;
+}
+
+/** Resolve event candidates against all business filters before address deduplication. */
+export function resolveMessageRecipientCandidates(
+  candidates: readonly MessageRecipientCandidate[],
+  filter: MessageRecipientFilter,
+): Array<MessageRecipientCandidate & { address: string }> {
+  const selected = candidates.filter((candidate) => {
+    if (filter.classIds.length && !filter.classIds.includes(candidate.classId))
+      return false;
+    if (filter.entryIds.length && !filter.entryIds.includes(candidate.entryId))
+      return false;
+    if (
+      filter.statuses.length &&
+      !filter.statuses.includes(candidate.verificationStatus) &&
+      !filter.statuses.includes(candidate.acceptanceStatus)
+    )
+      return false;
+    if (
+      filter.emailVerified !== undefined &&
+      (candidate.verificationStatus === 'verified') !== filter.emailVerified
+    )
+      return false;
+    return (
+      filter.payment === 'any' || candidate.paymentStatus === filter.payment
+    );
+  });
+  return deduplicateMessageRecipients(selected, filter.additionalAddresses);
 }
 
 /** Preserve the first registration for an address and merge manually supplied addresses. */
@@ -82,6 +148,10 @@ export function deduplicateMessageRecipients(
       result.set(address, {
         address,
         entryId: '',
+        classId: '',
+        verificationStatus: 'unverified',
+        acceptanceStatus: 'pending',
+        paymentStatus: 'unpaid',
         firstName: '',
         lastName: '',
         eventName: '',
@@ -118,6 +188,26 @@ export function transitionMessageCampaign(
   if (!canTransitionMessageCampaign(current, next))
     throw new Error(
       `Invalid message campaign transition: ${current} -> ${next}`,
+    );
+  return next;
+}
+
+const recipientTransitions: Readonly<
+  Record<MessageRecipientState, readonly MessageRecipientState[]>
+> = {
+  planned: ['sending', 'failed'],
+  sending: ['planned', 'sent', 'failed'],
+  sent: [],
+  failed: ['planned'],
+};
+
+export function transitionMessageRecipient(
+  current: MessageRecipientState,
+  next: MessageRecipientState,
+): MessageRecipientState {
+  if (!recipientTransitions[current].includes(next))
+    throw new Error(
+      `Invalid message recipient transition: ${current} -> ${next}`,
     );
   return next;
 }

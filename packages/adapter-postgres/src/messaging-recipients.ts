@@ -1,10 +1,10 @@
-import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
-import type { MessageRecipientFilter } from '@racepilot/contracts';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import type {
   MessageRecipientCandidate,
+  MessageRecipientFilter,
   RequestContext,
 } from '@racepilot/core';
-import { deduplicateMessageRecipients } from '@racepilot/core';
+import { resolveMessageRecipientCandidates } from '@racepilot/core';
 import type { Database } from './database.js';
 import { entries, people, registrationGroups } from './schema/entries.js';
 import { eventClasses, events } from './schema/organization.js';
@@ -32,44 +32,20 @@ export async function resolveMessageRecipients(
     eq(entries.eventId, eventId),
     isNull(entries.deletedAt),
   ];
-  if (filter.classIds.length)
-    where.push(inArray(entries.classId, filter.classIds));
-  const verification = filter.statuses.filter(
-    (status) => status === 'verified' || status === 'unverified',
-  );
-  const acceptance = filter.statuses.filter((status) =>
-    ['pending', 'accepted', 'rejected', 'withdrawn'].includes(status),
-  );
-  if (verification.length)
-    where.push(inArray(entries.verificationStatus, verification));
-  if (acceptance.length)
-    where.push(inArray(entries.acceptanceStatus, acceptance));
-  if (filter.emailVerified !== undefined)
-    where.push(
-      eq(
-        entries.verificationStatus,
-        filter.emailVerified ? 'verified' : 'unverified',
-      ),
-    );
-  if (filter.payment === 'paid')
-    where.push(
-      sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = 'paid')`,
-    );
-  if (filter.payment === 'open')
-    where.push(
-      sql`exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status in ('open','partially_paid'))`,
-    );
-  if (filter.payment === 'unpaid')
-    where.push(
-      sql`not exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status in ('paid','partially_paid'))`,
-    );
-  if (filter.entryIds.length) where.push(inArray(entries.id, filter.entryIds));
   const rows = await db
     .select({
       address: sql<
         string | null
       >`coalesce(${registrationGroups.contactEmail}, ${registrationGroups.guardianEmail}, ${people.email})`,
       entryId: entries.id,
+      classId: entries.classId,
+      verificationStatus: entries.verificationStatus,
+      acceptanceStatus: entries.acceptanceStatus,
+      paymentStatus: sql<'paid' | 'open' | 'unpaid'>`case
+        when exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status = 'paid') then 'paid'
+        when exists (select 1 from invoice i where i.organization_id = ${entries.organizationId} and i.registration_group_id = ${entries.registrationGroupId} and i.status in ('open','partially_paid')) then 'open'
+        else 'unpaid'
+      end`,
       registrationGroupId: registrationGroups.id,
       firstName: people.firstName,
       lastName: people.lastName,
@@ -113,6 +89,10 @@ export async function resolveMessageRecipients(
   const candidates: MessageRecipientCandidate[] = rows.map((row) => ({
     address: row.address,
     entryId: row.entryId,
+    classId: row.classId,
+    verificationStatus: row.verificationStatus,
+    acceptanceStatus: row.acceptanceStatus,
+    paymentStatus: row.paymentStatus,
     registrationGroupId: row.registrationGroupId,
     firstName: row.firstName,
     lastName: row.lastName,
@@ -120,10 +100,7 @@ export async function resolveMessageRecipients(
     className: row.className,
     entryNumber: row.entryNumber ?? '',
   }));
-  const unique = deduplicateMessageRecipients(
-    candidates,
-    filter.additionalAddresses,
-  );
+  const unique = resolveMessageRecipientCandidates(candidates, filter);
   return {
     count: unique.length,
     recipients: unique.map((recipient) => ({

@@ -20,12 +20,11 @@ import {
   type MembershipRepository,
   type MembershipBootstrap,
   type ExternalIdentity,
-} from '@racepilot/core';
-import {
-  type RegistrationSettings,
   type MessageCampaignCreate,
   type MessageRecipientFilter,
-} from '@racepilot/contracts';
+  type MessageTemplate,
+} from '@racepilot/core';
+import { type RegistrationSettings } from '@racepilot/contracts';
 
 export interface Authenticator {
   authenticate(request: Request): Promise<ExternalIdentity | null>;
@@ -75,7 +74,7 @@ export interface ApiDeps {
     ): Promise<unknown[] | null>;
     saveTemplate(
       context: RequestContext,
-      input: import('@racepilot/contracts').MessageTemplate,
+      input: MessageTemplate,
     ): Promise<unknown | null>;
     previewTemplate(
       context: RequestContext,
@@ -83,6 +82,12 @@ export interface ApiDeps {
       filter: MessageRecipientFilter,
       subject: string,
       text: string,
+    ): Promise<unknown | null>;
+    quickAction(
+      context: RequestContext,
+      eventId: string,
+      action: 'resend-verification' | 'remind-open-payments',
+      actor: string,
     ): Promise<unknown | null>;
   };
   entryDetails?: EntryDetailRepository;

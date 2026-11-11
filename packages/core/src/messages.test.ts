@@ -3,6 +3,8 @@ import {
   deduplicateMessageRecipients,
   renderMessageTemplate,
   validateMessageTemplate,
+  transitionMessageRecipient,
+  resolveMessageRecipientCandidates,
 } from './messages.js';
 
 describe('message templates', () => {
@@ -26,10 +28,54 @@ describe('message templates', () => {
 });
 
 describe('message recipients', () => {
+  it('resolves class, status, verification, payment and individual-entry filters in core', () => {
+    const candidate = {
+      address: 'ada@example.test',
+      entryId: 'entry-a',
+      classId: 'class-a',
+      verificationStatus: 'verified',
+      acceptanceStatus: 'accepted',
+      paymentStatus: 'open' as const,
+      registrationGroupId: 'group-a',
+      firstName: 'Ada',
+      lastName: 'Lovelace',
+      eventName: 'Run',
+      className: 'Open',
+      entryNumber: '12',
+    };
+    const filter = {
+      classIds: ['class-a'],
+      statuses: ['accepted'],
+      emailVerified: true,
+      payment: 'open' as const,
+      entryIds: ['entry-a'],
+      additionalAddresses: [],
+    };
+    expect(resolveMessageRecipientCandidates([candidate], filter)).toHaveLength(
+      1,
+    );
+    expect(
+      resolveMessageRecipientCandidates([candidate], {
+        ...filter,
+        classIds: ['other'],
+      }),
+    ).toHaveLength(0);
+    expect(
+      resolveMessageRecipientCandidates([candidate], {
+        ...filter,
+        payment: 'paid',
+      }),
+    ).toHaveLength(0);
+  });
+
   it('deduplicates addresses case-insensitively and includes additional recipients', () => {
     const row = {
       address: 'Person@example.test',
       entryId: 'entry',
+      classId: 'class-a',
+      verificationStatus: 'verified',
+      acceptanceStatus: 'accepted',
+      paymentStatus: 'open' as const,
       firstName: 'A',
       lastName: 'B',
       eventName: 'Run',
@@ -52,6 +98,7 @@ describe('message campaign state machine', () => {
     expect(canTransitionMessageCampaign('planned', 'sending')).toBe(true);
     expect(canTransitionMessageCampaign('sent', 'planned')).toBe(false);
     expect(transitionMessageCampaign('failed', 'planned')).toBe('planned');
+    expect(transitionMessageRecipient('sending', 'planned')).toBe('planned');
     expect(() => transitionMessageCampaign('sent', 'planned')).toThrow();
   });
 });
