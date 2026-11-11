@@ -80,3 +80,5 @@ export {
   ModuleJobPayload,
 } from './modules.js';
 export type { ModuleManifestData } from './modules.js';
+export { MessageRecipientFilterSchema, MessageTemplateSchema, MessageCampaignCreateSchema, MessageCampaignStatusSchema } from './messages.js';
+export type { MessageRecipientFilter, MessageTemplate, MessageCampaignCreate } from './messages.js';
