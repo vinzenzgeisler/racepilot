@@ -39,6 +39,7 @@ const entry: Entry = {
   priceSnapshotVersion: null,
   formSnapshotVersion: null,
   createdAt: new Date(0).toISOString(),
+  revision: 1,
   deletedAt: null,
   deletionReason: null,
 };
@@ -69,7 +70,29 @@ describe('entry domain rules', () => {
       'waitlisted->accepted',
       'waitlisted->rejected',
       'waitlisted->withdrawn',
+      'accepted->pending',
+      'rejected->pending',
+      'waitlisted->pending',
+      'withdrawn->pending',
     ]);
+  });
+  it('requires a reason to reopen through the default workflow', () => {
+    expect(() =>
+      assertWorkflowTransition(
+        defaultEntryWorkflow,
+        'withdrawn',
+        'pending',
+        '',
+      ),
+    ).toThrow(/reason/);
+    expect(() =>
+      assertWorkflowTransition(
+        defaultEntryWorkflow,
+        'withdrawn',
+        'pending',
+        'Reopen after review',
+      ),
+    ).not.toThrow();
   });
   it('normalizes legacy meanings without making legacy colors semantic tokens', () => {
     const legacy = {
@@ -242,10 +265,15 @@ describe('entry domain rules', () => {
       assertEntryTransition('acceptance', 'waitlisted', to),
     ).not.toThrow(),
   );
+  it.each(['accepted', 'rejected', 'waitlisted', 'withdrawn'])(
+    'allows reopening %s to pending',
+    (from) =>
+      expect(() =>
+        assertEntryTransition('acceptance', from, 'pending'),
+      ).not.toThrow(),
+  );
   it.each([
-    ['accepted', 'pending'],
     ['rejected', 'accepted'],
-    ['waitlisted', 'pending'],
     ['withdrawn', 'accepted'],
     ['pending', 'verified'],
   ])('rejects %s to %s', (from, to) =>

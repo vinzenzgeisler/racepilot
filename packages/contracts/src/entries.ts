@@ -43,6 +43,8 @@ export const EntryResponse = z
     formSnapshotVersion: z.string().nullable(),
     priceSnapshot: PriceSnapshotSchema.nullable().optional(),
     createdAt: z.string().datetime({ offset: true }),
+    revision: z.number().int().min(1).optional(),
+    availableActions: z.array(z.string()).optional(),
     deletedAt: z.string().datetime({ offset: true }).nullable(),
     deletionReason: z.string().nullable(),
     adminHistory: z

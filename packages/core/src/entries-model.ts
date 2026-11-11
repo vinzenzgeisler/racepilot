@@ -1,11 +1,14 @@
-import { EntryAcceptanceStatus } from './workflow-model.js';
+import {
+  EntryAcceptanceStatus,
+  EntryVerificationStatus,
+  EntryWorkflowCategory,
+} from './workflow-model.js';
 import { EntryStatusProjection } from './status-config.js';
-import { EntryVerificationStatus } from './workflow-model.js';
-import { EntryWorkflowCategory } from './workflow-model.js';
-import { OrganizationId } from './context.js';
+import { EntryVerificationStatus, EntryWorkflowCategory } from './workflow-model.js';
+import { JobContext, OrganizationId, RequestContext } from './context.js';
 import { PriceSnapshot } from './pricing.js';
-import { RequestContext } from './context.js';
-import type { AdminEntryDetails } from './entry-detail.js';
+import { StoredObjectRef } from './providers.js';
+import type { AdminEntryDetails, AdminEntryHistoryItem } from './entry-detail.js';
 
 export interface Person {
   id: string;
@@ -57,17 +60,11 @@ export interface Entry {
   formSnapshotVersion: string | null;
   priceSnapshot?: PriceSnapshot | null;
   createdAt: string;
+  revision: number;
   deletedAt: string | null;
   deletionReason: string | null;
   /** Read-model fields computed from the pinned workflow, event configuration and source records. */
-  adminHistory?: Array<{
-    id: string;
-    kind: 'entry' | 'status' | 'payment' | 'email';
-    label: string;
-    actor: string;
-    occurredAt: string;
-    detail: string;
-  }>;
+  adminHistory?: AdminEntryHistoryItem[];
   adminDetails?: AdminEntryDetails;
   statusProjection?: EntryStatusProjection;
   orgaCode: string;

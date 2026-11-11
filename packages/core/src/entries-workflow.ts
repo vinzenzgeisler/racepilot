@@ -17,11 +17,11 @@ const acceptanceTransitions: Record<
   readonly EntryAcceptanceStatus[]
 > = {
   pending: ['accepted', 'rejected', 'waitlisted', 'withdrawn'],
-  accepted: ['withdrawn'],
-  rejected: ['withdrawn'],
+  accepted: ['withdrawn', 'pending'],
+  rejected: ['withdrawn', 'pending'],
   // Manual promotion from the waitlist; automatic waitlist handling is #29.
-  waitlisted: ['accepted', 'rejected', 'withdrawn'],
-  withdrawn: [],
+  waitlisted: ['accepted', 'rejected', 'withdrawn', 'pending'],
+  withdrawn: ['pending'],
 };
 
 export function assertEntryTransition(
