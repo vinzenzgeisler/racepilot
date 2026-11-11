@@ -209,9 +209,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await page
     .getByRole('button', { name: 'Weiter zur Prüfung', exact: true })
     .click();
-  await expect(
-    page.getByRole('heading', { name: 'Bitte prüfen' }),
-  ).toBeVisible();
+  await expect(page.getByRole('group', { name: 'Bitte prüfen' })).toBeVisible();
   await expect(page.getByText(consent)).toBeVisible();
   await page.getByRole('checkbox').check();
   await shots('public-review-step');
