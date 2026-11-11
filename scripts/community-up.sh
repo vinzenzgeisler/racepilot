@@ -8,7 +8,7 @@ compose=(docker compose --env-file .community-local/compose.env -f compose.commu
 "${compose[@]}" --profile prepare run --rm keycloak-prepare
 "${compose[@]}" up -d --wait --wait-timeout 120
 cleanup() {
-  kill "${api_pid:-}" "${worker_pid:-}" "${app_pid:-}" 2>/dev/null || true
+  kill "${api_pid:-}" "${worker_pid:-}" "${app_pid:-}" "${demo_seed_pid:-}" 2>/dev/null || true
   "${compose[@]}" down >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -44,12 +44,12 @@ export SMTP_FROM='noreply@nennbox.local'
 export STORAGE_PROVIDER=local STORAGE_LOCAL_ROOT="$PWD/.community-local/uploads"
 mkdir -p "$STORAGE_LOCAL_ROOT"
 node scripts/community-init.mjs
-if [[ "${COMMUNITY_SEED_DEMO:-0}" == 1 ]]; then
-  COMMUNITY_DEMO_SEED=I_UNDERSTAND npm run community:demo-seed
-fi
 node packages/api/dist/server.js & api_pid=$!
 node packages/worker/dist/server.js & worker_pid=$!
 npm run dev --workspace @racepilot/app -- --host 127.0.0.1 & app_pid=$!
+if [[ "${COMMUNITY_SEED_DEMO:-0}" == 1 ]]; then
+  COMMUNITY_DEMO_SEED=I_UNDERSTAND npm run community:demo-seed & demo_seed_pid=$!
+fi
 echo 'NENNBOX Community: http://127.0.0.1:5173/app'
 echo 'Mailpit: http://127.0.0.1:8025'
 echo "Admin-E-Mail: $OIDC_BOOTSTRAP_EMAIL"

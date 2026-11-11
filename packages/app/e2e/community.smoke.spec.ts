@@ -21,7 +21,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   request,
 }) => {
   // Includes SMTP/job polling and desktop/mobile evidence for the whole lifecycle.
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const email = process.env.COMMUNITY_ADMIN_EMAIL ?? 'admin@nennbox.local';
   const password = process.env.COMMUNITY_ADMIN_PASSWORD;
   if (!password) throw new Error('COMMUNITY_ADMIN_PASSWORD is required');
@@ -283,7 +283,9 @@ test('Community registration and admin lifecycle with API setup', async ({
     .getByRole('combobox', { name: 'Veranstaltung' })
     .selectOption(demoEvent!.id);
   const demoRows = page.getByRole('row');
-  await expect.poll(() => demoRows.count()).toBeGreaterThan(12);
+  await expect
+    .poll(() => demoRows.count(), { timeout: 90_000 })
+    .toBeGreaterThan(12);
   await shots('demo-historic-list');
   await demoRows.nth(1).locator('button[data-entry-action]').click();
   const demoPreview = page.getByRole('complementary', {
