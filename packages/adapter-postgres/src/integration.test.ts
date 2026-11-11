@@ -155,6 +155,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         .insert(entries)
         .values([
           {
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: orgId,
             eventId,
             classId: klass!.id,
@@ -164,6 +165,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
             requestedStartNumber: '41',
           },
           {
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: orgId,
             eventId,
             classId: klass!.id,
@@ -470,6 +472,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       const [entry] = await db
         .insert(entries)
         .values({
+          orgaCode: `TEST-${crypto.randomUUID()}`,
           organizationId: orgA!.id,
           eventId: eventA1!.id,
           classId: eventClass!.id,
@@ -1454,6 +1457,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         db
           .insert(entries)
           .values({
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: orgA!,
             eventId: eventA!.id,
             classId: clsId,
@@ -1498,6 +1502,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           db
             .insert(entries)
             .values({
+              orgaCode: `TEST-${crypto.randomUUID()}`,
               organizationId: orgB!,
               eventId: eventB!.id,
               classId: classB!.id,
@@ -2139,6 +2144,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       const [entry] = await db
         .insert(entries)
         .values({
+          orgaCode: `TEST-${crypto.randomUUID()}`,
           organizationId: a!.id,
           eventId: ea!.id,
           classId: klass!.id,

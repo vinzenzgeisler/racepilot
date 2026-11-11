@@ -89,6 +89,7 @@ describe.skipIf(!url)('entry detail maintenance', () => {
         const [entry] = await db
           .insert(entries)
           .values({
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: org!.id,
             eventId: event!.id,
             classId: klass!.id,
@@ -352,6 +353,7 @@ describe.skipIf(!url)('entry detail maintenance', () => {
         const [entry] = await db
           .insert(entries)
           .values({
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: orgId,
             eventId: event!.id,
             classId: klass!.id,
@@ -534,6 +536,7 @@ describe.skipIf(!url)('entry detail maintenance', () => {
         const [soloEntry] = await db
           .insert(entries)
           .values({
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: orgId,
             eventId: first.event.id,
             classId: soloClass!.id,

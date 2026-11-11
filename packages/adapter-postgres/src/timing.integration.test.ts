@@ -95,6 +95,7 @@ describe.skipIf(!url)('PostgreSQL timing adapter', () => {
       const [entryA] = await db
         .insert(entries)
         .values({
+          orgaCode: `TEST-${crypto.randomUUID()}`,
           organizationId: orgA!.id,
           eventId: eventA!.id,
           classId: classA!.id,

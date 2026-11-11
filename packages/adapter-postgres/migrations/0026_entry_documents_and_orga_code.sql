@@ -1,5 +1,5 @@
 ALTER TABLE event ADD COLUMN orga_code_prefix text;
-ALTER TABLE entry ADD COLUMN orga_code text NOT NULL DEFAULT '';
+ALTER TABLE entry ADD COLUMN orga_code text;
 
 ALTER TABLE event ADD CONSTRAINT event_orga_code_prefix_check CHECK (orga_code_prefix IS NULL OR orga_code_prefix ~ '^[A-Z0-9]{1,12}$');
 
@@ -11,21 +11,6 @@ CREATE TABLE event_orga_code_sequence (
   FOREIGN KEY (organization_id, event_id) REFERENCES event (organization_id, id) ON DELETE CASCADE
 );
 
-CREATE FUNCTION allocate_entry_orga_code() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE prefix text; next_number bigint; alphabet text := '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'; value bigint; suffix text := '';
-BEGIN
-  IF NEW.orga_code <> '' THEN RETURN NEW; END IF;
-  SELECT COALESCE(NULLIF(trim(e.orga_code_prefix), ''), NULLIF(left(regexp_replace(upper(e.slug), '[^A-Z0-9]', '', 'g'), 8), ''), 'NEN') INTO prefix
-    FROM event e WHERE e.organization_id = NEW.organization_id AND e.id = NEW.event_id;
-  INSERT INTO event_orga_code_sequence (organization_id, event_id, last_number) VALUES (NEW.organization_id, NEW.event_id, 1)
-    ON CONFLICT (organization_id, event_id) DO UPDATE SET last_number = event_orga_code_sequence.last_number + 1
-    RETURNING last_number INTO next_number;
-  value := next_number;
-  WHILE value > 0 LOOP suffix := substr(alphabet, (value % 36)::integer + 1, 1) || suffix; value := value / 36; END LOOP;
-  NEW.orga_code := prefix || '-' || lpad(suffix, 5, '0');
-  RETURN NEW;
-END $$;
-
 CREATE FUNCTION entry_org_code_base36(input_value bigint) RETURNS text LANGUAGE plpgsql IMMUTABLE AS $$
 DECLARE alphabet text := '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'; value bigint := input_value; output text := '';
 BEGIN
@@ -34,20 +19,20 @@ BEGIN
 END $$;
 WITH numbered AS (
   SELECT e.id, e.organization_id, e.event_id,
-    COALESCE(NULLIF(trim(ev.orga_code_prefix), ''), NULLIF(left(regexp_replace(upper(ev.slug), '[^A-Z0-9]', '', 'g'), 8), ''), 'NEN') || '-' ||
+    COALESCE(NULLIF(upper(trim(ev.orga_code_prefix)), ''), NULLIF(left(regexp_replace(upper(ev.slug), '[^A-Z0-9]', '', 'g'), 8), ''), 'NEN') || '-' ||
     lpad(entry_org_code_base36(row_number() OVER (PARTITION BY e.organization_id, e.event_id ORDER BY e.created_at, e.id)), 5, '0') AS code,
     row_number() OVER (PARTITION BY e.organization_id, e.event_id ORDER BY e.created_at, e.id) AS sequence
   FROM entry e JOIN event ev ON ev.organization_id=e.organization_id AND ev.id=e.event_id
 )
 UPDATE entry e SET orga_code=n.code FROM numbered n WHERE e.id=n.id;
+ALTER TABLE entry ALTER COLUMN orga_code SET NOT NULL;
 INSERT INTO event_orga_code_sequence (organization_id, event_id, last_number)
 SELECT organization_id, event_id, max(sequence) FROM (
  SELECT organization_id,event_id,row_number() OVER (PARTITION BY organization_id,event_id ORDER BY created_at,id) AS sequence FROM entry
 ) numbers GROUP BY organization_id,event_id
 ON CONFLICT (organization_id,event_id) DO UPDATE SET last_number=excluded.last_number;
-CREATE UNIQUE INDEX entry_org_event_orga_code_unique ON entry (organization_id,event_id,orga_code);
+ALTER TABLE entry ADD CONSTRAINT entry_org_event_orga_code_unique UNIQUE (organization_id,event_id,orga_code);
 DROP FUNCTION entry_org_code_base36(bigint);
-CREATE TRIGGER entry_orga_code_before_insert BEFORE INSERT ON entry FOR EACH ROW EXECUTE FUNCTION allocate_entry_orga_code();
 CREATE INDEX entry_orga_code_search_idx ON entry (organization_id,orga_code);
 
 CREATE TABLE event_entry_document_type (

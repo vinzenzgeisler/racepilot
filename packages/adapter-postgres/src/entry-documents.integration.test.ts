@@ -1,6 +1,11 @@
 import { eq } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
-import { createRequestContext, organizationId } from '@racepilot/core';
+import {
+  createRequestContext,
+  deriveOrgaCodePrefix,
+  formatOrgaCode,
+  organizationId,
+} from '@racepilot/core';
 import {
   createDatabase,
   migrate,
@@ -83,17 +88,24 @@ describe.skipIf(!url)(
               personId: person!.id,
             })
             .returning();
-          const [entry] = await db
-            .insert(entries)
-            .values({
-              organizationId: organization!.id,
-              eventId: event!.id,
-              classId: eventClass!.id,
-              registrationGroupId: group!.id,
-              driverPersonId: person!.id,
-              vehicleId: vehicle!.id,
-            })
-            .returning();
+          const entryContext = createRequestContext({
+            deploymentMode: 'community',
+            organizationId: organizationId(organization!.id),
+            permissions: new Set(['entry:read', 'entry:write']),
+            capabilities: new Set(),
+            correlationId: `create-${name}`,
+          });
+          const entry = await createEntryRepository(db).create!(entryContext, {
+            eventId: event!.id,
+            classId: eventClass!.id,
+            registrationGroupId: group!.id,
+            driverPersonId: person!.id,
+            vehicleId: vehicle!.id,
+            requestedStartNumber: null,
+            priceSnapshotVersion: null,
+            priceSnapshot: null,
+            formSnapshotVersion: null,
+          });
           return {
             organization: organization!,
             event: event!,
@@ -101,25 +113,23 @@ describe.skipIf(!url)(
             person: person!,
             vehicle: vehicle!,
             group: group!,
-            entry: entry!,
+            entry,
           };
         };
         const tenantA = await createTenant('A');
         const tenantB = await createTenant('B');
-        const createEntry = async () => {
-          const [created] = await db
-            .insert(entries)
-            .values({
-              organizationId: tenantA.organization.id,
-              eventId: tenantA.event.id,
-              classId: tenantA.eventClass.id,
-              registrationGroupId: tenantA.group.id,
-              driverPersonId: tenantA.person.id,
-              vehicleId: tenantA.vehicle.id,
-            })
-            .returning();
-          return created!;
-        };
+        const createEntry = async () =>
+          createEntryRepository(db).create!(contextA, {
+            eventId: tenantA.event.id,
+            classId: tenantA.eventClass.id,
+            registrationGroupId: tenantA.group.id,
+            driverPersonId: tenantA.person.id,
+            vehicleId: tenantA.vehicle.id,
+            requestedStartNumber: null,
+            priceSnapshotVersion: null,
+            priceSnapshot: null,
+            formSnapshotVersion: null,
+          });
         const concurrentEntries = await Promise.all(
           Array.from({ length: 24 }, createEntry),
         );
@@ -131,6 +141,12 @@ describe.skipIf(!url)(
         expect(codes.every((code) => /^RACE-[0-9A-Z]{5}$/.test(code))).toBe(
           true,
         );
+        const expectedBackfillCodes = Array.from(
+          { length: codes.length },
+          (_, index) =>
+            formatOrgaCode(deriveOrgaCodePrefix(tenantA.event), index + 1),
+        );
+        expect([...codes].sort()).toEqual(expectedBackfillCodes.sort());
 
         const repository = createEntryDocumentsRepository(db);
         const contextA = createRequestContext({

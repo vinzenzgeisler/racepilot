@@ -149,7 +149,7 @@ export const entries = pgTable(
       .default({ double_starter: false, passenger: false, late_entry: false }),
     workflowRevisionId: uuid('workflow_revision_id'),
     requestedStartNumber: text('requested_start_number'),
-    orgaCode: text('orga_code').notNull().default(''),
+    orgaCode: text('orga_code').notNull(),
     priceSnapshotVersion: text('price_snapshot_version'),
     priceSnapshot: jsonb('price_snapshot').$type<
       import('@racepilot/core').PriceSnapshot | null
@@ -164,6 +164,11 @@ export const entries = pgTable(
   (t) => [
     unique('entry_org_id_unique').on(t.organizationId, t.id),
     unique('entry_org_event_id_unique').on(t.organizationId, t.eventId, t.id),
+    unique('entry_org_event_orga_code_unique').on(
+      t.organizationId,
+      t.eventId,
+      t.orgaCode,
+    ),
     foreignKey({
       columns: [t.organizationId, t.eventId],
       foreignColumns: [events.organizationId, events.id],
