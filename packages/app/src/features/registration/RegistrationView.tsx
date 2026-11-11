@@ -188,6 +188,16 @@ export function RegistrationView({
                       key={field.key}
                       label={field.label[locale]}
                       type={field.type}
+                      placeholder={
+                        field.key === 'dateOfBirth' ? 'TT.MM.JJJJ' : undefined
+                      }
+                      hint={
+                        field.key === 'email'
+                          ? locale === 'de'
+                            ? 'Bestätigungslink wird gesendet'
+                            : 'A confirmation link will be sent'
+                          : undefined
+                      }
                       required={field.required}
                       value={driverFieldValue(values, key)}
                       onChange={(e) =>

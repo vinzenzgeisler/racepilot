@@ -182,6 +182,15 @@
 }
 .registration .nb-form-grid.is-registration {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  min-width: 0;
+}
+.registration .nb-form-grid.is-registration > *,
+.registration-form .nb-field {
+  min-width: 0;
+  width: 100%;
+}
+.registration .nb-form-section.is-registration .nb-form-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 }
 .registration-step-description {
   grid-column: 1 / -1;
@@ -246,7 +255,8 @@
   .registration-form fieldset {
     grid-template-columns: minmax(0, 1fr);
   }
-  .registration .nb-form-grid.is-registration {
+  .registration .nb-form-grid.is-registration,
+  .registration .nb-form-section.is-registration .nb-form-grid {
     grid-template-columns: minmax(0, 1fr);
   }
   .registration-summary {

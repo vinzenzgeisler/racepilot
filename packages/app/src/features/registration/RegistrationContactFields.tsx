@@ -39,6 +39,16 @@ export function RegistrationContactFields({
       <Field
         label={t[key]}
         type={type}
+        {...(key === 'street'
+          ? { placeholder: 'Musterstraße 12' }
+          : key === 'postalCode'
+            ? { placeholder: '12345' }
+            : {})}
+        {...(field === 'phone'
+          ? { hint: t.phoneHint }
+          : field === 'street' || field === 'postalCode' || field === 'city'
+            ? { hint: t.optionalHint }
+            : {})}
         required={state(field) === 'required'}
         maxLength={key === 'street' ? 200 : key === 'postalCode' ? 20 : 100}
         value={values[key]}
@@ -49,45 +59,28 @@ export function RegistrationContactFields({
   return (
     <FormGrid variant="registration">
       {text('phone', 'phone', 'tel')}
-      {state('country') !== 'hidden' && (
-        <SelectField
-          label={t.country}
-          required={state('country') === 'required'}
-          value={values.country}
-          onChange={(event) => set('country')(event.target.value)}
-        >
-          <option value="">{t.countryNotGiven}</option>
-          <option value="DE">{t.germany}</option>
-          <option value="AT">{t.austria}</option>
-          <option value="CH">{t.switzerland}</option>
-        </SelectField>
-      )}
-      {state('publicationPreference') !== 'hidden' && (
-        <SelectField
-          label={t.publicationPreference}
-          required={state('publicationPreference') === 'required'}
-          value={values.publicationPreference}
-          onChange={(event) => set('publicationPreference')(event.target.value)}
-        >
-          <option value="">{t.publicationNotGiven}</option>
-          <option value="name_visible">{t.publicationNameVisible}</option>
-          <option value="initials">{t.publicationInitials}</option>
-          <option value="hidden">{t.publicationHidden}</option>
-        </SelectField>
-      )}
-      {(state('street') !== 'hidden' ||
-        state('postalCode') !== 'hidden' ||
-        state('city') !== 'hidden') && (
-        <FormWide>
-          <FormSection title={t.address} variant="registration">
-            <FormGrid variant="registration">
-              {text('street', 'street')}
-              {text('postalCode', 'postalCode')}
-              {text('city', 'city')}
-            </FormGrid>
-          </FormSection>
-        </FormWide>
-      )}
+      <FormWide>
+        <FormSection title={t.address} variant="registration">
+          <FormGrid variant="registration">
+            {text('street', 'street')}
+            {text('postalCode', 'postalCode')}
+            {text('city', 'city')}
+            {state('country') !== 'hidden' && (
+              <SelectField
+                label={t.country}
+                required={state('country') === 'required'}
+                value={values.country}
+                onChange={(event) => set('country')(event.target.value)}
+              >
+                <option value="">{t.countryNotGiven}</option>
+                <option value="DE">{t.germany}</option>
+                <option value="AT">{t.austria}</option>
+                <option value="CH">{t.switzerland}</option>
+              </SelectField>
+            )}
+          </FormGrid>
+        </FormSection>
+      </FormWide>
       {emergency !== 'hidden' && (
         <FormWide>
           <FormSection title={t.emergencyContact} variant="registration">
@@ -109,17 +102,38 @@ export function RegistrationContactFields({
                 label={t.emergencyContactPhone}
                 aria-label={`${t.emergencyContact} · ${t.emergencyContactPhone}`}
                 type="tel"
-                // An emergency contact is one unit: giving the name makes the number necessary.
                 required={
                   emergency === 'required' ||
                   Boolean(values.emergencyContactName)
                 }
                 maxLength={40}
+                placeholder="+49 151 0000000"
                 value={values.emergencyContactPhone}
                 onChange={(event) =>
                   set('emergencyContactPhone')(event.target.value)
                 }
               />
+            </FormGrid>
+          </FormSection>
+        </FormWide>
+      )}
+      {state('publicationPreference') !== 'hidden' && (
+        <FormWide>
+          <FormSection title={t.aboutYou} variant="registration">
+            <FormGrid variant="registration">
+              <SelectField
+                label={t.publicationPreference}
+                required={state('publicationPreference') === 'required'}
+                value={values.publicationPreference}
+                onChange={(event) =>
+                  set('publicationPreference')(event.target.value)
+                }
+              >
+                <option value="">{t.publicationNotGiven}</option>
+                <option value="name_visible">{t.publicationNameVisible}</option>
+                <option value="initials">{t.publicationInitials}</option>
+                <option value="hidden">{t.publicationHidden}</option>
+              </SelectField>
             </FormGrid>
           </FormSection>
         </FormWide>

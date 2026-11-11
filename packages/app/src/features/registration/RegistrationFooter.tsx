@@ -44,7 +44,9 @@ export function RegistrationFooter({
                 ? locale === 'de'
                   ? 'Weiter zur Prüfung'
                   : 'Continue to review'
-                : t.next}
+                : locale === 'de'
+                  ? 'Weiter zu Startmeldungen'
+                  : 'Continue to entries'}
         </Button>
       </div>
     </div>

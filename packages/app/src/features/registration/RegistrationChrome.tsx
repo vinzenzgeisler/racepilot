@@ -95,14 +95,6 @@ export function RegistrationHeader({
               EN
             </Button>
           </div>
-          {payload.organization.contactEmail && (
-            <p>
-              <span>{locale === 'de' ? 'Kontakt' : 'Contact'}</span>
-              <a href={`mailto:${payload.organization.contactEmail}`}>
-                {payload.organization.contactEmail}
-              </a>
-            </p>
-          )}
           <p>
             <span>{locale === 'de' ? 'Startgeld' : 'Entry fee'}</span>
             {model.startingFeeMessage}
@@ -111,6 +103,14 @@ export function RegistrationHeader({
             <span>{locale === 'de' ? 'Nennungsschluss' : 'Deadline'}</span>
             {model.registrationCloseDate ?? '—'}
           </p>
+          {payload.organization.contactEmail && (
+            <p>
+              <span>{locale === 'de' ? 'Kontakt' : 'Contact'}</span>
+              <a href={`mailto:${payload.organization.contactEmail}`}>
+                {payload.organization.contactEmail}
+              </a>
+            </p>
+          )}
         </div>
       </div>
     </header>

@@ -46,9 +46,10 @@
   grid-column: 1 / -1;
 }
 .registration-review-card {
-  padding: var(--space-5);
-  border: 1px solid var(--color-line);
-  background: var(--surface-panel);
+  padding: var(--space-4) 0;
+  border: 0;
+  border-top: 1px solid var(--color-line);
+  background: transparent;
 }
 .registration-review-card header {
   display: flex;
@@ -60,6 +61,17 @@
 .registration-review-card h3 {
   margin: 0;
   font: var(--text-heading-4);
+}
+.registration-review-card > h3 {
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-line);
+}
+.registration-review-card header h3 {
+  font: var(--text-label);
+  text-transform: uppercase;
+}
+.registration-review-card header + p {
+  font-weight: 600;
 }
 .registration-review-consents h4 {
   margin: 0 0 var(--space-3);
@@ -80,9 +92,9 @@
   border-top: 1px solid var(--color-line);
 }
 .registration-organizer-notice {
-  padding: var(--space-4);
-  border-left: var(--focus-width) solid var(--brand-primary);
-  background: var(--surface-page);
+  padding: var(--space-3) 0;
+  border: 0;
+  background: transparent;
   white-space: pre-line;
 }
 @media (width <= 48rem) {
