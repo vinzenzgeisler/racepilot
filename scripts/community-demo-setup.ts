@@ -1,12 +1,16 @@
+import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 import { defaultEntryStatusDimensionConfig } from '@racepilot/core';
 import { classes, demoWorkflow } from './community-demo-data.js';
 import {
   createEventRepository,
+  createOrganizationRepository,
   createEventClassRepository,
   createEventClassPricingRepository,
   createEntryWorkflowRepository,
   createEntryStatusDimensionRepository,
+  createRegistrationFormConfigRepository,
+  createEventConsentRepository,
   type createDatabase,
 } from '@racepilot/adapter-postgres';
 
@@ -51,6 +55,23 @@ const demoStatusConfig = {
 };
 
 export async function ensureDemoEvent(db: Db, ctx: DemoContext) {
+  const organizationRepo = createOrganizationRepository(db);
+  const organization = await organizationRepo.getById(ctx);
+  if (
+    organization &&
+    (!organization.contactEmail ||
+      organization.contactEmail === 'veranstalter@example.invalid' ||
+      organization.name === 'NENNBOX')
+  )
+    await organizationRepo.update(ctx, {
+      ...(organization.name === 'NENNBOX'
+        ? { name: 'Beispielverein e. V.' }
+        : {}),
+      ...(!organization.contactEmail ||
+      organization.contactEmail === 'veranstalter@example.invalid'
+        ? { contactEmail: 'nennung@beispiel.test' }
+        : {}),
+    });
   const eventRepo = createEventRepository(db);
   let event = (await eventRepo.listByOrganization(ctx)).find(
     (item) => item.slug === 'historischer-bergpreis-2027',
@@ -109,6 +130,129 @@ export async function ensureDemoEvent(db: Db, ctx: DemoContext) {
       'Statusreihenfolge nach Design',
     );
   }
+  const consentRepository = createEventConsentRepository(db);
+  const consentTerms = await consentRepository.get(ctx, event.id);
+  const existingConsentTerms = consentTerms ?? [];
+  const isPreviousDemoConsent =
+    existingConsentTerms.length > 0 &&
+    existingConsentTerms.length <= 2 &&
+    existingConsentTerms.every(
+      (term) => term.key === 'participation' && term.version === '1',
+    );
+  if (!consentTerms?.length || isPreviousDemoConsent) {
+    const examples = [
+      {
+        key: 'participation',
+        language: 'de' as const,
+        text: 'Ich bestätige, dass meine Angaben vollständig und korrekt sind und ich die Teilnahmebedingungen gelesen habe.',
+        required: true,
+      },
+      {
+        key: 'privacy',
+        language: 'de' as const,
+        text: 'Ich habe die Datenschutzhinweise zur Kenntnis genommen.',
+        required: true,
+      },
+      {
+        key: 'media',
+        language: 'de' as const,
+        text: 'Fotos und Videos, auf denen ich erkennbar bin, dürfen für Berichte über die Veranstaltung genutzt werden.',
+        required: false,
+      },
+      {
+        key: 'future-events',
+        language: 'de' as const,
+        text: 'Der Veranstalter darf mich über künftige Veranstaltungen informieren.',
+        required: false,
+      },
+      {
+        key: 'participation',
+        language: 'en' as const,
+        text: 'I confirm my details are complete and accurate and that I have read the participation terms.',
+        required: true,
+      },
+      {
+        key: 'privacy',
+        language: 'en' as const,
+        text: 'I have read the privacy information.',
+        required: true,
+      },
+      {
+        key: 'media',
+        language: 'en' as const,
+        text: 'Photos and videos showing me may be used in event reports.',
+        required: false,
+      },
+      {
+        key: 'future-events',
+        language: 'en' as const,
+        text: 'The organizer may contact me about future events.',
+        required: false,
+      },
+    ];
+    await consentRepository.update(
+      ctx,
+      event.id,
+      examples.map(({ language, text, key, required }) => ({
+        key,
+        version: '1',
+        language,
+        text,
+        hash: createHash('sha256').update(text).digest('hex'),
+        required,
+      })),
+      'demo-seed',
+    );
+  }
+  const formConfigs = createRegistrationFormConfigRepository(db);
+  const eventFormConfig = await formConfigs.getEvent(ctx, event.id);
+  const existingFormConfig =
+    eventFormConfig && typeof eventFormConfig === 'object'
+      ? eventFormConfig
+      : {};
+  const customFields = Array.isArray(existingFormConfig.customFields)
+    ? existingFormConfig.customFields
+    : [];
+  const demoCustomFields = [
+    {
+      key: 'biography',
+      type: 'text',
+      required: false,
+      label: { de: 'Sportlicher Werdegang', en: 'Racing background' },
+    },
+    {
+      key: 'organizer_notes',
+      type: 'text',
+      required: false,
+      label: {
+        de: 'Hinweise an den Veranstalter',
+        en: 'Notes for the organizer',
+      },
+    },
+  ];
+  if (
+    !('organizerNotice' in existingFormConfig) ||
+    customFields.length === 0 ||
+    customFields.some((field) => field.key === 'organizerNotes')
+  )
+    await formConfigs.updateEvent(
+      ctx,
+      event.id,
+      {
+        ...existingFormConfig,
+        organizerNotice:
+          existingFormConfig.organizerNotice ??
+          'Bitte bringe die Fahrzeugpapiere und einen gültigen Führerschein zur technischen Abnahme mit. Die Startnummer wird am Veranstaltungstag ausgegeben.',
+        customFields: customFields.some(
+          (field) => field.key === 'organizerNotes',
+        )
+          ? demoCustomFields
+          : customFields.length > 0
+            ? customFields
+            : demoCustomFields,
+      },
+      'demo-seed',
+    );
   const classRepo = createEventClassRepository(db);
   const pricing = createEventClassPricingRepository(db);
   const existingClasses = await classRepo.listByEvent(ctx, event.id);

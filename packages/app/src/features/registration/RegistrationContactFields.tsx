@@ -47,8 +47,21 @@ export function RegistrationContactFields({
     );
   const emergency = state('emergencyContact');
   return (
-    <FormGrid>
+    <FormGrid variant="registration">
       {text('phone', 'phone', 'tel')}
+      {state('country') !== 'hidden' && (
+        <SelectField
+          label={t.country}
+          required={state('country') === 'required'}
+          value={values.country}
+          onChange={(event) => set('country')(event.target.value)}
+        >
+          <option value="">{t.countryNotGiven}</option>
+          <option value="DE">{t.germany}</option>
+          <option value="AT">{t.austria}</option>
+          <option value="CH">{t.switzerland}</option>
+        </SelectField>
+      )}
       {state('publicationPreference') !== 'hidden' && (
         <SelectField
           label={t.publicationPreference}
@@ -67,7 +80,7 @@ export function RegistrationContactFields({
         state('city') !== 'hidden') && (
         <FormWide>
           <FormSection title={t.address} variant="registration">
-            <FormGrid>
+            <FormGrid variant="registration">
               {text('street', 'street')}
               {text('postalCode', 'postalCode')}
               {text('city', 'city')}
@@ -78,7 +91,7 @@ export function RegistrationContactFields({
       {emergency !== 'hidden' && (
         <FormWide>
           <FormSection title={t.emergencyContact} variant="registration">
-            <FormGrid>
+            <FormGrid variant="registration">
               <Field
                 label={t.emergencyContactName}
                 aria-label={`${t.emergencyContact} · ${t.emergencyContactName}`}

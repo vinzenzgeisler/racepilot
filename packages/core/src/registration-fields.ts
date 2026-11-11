@@ -3,6 +3,8 @@
  * Shared by the delivered form and the server-side check, so what the form asks for and
  * what the server accepts cannot drift apart.
  */
+import { RegistrationFormConfigPatchSchema } from '@racepilot/contracts';
+
 export type RegistrationFieldState = 'required' | 'optional' | 'hidden';
 
 export const registrationDetailFieldKeys = [
@@ -24,29 +26,37 @@ export type RegistrationFieldStates = Record<
   RegistrationFieldState
 >;
 
-type StoredConfig = { fields?: unknown } | null | undefined;
-const isState = (value: unknown): value is RegistrationFieldState =>
-  value === 'required' || value === 'optional' || value === 'hidden';
+type StoredConfig = unknown;
 
 /** A key missing from an older stored configuration means the default: optional. */
 export function resolveRegistrationFieldStates(
   organization: StoredConfig,
   event: StoredConfig,
 ): RegistrationFieldStates {
-  const read = (config: StoredConfig, key: string) => {
-    const fields = config?.fields;
-    if (!fields || typeof fields !== 'object') return undefined;
-    const state = (fields as Record<string, { state?: unknown } | undefined>)[
-      key
-    ]?.state;
-    return isState(state) ? state : undefined;
+  const parse = (config: StoredConfig) => {
+    const result = RegistrationFormConfigPatchSchema.safeParse(config);
+    return result.success ? result.data.fields : undefined;
   };
-  return Object.fromEntries(
-    registrationDetailFieldKeys.map((key) => [
-      key,
-      read(event, key) ?? read(organization, key) ?? 'optional',
-    ]),
-  ) as RegistrationFieldStates;
+  const organizationFields = parse(organization);
+  const eventFields = parse(event);
+  const resolved: RegistrationFieldStates = {
+    phone: 'optional',
+    street: 'optional',
+    postalCode: 'optional',
+    city: 'optional',
+    emergencyContact: 'optional',
+    publicationPreference: 'optional',
+    displacement: 'optional',
+    cylinders: 'optional',
+    owner: 'optional',
+    history: 'optional',
+  };
+  for (const key of registrationDetailFieldKeys)
+    resolved[key] =
+      eventFields?.[key]?.state ??
+      organizationFields?.[key]?.state ??
+      'optional';
+  return resolved;
 }
 
 export interface RegistrationDetailsInput {

@@ -148,6 +148,7 @@ export const RegistrationDraftSchema = z
     lastName: z.string().max(100),
     email: z.string().email().max(254),
     dateOfBirth: z.string().max(10),
+    country: z.string().max(2).optional(),
     guardianName: z.string().max(200),
     guardianEmail: z.string().max(254),
     // Added later: drafts saved before these fields existed still resume.

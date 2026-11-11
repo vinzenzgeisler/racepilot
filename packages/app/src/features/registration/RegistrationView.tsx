@@ -1,4 +1,4 @@
-import { Button, Checkbox, Field, Steps } from '@racepilot/ui';
+import { Checkbox, Field, Steps } from '@racepilot/ui';
 import type { CSSProperties } from 'react';
 import type { RegistrationModel } from './RegistrationModel.js';
 import type { RegistrationActions } from './RegistrationActions.js';
@@ -9,6 +9,8 @@ import {
 import { RegistrationVehicleFields } from './RegistrationVehicleFields.js';
 import { RegistrationCustomAnswers } from './RegistrationCustomAnswers.js';
 import { RegistrationContactFields } from './RegistrationContactFields.js';
+import { RegistrationReview } from './RegistrationReview.js';
+import { RegistrationFooter } from './RegistrationFooter.js';
 export function RegistrationView({
   model,
   actions,
@@ -44,12 +46,10 @@ export function RegistrationView({
     error,
     step,
     setStep,
-    submitting,
     steps,
-    savingDraft,
     draftMessage,
   } = model;
-  const { submit, saveDraft, uploadCustomField } = actions;
+  const { submit, uploadCustomField } = actions;
   const brandStyle: CSSProperties & Record<`--brand-${string}`, string> = {
     '--brand-primary': contrastColors.primarySurface,
     '--brand-accent': contrastColors.accentSurface,
@@ -81,7 +81,19 @@ export function RegistrationView({
       )}
       <main className="registration-container">
         <Steps
-          steps={steps.map((item) => item.title[locale])}
+          steps={steps.map((item) =>
+            item.id === 'driver'
+              ? locale === 'de'
+                ? 'Fahrer'
+                : 'Driver'
+              : item.id === 'vehicles'
+                ? locale === 'de'
+                  ? 'Startmeldungen'
+                  : 'Entries'
+                : locale === 'de'
+                  ? 'Prüfen und absenden'
+                  : 'Review and submit',
+          )}
           current={step}
           label={locale === 'de' ? 'Anmeldeschritte' : 'Registration steps'}
           completedLabel={locale === 'de' ? 'Abgeschlossen' : 'Completed'}
@@ -90,73 +102,103 @@ export function RegistrationView({
         <div className="registration-layout">
           <form
             className="registration-form"
+            id="registration-form"
             ref={formRef}
             onSubmit={submit}
             noValidate={false}
           >
             <fieldset>
-              <legend>{currentStep?.title[locale]}</legend>
-              {currentStep?.fields.map((field) => {
-                if (field.key === 'entries')
+              <legend>
+                {step === steps.length - 1
+                  ? locale === 'de'
+                    ? 'Bitte prüfen'
+                    : 'Please review'
+                  : currentStep?.id === 'driver'
+                    ? locale === 'de'
+                      ? 'Fahrer'
+                      : 'Driver'
+                    : currentStep?.id === 'vehicles'
+                      ? locale === 'de'
+                        ? 'Startmeldungen'
+                        : 'Entries'
+                      : currentStep?.title[locale]}
+              </legend>
+              {step !== steps.length - 1 && currentStep?.id === 'vehicles' && (
+                <p className="registration-step-description">
+                  {locale === 'de'
+                    ? 'Lege für jedes Fahrzeug eine Startmeldung an. Mehrere Starts sind möglich.'
+                    : 'Create an entry for each vehicle. You can add multiple entries.'}
+                </p>
+              )}
+              {step === steps.length - 1 ? (
+                <RegistrationReview
+                  model={model}
+                  onEditDriver={() => setStep(0)}
+                  onEditEntries={() => setStep(1)}
+                />
+              ) : (
+                currentStep?.fields.map((field) => {
+                  if (field.key === 'entries')
+                    return (
+                      <RegistrationVehicleFields
+                        key={field.key}
+                        field={field}
+                        locale={locale}
+                        vehicles={vehicles}
+                        setVehicle={setVehicle}
+                        setVehicles={setVehicles}
+                        payload={payload}
+                        t={t}
+                        numberLookup={numberLookup}
+                        numberAvailability={numberAvailability}
+                        setNumberAvailability={setNumberAvailability}
+                        organizationId={organizationId}
+                        eventSlug={eventSlug}
+                      />
+                    );
+                  if (field.key === 'consent')
+                    return (
+                      <div key={field.key} className="consent-list">
+                        {payload.consents
+                          .filter((item) => item.language === locale)
+                          .map((term) => (
+                            <Checkbox
+                              key={`${term.key}:${term.version}:${term.language}`}
+                              label={`${term.required === false ? (locale === 'de' ? 'Freiwillig · ' : 'Optional · ') : locale === 'de' ? 'Erforderlich · ' : 'Required · '}${term.text} (${t.consent})`}
+                              required={term.required !== false}
+                              checked={
+                                accepted[
+                                  `${term.key}:${term.version}:${term.language}`
+                                ] ?? false
+                              }
+                              onChange={(e) =>
+                                setAccepted((old) => ({
+                                  ...old,
+                                  [`${term.key}:${term.version}:${term.language}`]:
+                                    e.target.checked,
+                                }))
+                              }
+                            />
+                          ))}
+                      </div>
+                    );
+                  const key = field.key;
                   return (
-                    <RegistrationVehicleFields
+                    <Field
                       key={field.key}
-                      field={field}
-                      locale={locale}
-                      vehicles={vehicles}
-                      setVehicle={setVehicle}
-                      setVehicles={setVehicles}
-                      payload={payload}
-                      t={t}
-                      numberLookup={numberLookup}
-                      numberAvailability={numberAvailability}
-                      setNumberAvailability={setNumberAvailability}
-                      organizationId={organizationId}
-                      eventSlug={eventSlug}
+                      label={field.label[locale]}
+                      type={field.type}
+                      required={field.required}
+                      value={driverFieldValue(values, key)}
+                      onChange={(e) =>
+                        setValues((old) =>
+                          updateDriverField(old, key, e.target.value),
+                        )
+                      }
                     />
                   );
-                if (field.key === 'consent')
-                  return (
-                    <div key={field.key} className="consent-list">
-                      {payload.consents
-                        .filter((item) => item.language === locale)
-                        .map((term) => (
-                          <Checkbox
-                            key={`${term.key}:${term.version}:${term.language}`}
-                            label={`${term.required === false ? (locale === 'de' ? 'Freiwillig · ' : 'Optional · ') : locale === 'de' ? 'Erforderlich · ' : 'Required · '}${term.text} (${t.consent})`}
-                            required={term.required !== false}
-                            checked={
-                              accepted[
-                                `${term.key}:${term.version}:${term.language}`
-                              ] ?? false
-                            }
-                            onChange={(e) =>
-                              setAccepted((old) => ({
-                                ...old,
-                                [`${term.key}:${term.version}:${term.language}`]:
-                                  e.target.checked,
-                              }))
-                            }
-                          />
-                        ))}
-                    </div>
-                  );
-                const key = field.key;
-                return (
-                  <Field
-                    key={field.key}
-                    label={field.label[locale]}
-                    type={field.type}
-                    required={field.required}
-                    value={driverFieldValue(values, key)}
-                    onChange={(e) =>
-                      setValues((old) =>
-                        updateDriverField(old, key, e.target.value),
-                      )
-                    }
-                  />
-                );
-              })}
+                })
+              )}
               {currentStep?.id === 'driver' && (
                 <RegistrationContactFields
                   config={payload.registrationFormConfig}
@@ -207,43 +249,15 @@ export function RegistrationView({
               )}
             </fieldset>
             {error && <p role="alert">{error}</p>}
-            <div className="registration-actions">
-              {step > 0 && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => setStep(step - 1)}
-                >
-                  {t.previous}
-                </Button>
-              )}
-              <Button type="submit" disabled={submitting}>
-                {submitting
-                  ? t.sending
-                  : step === steps.length - 1
-                    ? t.submit
-                    : t.next}
-              </Button>
-              <Button
-                type="button"
-                variant="text"
-                disabled={savingDraft}
-                onClick={() => void saveDraft()}
-              >
-                {savingDraft
-                  ? t.sending
-                  : locale === 'de'
-                    ? 'Zwischenspeichern'
-                    : 'Save for later'}
-              </Button>
-            </div>
             {draftMessage && <p role="status">{draftMessage}</p>}
+            <RegistrationFooter model={model} actions={actions} />
           </form>
           <RegistrationSummary model={model} />
         </div>
       </main>
-      <footer className="registration-footer">
-        {payload.event.name} · Nennung mit NENNBOX
+      <footer className="registration-site-footer">
+        <span>{payload.organization.name}</span>
+        <span>Nennung mit NENNBOX</span>
       </footer>
     </section>
   );

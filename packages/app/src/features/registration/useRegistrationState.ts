@@ -36,6 +36,9 @@ export function useRegistrationState({
     dateOfBirth: initialDraft?.dateOfBirth ?? '',
     guardianName: initialDraft?.guardianName ?? '',
     guardianEmail: initialDraft?.guardianEmail ?? '',
+    country:
+      initialDraft?.country ??
+      (defaultLocale.toLowerCase().startsWith('de') ? 'DE' : ''),
     phone: initialDraft?.phone ?? '',
     street: initialDraft?.street ?? '',
     postalCode: initialDraft?.postalCode ?? '',

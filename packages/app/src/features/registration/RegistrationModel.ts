@@ -47,6 +47,17 @@ export function deriveRegistration(
         : locale === 'de'
           ? 'Preis für Auswahl nicht verfügbar'
           : 'Price unavailable for selection');
+  const configuredFees = payload.pricing.map((item) => item.baseCents);
+  const feeLow = configuredFees.length ? Math.min(...configuredFees) : null;
+  const feeHigh = configuredFees.length ? Math.max(...configuredFees) : null;
+  const startingFeeMessage =
+    feeLow === null || feeHigh === null
+      ? locale === 'de'
+        ? 'Preis pro Fahrzeug auf Anfrage'
+        : 'Fee per vehicle on request'
+      : feeLow === feeHigh
+        ? `${new Intl.NumberFormat(locale, { style: 'currency', currency: payload.currency }).format(feeLow / 100)} ${locale === 'de' ? 'pro Fahrzeug' : 'per vehicle'}`
+        : `${new Intl.NumberFormat(locale, { style: 'currency', currency: payload.currency }).format(feeLow / 100)}–${new Intl.NumberFormat(locale, { style: 'currency', currency: payload.currency }).format(feeHigh / 100)} ${locale === 'de' ? 'pro Fahrzeug' : 'per vehicle'}`;
   const setVehicle = (index: number, patch: Partial<VehicleEntry>) =>
     setVehicles((old) =>
       old.map((item, i) => (i === index ? { ...item, ...patch } : item)),
@@ -60,6 +71,7 @@ export function deriveRegistration(
     guardianRequired,
     registrationCloseDate,
     estimateMessage,
+    startingFeeMessage,
     setVehicle,
   };
 }

@@ -28,7 +28,7 @@ export function Steps({
           {variant === 'registration' ? (
             <>
               <span className="nb-step-registration-mark" aria-hidden="true">
-                {String(i + 1).padStart(2, '0')}
+                {i < current ? '✓' : String(i + 1).padStart(2, '0')}
               </span>
               <span>{step}</span>
             </>

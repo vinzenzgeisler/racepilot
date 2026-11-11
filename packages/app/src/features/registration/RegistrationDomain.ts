@@ -65,6 +65,7 @@ export const emptyVehicle = (): VehicleEntry => ({
 });
 export type DriverContact = {
   phone: string;
+  country: string;
   street: string;
   postalCode: string;
   city: string;
@@ -139,6 +140,11 @@ export const translations = {
     consent: 'Ich stimme zu',
     emailError: 'Bitte gib eine gültige E-Mail-Adresse ein.',
     phone: 'Telefon',
+    country: 'Land',
+    countryNotGiven: 'Bitte auswählen',
+    germany: 'Deutschland',
+    austria: 'Österreich',
+    switzerland: 'Schweiz',
     street: 'Straße und Hausnummer',
     postalCode: 'PLZ',
     city: 'Ort',
@@ -182,6 +188,11 @@ export const translations = {
     consent: 'I agree',
     emailError: 'Enter a valid email address.',
     phone: 'Phone',
+    country: 'Country',
+    countryNotGiven: 'Select country',
+    germany: 'Germany',
+    austria: 'Austria',
+    switzerland: 'Switzerland',
     street: 'Street and number',
     postalCode: 'Postal code',
     city: 'City',

@@ -64,27 +64,27 @@
   min-width: 0;
   align-items: flex-start;
   gap: var(--space-2);
-  padding-bottom: var(--space-3);
+  padding: var(--space-6) 0 var(--space-3);
   color: var(--color-graphite);
   font-size: var(--type-small-size);
 }
 .nb-steps.is-registration li::after {
   position: absolute;
   right: 0;
-  bottom: -1px;
+  top: 0;
   left: 0;
   height: 1px;
   background: var(--color-sage);
   content: '';
 }
 .nb-steps.is-registration li:nth-child(1)::after {
-  height: 8px;
+  height: var(--registration-step-bar-1);
 }
 .nb-steps.is-registration li:nth-child(2)::after {
-  height: 14px;
+  height: var(--registration-step-bar-2);
 }
 .nb-steps.is-registration li:nth-child(3)::after {
-  height: 20px;
+  height: var(--registration-step-bar-3);
 }
 .nb-steps.is-registration li[aria-current='step'] {
   color: var(--color-ink);

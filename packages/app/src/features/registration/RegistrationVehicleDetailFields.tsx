@@ -25,7 +25,7 @@ export function RegistrationVehicleDetailFields({
   const required = (key: keyof RegistrationFormConfig['fields']) =>
     state(key) === 'required';
   return (
-    <FormGrid>
+    <FormGrid variant="registration">
       {state('displacement') !== 'hidden' && (
         <Field
           label={t.displacement}

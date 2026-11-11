@@ -111,6 +111,9 @@ export function createRegistrationActions(
         lastName: values.lastName,
         email: values.email,
         dateOfBirth: values.dateOfBirth,
+        ...(asked(payload!.registrationFormConfig, 'country') && values.country
+          ? { country: values.country }
+          : {}),
         ...contactPayload(values, payload!.registrationFormConfig),
         ...(guardianRequired
           ? {
@@ -206,10 +209,14 @@ export function createRegistrationActions(
         },
       );
       if (!response.ok) throw new Error();
+      const savedAt = new Intl.DateTimeFormat(locale, {
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date());
       setDraftMessage(
         locale === 'de'
-          ? 'Wenn die Nennung gespeichert werden kann, erhältst du einen Link per E-Mail.'
-          : 'If this entry can be saved, you will receive a continuation link by email.',
+          ? `Entwurf gespeichert · ${savedAt}`
+          : `Draft saved · ${savedAt}`,
       );
     } catch {
       setDraftMessage(t.retry);

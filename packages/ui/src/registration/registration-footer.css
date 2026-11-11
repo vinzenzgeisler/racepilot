@@ -1,0 +1,42 @@
+.registration-footer {
+  margin-top: var(--space-8);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-line);
+}
+.registration-footer .registration-actions {
+  justify-content: space-between;
+  padding: 0;
+  border: 0;
+}
+.registration-site-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  max-width: var(--registration-content-max);
+  margin-inline: auto;
+  padding: var(--space-6) clamp(var(--space-4), 4vw, var(--space-12));
+  border-top: 1px solid var(--color-line);
+  color: var(--color-graphite);
+}
+.registration-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: space-between;
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--color-line);
+}
+.registration :focus-visible {
+  outline: var(--focus-width) solid var(--brand-accent, var(--color-marshal));
+  outline-offset: var(--focus-offset);
+}
+@media (width <= 48rem) {
+  .registration-footer .registration-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .registration-site-footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
