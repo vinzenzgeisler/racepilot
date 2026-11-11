@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { healthResponseSchema, RuntimeBootstrapResponse } from './index.js';
+import {
+  healthResponseSchema,
+  RuntimeBootstrapResponse,
+  MessageRecipientFilterSchema,
+} from './index.js';
 import {
   deriveAccessibleBrandColors,
   RegistrationFormConfigSchema,
@@ -214,6 +218,23 @@ describe('public registration contracts', () => {
         ...validRequest,
         person: { ...validRequest.person, email: 'not-email' },
       }).success,
+    ).toBe(false);
+  });
+});
+
+describe('message recipient filter contract', () => {
+  it('keeps acceptance statuses separate from email verification', () => {
+    expect(
+      MessageRecipientFilterSchema.safeParse({ statuses: ['accepted'] })
+        .success,
+    ).toBe(true);
+    expect(
+      MessageRecipientFilterSchema.safeParse({ statuses: ['verified'] })
+        .success,
+    ).toBe(false);
+    expect(
+      MessageRecipientFilterSchema.safeParse({ statuses: ['unverified'] })
+        .success,
     ).toBe(false);
   });
 });
