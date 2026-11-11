@@ -60,7 +60,7 @@ function createMessageRouteGuard(context: ApiRoutesContext) {
 }
 
 export function registerMessageRoutes(context: ApiRoutesContext): void {
-  const { app, deps, resolveMemberContext } = context;
+  const { app, deps } = context;
   const guard = createMessageRouteGuard(context);
   app.post('/admin/events/:eventId/messages/recipients/preview', async (c) => {
     const access = await guard(c.req.raw, 'entry:read');

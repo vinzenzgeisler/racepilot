@@ -153,11 +153,12 @@ describe('message campaign send use case', () => {
   type TestCampaign = { id: string };
   type TestRecipient = { id: string };
   type TestResponse = { id: string };
-  type TestPorts = import('./messages.js').MessageCampaignSendPorts<
-    TestCampaign,
-    TestRecipient,
-    TestResponse
-  >;
+  type TestPorts =
+    import('./message-campaign-send.js').MessageCampaignSendPorts<
+      TestCampaign,
+      TestRecipient,
+      TestResponse
+    >;
   const context = {
     deploymentMode: 'community' as const,
     organizationId: 'org-a' as never,
@@ -179,13 +180,13 @@ describe('message campaign send use case', () => {
     attachments: [],
   };
   const transactionCalls: string[] = [];
-  const transaction: import('./messages.js').MessageCampaignTransaction<
+  const transaction: import('./message-campaign-send.js').MessageCampaignTransaction<
     TestCampaign,
     TestRecipient,
     TestResponse
   > = {
     resolveRecipients: async (): Promise<
-      import('./messages.js').MessageCampaignRecipient[]
+      import('./message-campaign-send.js').MessageCampaignRecipient[]
     > => {
       transactionCalls.push('resolve');
       return [];
@@ -209,7 +210,7 @@ describe('message campaign send use case', () => {
   };
 
   it('keeps template rejection typed and does not begin a transaction', async () => {
-    const { sendMessageCampaign } = await import('./messages.js');
+    const { sendMessageCampaign } = await import('./message-campaign-send.js');
     const result = await sendMessageCampaign(
       context,
       input.eventId,
@@ -229,7 +230,7 @@ describe('message campaign send use case', () => {
   });
 
   it('returns typed attachment count and validation errors before opening a transaction', async () => {
-    const { sendMessageCampaign } = await import('./messages.js');
+    const { sendMessageCampaign } = await import('./message-campaign-send.js');
     const tooMany = await sendMessageCampaign(
       context,
       input.eventId,
@@ -274,7 +275,7 @@ describe('message campaign send use case', () => {
   });
 
   it('resolves recipients inside the transaction and returns a typed empty-selection error', async () => {
-    const { sendMessageCampaign } = await import('./messages.js');
+    const { sendMessageCampaign } = await import('./message-campaign-send.js');
     const result = await sendMessageCampaign(
       context,
       input.eventId,
@@ -291,14 +292,14 @@ describe('message campaign send use case', () => {
   });
 
   it('returns an idempotency conflict instead of an absent campaign', async () => {
-    const { sendMessageCampaign } = await import('./messages.js');
+    const { sendMessageCampaign } = await import('./message-campaign-send.js');
     const conflictPorts: TestPorts = {
       ...ports,
       transaction: async (_context, work) =>
         work({
           ...transaction,
           resolveRecipients: async (): Promise<
-            import('./messages.js').MessageCampaignRecipient[]
+            import('./message-campaign-send.js').MessageCampaignRecipient[]
           > => [
             {
               entryId: 'entry-a',

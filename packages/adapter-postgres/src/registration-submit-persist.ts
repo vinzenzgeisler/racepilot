@@ -1,11 +1,15 @@
 import { desc, eq, and } from 'drizzle-orm';
-import { calculatePrice, normalizeRequestedStartNumber } from '@racepilot/core';
+import {
+  calculatePrice,
+  normalizeRequestedStartNumber,
+  MESSAGE_VERIFICATION_TOKEN_TTL_MS,
+} from '@racepilot/core';
 import type { RequestContext } from '@racepilot/core';
 import { eventClassPricingRules } from './schema/billing.js';
 import { emailTemplateVersions } from './mail-schema.js';
 import { vehicles } from './schema/entries.js';
 import { consentEvidence } from './schema/forms.js';
-import { groupEmailVerifications } from './schema/public-registration.js';
+import { persistRegistrationVerificationToken } from './registration-verification-token.js';
 import { publicEntrySubmissions } from './schema/public-registration.js';
 import { createEntryRepository } from './entry-repository.js';
 import { createInvoiceRepository } from './billing-invoices.js';
@@ -142,13 +146,13 @@ export async function persistRegistrationSubmission(args: {
       textHash: term.hash,
       acceptedAt: receivedAt,
     });
-  await tx.insert(groupEmailVerifications).values({
+  await persistRegistrationVerificationToken(tx, {
     organizationId: ctx.organizationId,
     eventId: event.id,
     registrationGroupId: groupId,
     tokenHash,
     expiresAt: new Date(
-      receivedAt.getTime() + (tokenTtlMs ?? 24 * 60 * 60_000),
+      receivedAt.getTime() + (tokenTtlMs ?? MESSAGE_VERIFICATION_TOKEN_TTL_MS),
     ),
   });
   const verificationUrl = new URL(

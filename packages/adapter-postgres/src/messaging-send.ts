@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type {
   MessageCampaignCreate,
   MessageCampaignSendPorts,
@@ -7,13 +7,17 @@ import type {
   ObjectStorageProvider,
   RequestContext,
 } from '@racepilot/core';
-import { sendMessageCampaign } from '@racepilot/core';
-import { MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/contracts';
+import {
+  MESSAGE_ATTACHMENT_LIMITS,
+  sendMessageCampaign,
+} from '@racepilot/core';
 import { validateMessageAttachmentMetadata } from './messaging-attachments.js';
 import type { Database } from './database.js';
 import { organizations } from './schema/organization.js';
-import { groupEmailVerifications } from './schema/public-registration.js';
-import { createRegistrationVerificationToken } from './registration-verification-token.js';
+import {
+  createRegistrationVerificationToken,
+  persistRegistrationVerificationToken,
+} from './registration-verification-token.js';
 import { enqueueMailOutbox } from './mail-outbox.js';
 import {
   messageCampaignAudits,
@@ -141,30 +145,14 @@ export function createMessageSender(
               if (!canonicalBaseUrl || !value.recipient.registrationGroupId)
                 throw new Error('Registration verification is unavailable');
               const now = new Date();
-              await tx
-                .update(groupEmailVerifications)
-                .set({ consumedAt: now })
-                .where(
-                  and(
-                    eq(
-                      groupEmailVerifications.organizationId,
-                      context.organizationId,
-                    ),
-                    eq(groupEmailVerifications.eventId, value.eventId),
-                    eq(
-                      groupEmailVerifications.registrationGroupId,
-                      value.recipient.registrationGroupId,
-                    ),
-                    isNull(groupEmailVerifications.consumedAt),
-                  ),
-                );
               const token = createRegistrationVerificationToken(now);
-              await tx.insert(groupEmailVerifications).values({
+              await persistRegistrationVerificationToken(tx, {
                 organizationId: context.organizationId,
                 eventId: value.eventId,
                 registrationGroupId: value.recipient.registrationGroupId,
                 tokenHash: token.tokenHash,
                 expiresAt: token.expiresAt,
+                replaceExisting: true,
               });
               const verificationUrl = new URL(
                 `/registration/verify?token=${encodeURIComponent(token.token)}`,

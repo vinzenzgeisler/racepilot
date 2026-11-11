@@ -1,9 +1,9 @@
+import { MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/core';
 import type {
   MessageCampaignSendResult,
   ObjectStorageProvider,
 } from '@racepilot/core';
 import type { OrganizationId } from '@racepilot/core';
-import { MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/contracts';
 
 export async function validateMessageAttachmentMetadata(
   storage: ObjectStorageProvider | undefined,
