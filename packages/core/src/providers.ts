@@ -73,6 +73,17 @@ export function permissionsForRole(role: MembershipRole): ReadonlySet<string> {
     : new Set(['role:member']);
 }
 
+export interface MailAttachmentReference {
+  readonly objectId: string;
+  readonly filename: string;
+}
+
+export interface MailAttachment {
+  readonly filename: string;
+  readonly contentType: string;
+  readonly content: Uint8Array;
+}
+
 export interface MailMessage {
   readonly organizationId: OrganizationId;
   readonly to: string;
@@ -82,6 +93,7 @@ export interface MailMessage {
   readonly idempotencyKey: string;
   readonly from?: string;
   readonly replyTo?: string;
+  readonly attachments?: readonly MailAttachment[];
 }
 
 export interface MailProvider {
@@ -108,6 +120,10 @@ export interface ObjectStorageProvider {
     readonly body: Uint8Array;
     readonly contentType: string;
   }): Promise<StoredObjectRef>;
+  head?(
+    organizationId: OrganizationId,
+    objectId: string,
+  ): Promise<StoredObjectRef | null>;
   get(
     organizationId: OrganizationId,
     objectId: string,
@@ -134,6 +150,15 @@ export async function verifyObjectStorageContract(
     !/^[a-f0-9]{64}$/.test(ref.sha256)
   )
     throw new Error('Storage put contract failed');
+  const metadata = await storage.head?.(owner, ref.objectId);
+  if (
+    storage.head &&
+    (!metadata ||
+      metadata.size !== ref.size ||
+      metadata.contentType !== ref.contentType ||
+      metadata.sha256 !== ref.sha256)
+  )
+    throw new Error('Storage head contract failed');
   const result = await storage.get(owner, ref.objectId);
   if (
     !result ||

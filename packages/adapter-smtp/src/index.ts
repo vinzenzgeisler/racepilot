@@ -53,6 +53,15 @@ async function send(
       subject: message.subject,
       text: message.text,
       ...(message.html ? { html: message.html } : {}),
+      ...(message.attachments?.length
+        ? {
+            attachments: message.attachments.map((attachment) => ({
+              filename: attachment.filename,
+              content: Buffer.from(attachment.content),
+              contentType: attachment.contentType,
+            })),
+          }
+        : {}),
     });
   } catch (cause) {
     throw new ProviderError('unavailable', 'Mail delivery failed', { cause });

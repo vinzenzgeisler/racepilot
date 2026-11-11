@@ -68,12 +68,15 @@ export async function listEntryMessages(
   return rows.map((row): EntryMessage => ({
     id: row.id,
     status: row.status as EntryMessage['status'],
-    subject: renderOutboxSubject(
-      row.templateKey,
-      row.locale,
-      row.subjectTemplate,
-      { eventName: entry.eventName, ...row.variables },
-    ),
+    subject:
+      row.templateKey === 'message-campaign'
+        ? (row.variables.subject ?? '')
+        : renderOutboxSubject(
+            row.templateKey,
+            row.locale,
+            row.subjectTemplate,
+            { eventName: entry.eventName, ...row.variables },
+          ),
     templateKey: row.templateKey,
     recipient: row.recipient,
     createdAt: row.createdAt.toISOString(),

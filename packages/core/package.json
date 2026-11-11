@@ -11,5 +11,8 @@
   "files": [
     "dist"
   ],
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@racepilot/contracts": "0.0.0"
+  }
 }

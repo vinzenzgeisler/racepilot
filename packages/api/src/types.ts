@@ -20,6 +20,12 @@ import {
   type MembershipRepository,
   type MembershipBootstrap,
   type ExternalIdentity,
+  type MessageCampaignCreate,
+  type MessageCampaignSendResult,
+  type MessageCampaignData,
+  type MessagePreviewResult,
+  type MessageRecipientFilter,
+  type MessageTemplate,
 } from '@racepilot/core';
 import { type RegistrationSettings } from '@racepilot/contracts';
 
@@ -40,6 +46,55 @@ export interface ApiDeps {
   events: EventRepository;
   classes?: EventClassRepository;
   entries?: EntryRepository;
+  messages?: {
+    preview(
+      context: RequestContext,
+      eventId: string,
+      filter: MessageRecipientFilter,
+    ): Promise<
+      MessagePreviewResult<{
+        count: number;
+        recipients: Array<{
+          entryId: string | null;
+          email: string;
+          name: string;
+        }>;
+      }>
+    >;
+    send(
+      context: RequestContext,
+      eventId: string,
+      idempotencyKey: string,
+      input: MessageCampaignCreate,
+      actor: string,
+    ): Promise<MessageCampaignSendResult<MessageCampaignData>>;
+    retryFailed(
+      context: RequestContext,
+      campaignId: string,
+    ): Promise<unknown | null>;
+    list(context: RequestContext, eventId: string): Promise<unknown[] | null>;
+    listTemplates(
+      context: RequestContext,
+      eventId: string,
+    ): Promise<unknown[] | null>;
+    saveTemplate(
+      context: RequestContext,
+      input: MessageTemplate,
+    ): Promise<unknown | null>;
+    previewTemplate(
+      context: RequestContext,
+      eventId: string,
+      filter: MessageRecipientFilter,
+      subject: string,
+      text: string,
+    ): Promise<MessagePreviewResult<unknown>>;
+    quickAction(
+      context: RequestContext,
+      eventId: string,
+      action: 'resend-verification' | 'remind-open-payments',
+      actor: string,
+    ): Promise<MessageCampaignSendResult<MessageCampaignData>>;
+  };
   entryDetails?: EntryDetailRepository;
   entryExports?: EntryExportRepository;
   entryConfirmations?: EntryConfirmationRepository;

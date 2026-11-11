@@ -1,5 +1,6 @@
 import type { Database } from './database.js';
-import { createHash, randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { createRegistrationVerificationToken } from './registration-verification-token.js';
 import { createRegistrationUploadMethods } from './registration-upload.js';
 import { createRegistrationStartNumberMethods } from './registration-start-number.js';
 import { createRegistrationSaveDraftMethods } from './registration-save-draft.js';
@@ -39,8 +40,10 @@ export function createPublicRegistrationService(
       eventSlug: string,
       payload: PublicRegistrationPayload,
     ) => {
-      const token = randomBytes(32).toString('base64url');
-      const tokenHash = hashToken(token);
+      const { token, tokenHash } = createRegistrationVerificationToken(
+        new Date(),
+        options.tokenTtlMs,
+      );
       const canonicalize = (value: unknown): string => {
         if (Array.isArray(value))
           return `[${value.map(canonicalize).join(',')}]`;

@@ -1,10 +1,12 @@
 import type { Database } from './database.js';
+import { transitionMessageRecipient } from '@racepilot/core';
 
 import { sql } from 'drizzle-orm';
 
 import { eq, and, or, lt, lte } from 'drizzle-orm';
 
 import { organizations } from './schema/organization.js';
+import { messageCampaignRecipients } from './messaging-schema.js';
 
 import {
   emailOutbox,
@@ -27,6 +29,7 @@ export interface NewMailOutboxMessage {
   recipient: string;
   idempotencyKey: string;
   variables: Record<string, string>;
+  attachmentRefs?: readonly { objectId: string; filename: string }[];
   correlationId?: string;
 }
 
@@ -49,6 +52,7 @@ export async function enqueueMailOutbox(
       recipient: input.recipient,
       idempotencyKey: input.idempotencyKey,
       variables: input.variables,
+      attachmentRefs: input.attachmentRefs ? [...input.attachmentRefs] : [],
     })
     .onConflictDoNothing({
       target: [emailOutbox.organizationId, emailOutbox.idempotencyKey],
@@ -96,12 +100,14 @@ export function createMailOutboxRepository(
       | 'entry-received'
       | 'accepted'
       | 'rejected'
-      | 'status-change',
+      | 'status-change'
+      | 'message-campaign',
     templateVersion: row.templateVersion,
     locale: row.locale as 'de' | 'en',
     recipient: row.recipient,
     idempotencyKey: row.idempotencyKey,
     variables: row.variables,
+    attachmentRefs: row.attachmentRefs,
     status: row.status as 'pending' | 'sending' | 'sent' | 'failed',
     attempts: row.attempts,
   });
@@ -119,32 +125,49 @@ export function createMailOutboxRepository(
         .limit(1);
       return row ? mapOutbox(row) : null;
     },
-    claim: async (ctx: { organizationId: string }, id: string) => {
-      const [row] = await db
-        .update(emailOutbox)
-        .set({ status: 'sending', claimedAt: new Date() })
-        .where(
-          and(
-            eq(emailOutbox.organizationId, ctx.organizationId),
-            eq(emailOutbox.id, id),
-            or(
-              and(
-                eq(emailOutbox.status, 'pending'),
-                lte(emailOutbox.availableAt, sql`now()`),
-              ),
-              and(
-                eq(emailOutbox.status, 'sending'),
-                lt(
-                  emailOutbox.claimedAt,
-                  sql`now() - (${leaseMs} * interval '1 millisecond')`,
+    claim: async (ctx: { organizationId: string }, id: string) =>
+      db.transaction(async (tx) => {
+        const [row] = await tx
+          .update(emailOutbox)
+          .set({ status: 'sending', claimedAt: new Date() })
+          .where(
+            and(
+              eq(emailOutbox.organizationId, ctx.organizationId),
+              eq(emailOutbox.id, id),
+              or(
+                and(
+                  eq(emailOutbox.status, 'pending'),
+                  lte(emailOutbox.availableAt, sql`now()`),
+                ),
+                and(
+                  eq(emailOutbox.status, 'sending'),
+                  lt(
+                    emailOutbox.claimedAt,
+                    sql`now() - (${leaseMs} * interval '1 millisecond')`,
+                  ),
                 ),
               ),
             ),
-          ),
-        )
-        .returning();
-      return row ? mapOutbox(row) : null;
-    },
+          )
+          .returning();
+        if (!row) return null;
+        const sendingStatus = transitionMessageRecipient('planned', 'sending');
+        if (!sendingStatus.ok) return null;
+        await tx
+          .update(messageCampaignRecipients)
+          .set({ status: sendingStatus.value })
+          .where(
+            and(
+              eq(messageCampaignRecipients.organizationId, ctx.organizationId),
+              eq(messageCampaignRecipients.outboxId, id),
+            ),
+          );
+        await tx.execute(sql`update message_campaign c set status = 'sending'
+          where c.organization_id = ${ctx.organizationId}
+            and exists (select 1 from message_campaign_recipient r
+              where r.organization_id = c.organization_id and r.campaign_id = c.id and r.outbox_id = ${id})`);
+        return mapOutbox(row);
+      }),
     template: async (
       ctx: { organizationId: string },
       key: string,
@@ -204,6 +227,14 @@ export function createMailOutboxRepository(
       },
     ) => {
       await db.transaction(async (tx) => {
+        const recipientTransition =
+          outcome.outcome === 'sent'
+            ? transitionMessageRecipient('sending', 'sent')
+            : outcome.outcome === 'failed'
+              ? transitionMessageRecipient('sending', 'failed')
+              : transitionMessageRecipient('sending', 'planned');
+        if (!recipientTransition.ok) return;
+        const recipientStatus = recipientTransition.value;
         await tx
           .update(emailOutbox)
           .set({
@@ -221,6 +252,17 @@ export function createMailOutboxRepository(
               eq(emailOutbox.status, 'sending'),
             ),
           );
+        await tx.execute(sql`update message_campaign_recipient
+          set status = ${recipientStatus}
+          where organization_id = ${ctx.organizationId} and outbox_id = ${id}`);
+        await tx.execute(sql`update message_campaign c
+          set status = case
+            when exists (select 1 from message_campaign_recipient r where r.organization_id = c.organization_id and r.campaign_id = c.id and r.status in ('planned','sending')) then 'sending'
+            when exists (select 1 from message_campaign_recipient r where r.organization_id = c.organization_id and r.campaign_id = c.id and r.status = 'failed') then 'failed'
+            else 'sent'
+          end
+          where c.organization_id = ${ctx.organizationId}
+            and exists (select 1 from message_campaign_recipient r where r.organization_id = c.organization_id and r.campaign_id = c.id and r.outbox_id = ${id})`);
         await tx
           .insert(emailDeliveries)
           .values({

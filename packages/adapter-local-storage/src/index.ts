@@ -2,7 +2,30 @@ import { createHash, randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, relative, resolve, sep } from 'node:path';
 import type { ObjectStorageProvider, StoredObjectRef } from '@racepilot/core';
-import { ProviderError } from '@racepilot/core';
+import { organizationId, ProviderError } from '@racepilot/core';
+import { z } from 'zod';
+
+const StoredObjectRefSchema = z.object({
+  organizationId: z.string().min(1),
+  objectId: z.string().uuid(),
+  contentType: z.string().min(1),
+  size: z.number().int().nonnegative(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/),
+});
+
+function parseStoredObjectRef(metadata: string): StoredObjectRef {
+  const parsed = StoredObjectRefSchema.parse(JSON.parse(metadata));
+  return { ...parsed, organizationId: organizationId(parsed.organizationId) };
+}
+
+function hasErrorCode(cause: unknown, code: string): boolean {
+  return (
+    typeof cause === 'object' &&
+    cause !== null &&
+    'code' in cause &&
+    cause.code === code
+  );
+}
 
 export function createLocalObjectStorage(root: string): ObjectStorageProvider {
   if (!root.trim())
@@ -50,6 +73,22 @@ export function createLocalObjectStorage(root: string): ObjectStorageProvider {
       }
       return ref;
     },
+    async head(organizationId, objectId) {
+      const path = objectPath(organizationId, objectId);
+      try {
+        const metadata = await readFile(`${path}.json`, 'utf8');
+        const ref = parseStoredObjectRef(metadata);
+        if (ref.organizationId !== organizationId || ref.objectId !== objectId)
+          throw new ProviderError('forbidden', 'Object ownership check failed');
+        return ref;
+      } catch (cause) {
+        if (cause instanceof ProviderError) throw cause;
+        if (hasErrorCode(cause, 'ENOENT')) return null;
+        throw new ProviderError('unavailable', 'Object metadata read failed', {
+          cause,
+        });
+      }
+    },
     async get(organizationId, objectId) {
       const path = objectPath(organizationId, objectId);
       try {
@@ -57,7 +96,7 @@ export function createLocalObjectStorage(root: string): ObjectStorageProvider {
           readFile(`${path}.json`, 'utf8'),
           readFile(path),
         ]);
-        const ref = JSON.parse(metadata) as StoredObjectRef;
+        const ref = parseStoredObjectRef(metadata);
         if (ref.organizationId !== organizationId || ref.objectId !== objectId)
           throw new ProviderError('forbidden', 'Object ownership check failed');
         if (ref.sha256 !== createHash('sha256').update(body).digest('hex'))
@@ -65,7 +104,7 @@ export function createLocalObjectStorage(root: string): ObjectStorageProvider {
         return { ref, body };
       } catch (cause) {
         if (cause instanceof ProviderError) throw cause;
-        if ((cause as NodeJS.ErrnoException).code === 'ENOENT') return null;
+        if (hasErrorCode(cause, 'ENOENT')) return null;
         throw new ProviderError('unavailable', 'Object storage read failed', {
           cause,
         });

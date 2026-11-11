@@ -533,6 +533,7 @@ describe('registration administration and public endpoints', () => {
           sha256: 'a'.repeat(64),
         };
       },
+      head: async () => null,
       get: async () => null,
       delete: async () => undefined,
     };
@@ -605,6 +606,7 @@ describe('registration administration and public endpoints', () => {
         writes++;
         throw new Error('unexpected');
       },
+      head: async () => null,
       get: async () => null,
       delete: async () => undefined,
     };

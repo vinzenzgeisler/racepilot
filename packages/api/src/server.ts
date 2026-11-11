@@ -27,6 +27,7 @@ import {
   createTimingRepository,
   createPostgresRegistrationRateLimiter,
   createPublicRegistrationRateLimitSettingsRepository,
+  createMessageRepository,
 } from '@racepilot/adapter-postgres';
 import { createModuleRegistry } from '@racepilot/core';
 import { timingModule } from './timing-module.js';
@@ -123,6 +124,7 @@ serve({
     paymentRecipients: createPaymentRecipientRepository(db),
     pricing: createEventClassPricingRepository(db),
     entries: createEntryRepository(db),
+    messages: createMessageRepository(db, storage, config.CANONICAL_BASE_URL),
     // Optional event modules are registered statically here (ADR 0004); Community
     // activates everything locally, so no entitlement port is supplied.
     modules: {

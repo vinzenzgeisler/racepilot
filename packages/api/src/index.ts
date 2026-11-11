@@ -3,6 +3,7 @@ import { registerEventsRoutes } from './routes/events.js';
 import { registerPublicRegistrationRoutes } from './routes/public-registration.js';
 import { registerEntriesRoutes } from './routes/entries.js';
 import { registerPaymentsRoutes } from './routes/payments.js';
+import { registerMessageRoutes } from './routes/messages.js';
 import { registerOrganizationRoutes } from './routes/organization.js';
 import { registerRegistrationRoutes } from './routes/registration.js';
 import type { RequestContext } from '@racepilot/core';
@@ -260,6 +261,7 @@ export function createApp(deps: ApiDeps) {
 
   registerEventsRoutes(routeContext);
   registerEntriesRoutes(routeContext);
+  registerMessageRoutes(routeContext);
 
   registerPaymentsRoutes(routeContext);
 

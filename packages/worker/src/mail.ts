@@ -1,5 +1,12 @@
-import type { JobContext, MailProvider } from '@racepilot/core';
-import { JobEnvelope } from '@racepilot/contracts';
+import { organizationId } from '@racepilot/core';
+import type {
+  JobContext,
+  MailProvider,
+  MailAttachment,
+  ObjectStorageProvider,
+  MailAttachmentReference,
+} from '@racepilot/core';
+import { JobEnvelope, MESSAGE_ATTACHMENT_LIMITS } from '@racepilot/contracts';
 import { createJobContext } from './index.js';
 
 export const mailTemplateContracts = {
@@ -15,6 +22,7 @@ export const mailTemplateContracts = {
     'statusLabelDe',
     'statusLabelEn',
   ],
+  'message-campaign': ['subject', 'body'],
 } as const;
 export type MailTemplateKey = keyof typeof mailTemplateContracts;
 export type MailLocale = 'de' | 'en';
@@ -83,6 +91,10 @@ const defaultCopy: Record<MailTemplateKey, Record<MailLocale, MailTemplate>> = {
       text: 'Hello {{recipientName}}, your entry status for {{eventName}} is now {{statusLabelEn}} ({{statusKey}}).',
       html: '<p>Hello {{recipientName}},</p><p>Your entry status for {{eventName}} is now {{statusLabelEn}} (<code>{{statusKey}}</code>).</p>',
     },
+  },
+  'message-campaign': {
+    de: { subject: '{{subject}}', text: '{{body}}', html: '<p>{{body}}</p>' },
+    en: { subject: '{{subject}}', text: '{{body}}', html: '<p>{{body}}</p>' },
   },
   rejected: {
     de: {
@@ -154,8 +166,10 @@ export interface MailOutboxRecord {
   recipient: string;
   idempotencyKey: string;
   variables: Record<string, string>;
+  attachmentRefs?: readonly MailAttachmentReference[];
   status: 'pending' | 'sending' | 'sent' | 'failed';
   attempts: number;
+  attachments?: readonly MailAttachment[];
 }
 export interface MailOutboxRepository {
   get(ctx: JobContext, id: string): Promise<MailOutboxRecord | null>;
@@ -228,6 +242,9 @@ export async function processMailOutboxJob(input: {
       ...(config.replyTo ? { replyTo: config.replyTo } : {}),
       ...rendered,
       idempotencyKey: claimed.idempotencyKey,
+      ...(claimed.attachments?.length
+        ? { attachments: claimed.attachments }
+        : {}),
     });
     await deps.repository.finish(ctx, claimed.id, {
       outcome: 'sent',
@@ -259,6 +276,7 @@ export function createMailOutboxTask(deps: {
   repository: MailOutboxRepository;
   mail: MailProvider;
   canonicalBaseUrl: string;
+  storage?: ObjectStorageProvider;
 }) {
   return async (payload: unknown, helpers: { job: { id: string } }) => {
     let envelope: ReturnType<typeof JobEnvelope.parse>;
@@ -308,6 +326,24 @@ export function createMailOutboxTask(deps: {
       return;
     }
     const variables = { ...row.variables };
+    const attachmentReferences = row.attachmentRefs ?? [];
+    const expectsAttachments = attachmentReferences.length > 0;
+    if (
+      row.templateKey === 'message-campaign' &&
+      expectsAttachments &&
+      !deps.storage
+    )
+      throw new Error('Message attachment storage is unavailable');
+    const attachments =
+      row.templateKey === 'message-campaign' &&
+      expectsAttachments &&
+      deps.storage
+        ? await loadMessageAttachments(
+            deps.storage,
+            ctx.organizationId,
+            attachmentReferences,
+          )
+        : [];
     if (
       row.templateKey === 'verification' ||
       row.templateKey === 'registration-resume'
@@ -331,10 +367,62 @@ export function createMailOutboxTask(deps: {
       deps: {
         repository: {
           ...deps.repository,
-          get: async () => ({ ...row, variables }),
+          get: async () => ({ ...row, variables, attachments }),
+          claim: async () => {
+            const claimed = await deps.repository.claim(ctx, row.id);
+            return claimed ? { ...claimed, variables, attachments } : null;
+          },
         },
         mail: deps.mail,
       },
     });
   };
+}
+
+async function loadMessageAttachments(
+  storage: ObjectStorageProvider,
+  tenantId: string,
+  references: readonly MailAttachmentReference[],
+): Promise<MailAttachment[]> {
+  if (!references.length) return [];
+  let refs: Array<{ objectId: string; filename: string }>;
+  try {
+    const parsed: unknown = references;
+    if (
+      !Array.isArray(parsed) ||
+      !parsed.every(
+        (item) =>
+          typeof item === 'object' &&
+          item !== null &&
+          'objectId' in item &&
+          typeof item.objectId === 'string' &&
+          'filename' in item &&
+          typeof item.filename === 'string',
+      )
+    )
+      throw new Error('Invalid attachment references');
+    if (parsed.length > MESSAGE_ATTACHMENT_LIMITS.maxCount)
+      throw new Error('Too many message attachments');
+    refs = parsed;
+  } catch {
+    throw new Error('Invalid message attachment references');
+  }
+  const attachments: MailAttachment[] = [];
+  let totalBytes = 0;
+  for (const ref of refs) {
+    if (!/^[A-Za-z0-9][A-Za-z0-9 ._()-]*\.pdf$/i.test(ref.filename))
+      throw new Error('Invalid message attachment filename');
+    const object = await storage.get(organizationId(tenantId), ref.objectId);
+    if (!object || object.ref.contentType !== 'application/pdf')
+      throw new Error('Message attachment is unavailable');
+    totalBytes += object.ref.size;
+    if (totalBytes > MESSAGE_ATTACHMENT_LIMITS.maxBytes)
+      throw new Error('Message attachments exceed the configured size limit');
+    attachments.push({
+      filename: ref.filename,
+      contentType: object.ref.contentType,
+      content: object.body,
+    });
+  }
+  return attachments;
 }

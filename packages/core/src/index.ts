@@ -13,3 +13,10 @@ export * from './exports.js';
 export * from './modules.js';
 export * from './timing.js';
 export * from './entry-detail.js';
+export * from './messages.js';
+export * from './message-campaign-send.js';
+export * from './message-campaign-delivery.js';
+export {
+  MESSAGE_ATTACHMENT_LIMITS,
+  MESSAGE_VERIFICATION_TOKEN_TTL_MS,
+} from '@racepilot/contracts';
