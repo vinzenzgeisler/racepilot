@@ -22,7 +22,10 @@ describe('message templates', () => {
         className: 'A',
         entryNumber: '12',
       }),
-    ).toEqual({ subject: 'Hi Ada', text: 'For Spring Run' });
+    ).toEqual({
+      ok: true,
+      value: { subject: 'Hi Ada', text: 'For Spring Run' },
+    });
     expect(validateMessageTemplate('{{unknown}}', 'body')).toContain('unknown');
   });
 });
@@ -143,21 +146,28 @@ describe('message campaign state machine', () => {
       await import('./messages.js');
     expect(canTransitionMessageCampaign('planned', 'sending')).toBe(true);
     expect(canTransitionMessageCampaign('sent', 'planned')).toBe(false);
-    expect(transitionMessageCampaign('failed', 'planned')).toBe('planned');
-    expect(transitionMessageRecipient('sending', 'planned')).toBe('planned');
-    expect(() => transitionMessageCampaign('sent', 'planned')).toThrow();
+    expect(transitionMessageCampaign('failed', 'planned')).toEqual({
+      ok: true,
+      value: 'planned',
+    });
+    expect(transitionMessageRecipient('sending', 'planned')).toEqual({
+      ok: true,
+      value: 'planned',
+    });
+    expect(transitionMessageCampaign('sent', 'planned')).toEqual({
+      ok: false,
+      error: 'invalid-transition',
+    });
   });
 });
 
 describe('message campaign send use case', () => {
   type TestCampaign = { id: string };
   type TestRecipient = { id: string };
-  type TestResponse = { id: string };
   type TestPorts =
     import('./message-campaign-send.js').MessageCampaignSendPorts<
       TestCampaign,
-      TestRecipient,
-      TestResponse
+      TestRecipient
     >;
   const context = {
     deploymentMode: 'community' as const,
@@ -182,8 +192,7 @@ describe('message campaign send use case', () => {
   const transactionCalls: string[] = [];
   const transaction: import('./message-campaign-send.js').MessageCampaignTransaction<
     TestCampaign,
-    TestRecipient,
-    TestResponse
+    TestRecipient
   > = {
     resolveRecipients: async (): Promise<
       import('./message-campaign-send.js').MessageCampaignRecipient[]
@@ -195,15 +204,15 @@ describe('message campaign send use case', () => {
     createCampaign: async () => null,
     recordAudit: async () => {},
     getLocale: async () => 'en',
+    enqueueVerificationRecipient: async () => ({ id: 'recipient-a' }),
     enqueueRecipient: async () => ({ id: 'recipient-a' }),
     markSending: async () => {},
     listRecipients: async () => [],
-    toResponse: () => ({ id: 'response-a' }),
   };
   const ports: TestPorts = {
     maxAttachments: 1,
     hashRequest: (fingerprint) => fingerprint,
-    validateAttachments: async () => null,
+    validateAttachments: async () => ({ ok: true as const }),
     transaction: async (_context, work) => {
       transactionCalls.push('begin');
       return work(transaction);
@@ -333,7 +342,10 @@ describe('message campaign send use case', () => {
     expect(result).toMatchObject({
       ok: true,
       replayed: true,
-      campaign: { id: 'response-a' },
+      campaign: {
+        campaign: { id: 'campaign-a' },
+        recipients: [{ id: 'recipient-a' }],
+      },
     });
   });
 

@@ -63,8 +63,9 @@ export function createMessageCampaignRepository(db: Database) {
           )
           .limit(1);
         if (!campaign || campaign.status !== 'failed') return null;
-        transitionMessageCampaign('failed', 'planned');
+        const failedToPlanned = transitionMessageCampaign('failed', 'planned');
         const retryStatus = transitionMessageCampaign('planned', 'sending');
+        if (!failedToPlanned.ok || !retryStatus.ok) return null;
         const failed = await tx
           .select({ outboxId: messageCampaignRecipients.outboxId })
           .from(messageCampaignRecipients)
@@ -119,7 +120,7 @@ export function createMessageCampaignRepository(db: Database) {
           );
         await tx
           .update(messageCampaigns)
-          .set({ status: retryStatus })
+          .set({ status: retryStatus.value })
           .where(
             and(
               eq(messageCampaigns.organizationId, ctx.organizationId),

@@ -40,8 +40,10 @@ export type MessageRecipient = Readonly<Record<MessagePlaceholder, string>>;
 
 export function messagePlaceholders(subject: string, text: string): string[] {
   const found = new Set<string>();
-  for (const match of `${subject}\n${text}`.matchAll(/{{\s*([^{}]+?)\s*}}/g))
-    found.add(match[1]!);
+  for (const match of `${subject}\n${text}`.matchAll(/{{\s*([^{}]+?)\s*}}/g)) {
+    const [, name] = match;
+    if (name) found.add(name);
+  }
   return [...found];
 }
 
@@ -67,16 +69,17 @@ export function renderMessageTemplate(
   subject: string,
   text: string,
   recipient: MessageRecipient,
-): { subject: string; text: string } {
+):
+  | { ok: true; value: { subject: string; text: string } }
+  | { ok: false; errors: string[] } {
   const errors = validateMessageTemplate(subject, text);
-  if (errors.length)
-    throw new Error(`Invalid message template: ${errors.join(', ')}`);
+  if (errors.length) return { ok: false, errors };
   const render = (value: string) =>
     value.replace(
       /{{\s*([^{}]+?)\s*}}/g,
       (_match, name: MessagePlaceholder) => recipient[name],
     );
-  return { subject: render(subject), text: render(text) };
+  return { ok: true, value: { subject: render(subject), text: render(text) } };
 }
 
 export interface MessageRecipientCandidate {
@@ -177,12 +180,12 @@ export function canTransitionMessageCampaign(
 export function transitionMessageCampaign(
   current: MessageCampaignState,
   next: MessageCampaignState,
-): MessageCampaignState {
-  if (!canTransitionMessageCampaign(current, next))
-    throw new Error(
-      `Invalid message campaign transition: ${current} -> ${next}`,
-    );
-  return next;
+):
+  | { ok: true; value: MessageCampaignState }
+  | { ok: false; error: 'invalid-transition' } {
+  return canTransitionMessageCampaign(current, next)
+    ? { ok: true, value: next }
+    : { ok: false, error: 'invalid-transition' };
 }
 
 const recipientTransitions: Readonly<
@@ -197,12 +200,12 @@ const recipientTransitions: Readonly<
 export function transitionMessageRecipient(
   current: MessageRecipientState,
   next: MessageRecipientState,
-): MessageRecipientState {
-  if (!recipientTransitions[current].includes(next))
-    throw new Error(
-      `Invalid message recipient transition: ${current} -> ${next}`,
-    );
-  return next;
+):
+  | { ok: true; value: MessageRecipientState }
+  | { ok: false; error: 'invalid-transition' } {
+  return recipientTransitions[current].includes(next)
+    ? { ok: true, value: next }
+    : { ok: false, error: 'invalid-transition' };
 }
 
 /** Canonical fingerprint used by persistence adapters to reject key reuse with a different request. */

@@ -151,9 +151,11 @@ export function createMailOutboxRepository(
           )
           .returning();
         if (!row) return null;
+        const sendingStatus = transitionMessageRecipient('planned', 'sending');
+        if (!sendingStatus.ok) return null;
         await tx
           .update(messageCampaignRecipients)
-          .set({ status: transitionMessageRecipient('planned', 'sending') })
+          .set({ status: sendingStatus.value })
           .where(
             and(
               eq(messageCampaignRecipients.organizationId, ctx.organizationId),
@@ -225,12 +227,14 @@ export function createMailOutboxRepository(
       },
     ) => {
       await db.transaction(async (tx) => {
-        const recipientStatus =
+        const recipientTransition =
           outcome.outcome === 'sent'
             ? transitionMessageRecipient('sending', 'sent')
             : outcome.outcome === 'failed'
               ? transitionMessageRecipient('sending', 'failed')
               : transitionMessageRecipient('sending', 'planned');
+        if (!recipientTransition.ok) return;
+        const recipientStatus = recipientTransition.value;
         await tx
           .update(emailOutbox)
           .set({
