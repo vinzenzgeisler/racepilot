@@ -14,6 +14,11 @@ import {
 } from './RegistrationContactFields.js';
 import { RegistrationReview } from './RegistrationReview.js';
 import { RegistrationFooter } from './RegistrationFooter.js';
+import {
+  RegistrationDriverField,
+  driverFieldValue,
+  updateDriverField,
+} from './RegistrationDriverField.js';
 export function RegistrationView({
   model,
   actions,
@@ -188,26 +193,12 @@ export function RegistrationView({
                   const key = field.key;
                   return (
                     <Fragment key={field.key}>
-                      <Field
-                        label={field.label[locale]}
-                        type={field.type}
-                        {...(field.key === 'dateOfBirth'
-                          ? { placeholder: 'TT.MM.JJJJ' }
-                          : {})}
-                        {...(field.key === 'email'
-                          ? {
-                              hint:
-                                locale === 'de'
-                                  ? 'Bestätigungslink wird gesendet'
-                                  : 'A confirmation link will be sent',
-                            }
-                          : {})}
-                        required={field.required}
+                      <RegistrationDriverField
+                        field={field}
+                        locale={locale}
                         value={driverFieldValue(values, key)}
-                        onChange={(e) =>
-                          setValues((old) =>
-                            updateDriverField(old, key, e.target.value),
-                          )
+                        onChange={(value) =>
+                          setValues((old) => updateDriverField(old, key, value))
                         }
                       />
                       {field.key === 'dateOfBirth' &&
@@ -287,41 +278,4 @@ export function RegistrationView({
       </footer>
     </section>
   );
-}
-
-function driverFieldValue(
-  values: RegistrationModel['values'],
-  key: string,
-): string {
-  switch (key) {
-    case 'firstName':
-      return values.firstName;
-    case 'lastName':
-      return values.lastName;
-    case 'email':
-      return values.email;
-    case 'dateOfBirth':
-      return values.dateOfBirth;
-    default:
-      return '';
-  }
-}
-
-function updateDriverField(
-  values: RegistrationModel['values'],
-  key: string,
-  value: string,
-): RegistrationModel['values'] {
-  switch (key) {
-    case 'firstName':
-      return { ...values, firstName: value };
-    case 'lastName':
-      return { ...values, lastName: value };
-    case 'email':
-      return { ...values, email: value };
-    case 'dateOfBirth':
-      return { ...values, dateOfBirth: value };
-    default:
-      return values;
-  }
 }

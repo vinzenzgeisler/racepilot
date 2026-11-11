@@ -190,7 +190,7 @@ describe('public registration contact and vehicle fields', () => {
     expect(control('Veröffentlichung')).toBeTruthy();
     // Driver step first; the vehicle details follow on the next step.
     await fill('Telefon', '+49 351 123456');
-    await press('Weiter');
+    await press('Weiter zu Startmeldungen');
     expect(control('Zylinder')?.required).toBe(true);
     expect(control('Besitzer')).toBeUndefined();
     expect(control('Hubraum (cm³)')).toBeTruthy();
@@ -242,7 +242,7 @@ describe('public registration contact and vehicle fields', () => {
         ],
       }),
     );
-    await press('Weiter');
+    await press('Weiter zu Startmeldungen');
     await press('Weiter zur Prüfung');
     await press('Nennung absenden');
     expect(submissions).toHaveLength(1);
