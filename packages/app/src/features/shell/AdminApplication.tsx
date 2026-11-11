@@ -66,7 +66,8 @@ export function AuthenticatedAdmin() {
   );
 }
 
-const previewQuery = '(width >= 1680px)';
+declare const __WORKSPACE_PREVIEW_QUERY__: string;
+const previewQuery = __WORKSPACE_PREVIEW_QUERY__;
 /** The A6 list preview exists only on wide screens; below that, rows open detail. */
 function usePreviewViewport() {
   return useSyncExternalStore(

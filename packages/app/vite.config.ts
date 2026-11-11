@@ -1,5 +1,17 @@
+import { readFileSync } from 'node:fs';
 import { configDefaults, defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+const workspaceSplitCss = readFileSync(
+  new URL('../ui/src/workspace/workspace-split.css', import.meta.url),
+  'utf8',
+);
+const workspacePreviewToken =
+  /\/\* --workspace-preview-breakpoint[^*]*\*\/\s*@media \((width\s*>=\s*[^)]+)\)/.exec(
+    workspaceSplitCss,
+  );
+if (!workspacePreviewToken?.[1])
+  throw new Error('Workspace preview breakpoint is missing from UI styles');
+const workspacePreviewQuery = `(${workspacePreviewToken[1]})`;
 
 // Local development only: the browser talks same-origin and Vite forwards API routes.
 const apiTarget = process.env.RACEPILOT_API_URL ?? 'http://127.0.0.1:3000';
@@ -7,6 +19,9 @@ const apiTarget = process.env.RACEPILOT_API_URL ?? 'http://127.0.0.1:3000';
 const apiRoutes = ['/runtime', '/auth/config', '/admin', '/public', '/health'];
 
 export default defineConfig({
+  define: {
+    __WORKSPACE_PREVIEW_QUERY__: JSON.stringify(workspacePreviewQuery),
+  },
   plugins: [react()],
   server: {
     proxy: Object.fromEntries(

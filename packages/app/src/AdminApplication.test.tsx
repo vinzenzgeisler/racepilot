@@ -88,6 +88,7 @@ let listedEntries: unknown[] = [alex];
 let container: HTMLDivElement;
 let root: ReturnType<typeof createRoot> | undefined;
 let narrow = false;
+let previewAvailable = true;
 const pending: Record<string, (response: Response) => void> = {};
 function deferred(key: string) {
   return new Promise<Response>((resolve) => {
@@ -180,9 +181,10 @@ async function click(predicate: (button: HTMLButtonElement) => boolean) {
 const byText = (text: string) => (button: HTMLButtonElement) =>
   button.textContent?.trim() === text;
 async function switchEvent(id: string) {
-  const select = container.querySelector<HTMLSelectElement>(
-    '.nb-admin-event-picker select',
-  )!;
+  const selector = narrow
+    ? '.nb-admin-mobile-event-picker select'
+    : '.nb-admin-event-picker select';
+  const select = container.querySelector<HTMLSelectElement>(selector)!;
   await act(async () => {
     select.value = id;
     select.dispatchEvent(new Event('change', { bubbles: true }));
@@ -192,10 +194,7 @@ async function switchEvent(id: string) {
 }
 const textOf = () => container.textContent ?? '';
 async function openDetailWide() {
-  await click(
-    (button) =>
-      button.getAttribute('aria-label') === 'Alex Driver vollständig öffnen',
-  );
+  await click(byText('Vollständig öffnen'));
   expect(container.querySelector('.nb-detail')).not.toBeNull();
 }
 function expectEmptyEventView() {
@@ -213,9 +212,10 @@ beforeEach(() => {
     globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }
   ).IS_REACT_ACT_ENVIRONMENT = true;
   narrow = false;
+  previewAvailable = true;
   listedEntries = [alex];
   window.matchMedia = ((query: string) => ({
-    matches: !narrow && query.includes('1680'),
+    matches: previewAvailable && !narrow && query.includes('1680'),
     media: query,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
@@ -311,19 +311,28 @@ describe('AdminApplication event switch and detail access', () => {
       expectEmptyEventView();
     });
 
-  it('keeps the list as the start view on a narrow screen and reaches the detail from the preview', async () => {
+  it('opens details directly from a row on compact screens and keeps event switching available', async () => {
     narrow = true;
     await mount();
     // No preview opens by itself; the list stays the start view.
     expect(container.querySelector('.is-mobile-open')).toBeNull();
     expect(textOf()).toContain('Alex Driver');
+    expect(
+      container.querySelector('.nb-admin-mobile-event-picker select'),
+    ).not.toBeNull();
     await click((button) => button.hasAttribute('data-entry-action'));
-    expect(container.querySelector('.is-mobile-open')).not.toBeNull();
-    await click(byText('Vollständig öffnen'));
+    expect(container.querySelector('.is-mobile-open')).toBeNull();
     expect(container.querySelector('.nb-detail')).not.toBeNull();
     await switchEvent(eventB);
     expectEmptyEventView();
     expect(container.querySelector('.is-mobile-open')).toBeNull();
+  });
+
+  it('opens the detail directly from a row in the 1280–1679 viewport band', async () => {
+    previewAvailable = false;
+    await mount();
+    await click((button) => button.hasAttribute('data-entry-action'));
+    expect(container.querySelector('.nb-detail')).not.toBeNull();
   });
 
   it('carries a successful preview status into the detail record and actions', async () => {

@@ -8,13 +8,14 @@ import {
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { SelectField } from '@racepilot/ui';
 import { initialQuery, request, type EntryQuery } from './AdminEntriesModel.js';
+import { AdminEntriesState } from './AdminEntriesState.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
 import { useAdminEntryActions } from './useAdminEntryActions.js';
 import { useAdminEntriesData } from './useAdminEntriesData.js';
 import { useAdminEntriesKeyboard } from './useAdminEntriesKeyboard.js';
-import { useOpenEntryDetail } from './useOpenEntryDetail.js';
 import { usePreviewAdvance } from './usePreviewAdvance.js';
+import { useOpenEntryDetail } from './useOpenEntryDetail.js';
 import { useSharedSelection } from './useSharedSelection.js';
 type AdminEntriesProps = {
   detailOpen?: boolean;
@@ -157,7 +158,13 @@ function AdminEntriesView({
     );
     void openEntry((firstPending ?? items[0]!).id);
   }, [autoPreview, eventId, items, workflow, openEntry]);
-  usePreviewAdvance({ eventId, items, workflow, openEntry, setRefreshRevision });
+  usePreviewAdvance({
+    eventId,
+    items,
+    workflow,
+    openEntry,
+    setRefreshRevision,
+  });
   useAdminEntriesKeyboard({
     items,
     selected,
@@ -210,29 +217,8 @@ function AdminEntriesView({
     }));
   }
 
-  if (apiState === 'loading' && events.length === 0)
-    return <p role="status">Verwaltung wird geladen …</p>;
-  if (apiState === 'unauthorized')
-    return (
-      <section className="admin-state">
-        <h2>Anmeldung erforderlich</h2>
-        <p role="alert">Bitte erneut anmelden.</p>
-      </section>
-    );
-  if (apiState === 'forbidden')
-    return (
-      <section className="admin-state">
-        <h2>Zugriff verweigert</h2>
-        <p role="alert">Dein Konto darf diese Veranstaltung nicht verwalten.</p>
-      </section>
-    );
-  if (apiState === 'unavailable' && events.length === 0)
-    return (
-      <section className="admin-state">
-        <h2>Verwaltung nicht verfügbar</h2>
-        <p role="alert">Veranstaltungen konnten nicht geladen werden.</p>
-      </section>
-    );
+  if (events.length === 0 && apiState !== 'ready')
+    return <AdminEntriesState state={apiState} />;
 
   return (
     <section className="admin-entries" aria-labelledby="admin-entries-title">
@@ -261,6 +247,7 @@ function AdminEntriesView({
         <AdminEntryList
           preview={preview}
           mobilePreviewOpen={mobilePreviewOpen}
+          wide={autoPreview}
           eventId={eventId}
           apiState={apiState}
           draft={draft}
@@ -274,8 +261,7 @@ function AdminEntriesView({
           selected={selected}
           selectedIds={selectedIds}
           setSelection={setSelection}
-          openEntry={openEntry}
-          openEntryDetail={openEntryDetail}
+          openEntry={autoPreview ? openEntry : openEntryDetail}
           eligibleSelectedItems={eligibleSelectedItems}
           busy={busy}
           clearSelection={clearSelection}

@@ -92,6 +92,7 @@ export function EntryPreview({
         empty={<p>Keine hochgeladenen Unterlagen vorhanden.</p>}
       />
       <ActionPanel
+        variant="primary"
         title="Nächster Schritt"
         hint={
           missing.length

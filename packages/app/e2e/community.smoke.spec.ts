@@ -4,6 +4,8 @@ import { mkdirSync, readFileSync } from 'node:fs';
 
 // The payment test continues with the entry that the lifecycle test registered.
 test.describe.configure({ mode: 'serial' });
+const apiBaseUrl = process.env.RACEPILOT_API_URL ?? 'http://127.0.0.1:3000';
+const mailpitUrl = process.env.RACEPILOT_MAILPIT_URL ?? 'http://127.0.0.1:8025';
 const shared: { eventId: string; participant: string } = {
   eventId: '',
   participant: '',
@@ -43,7 +45,7 @@ test('Community registration and admin lifecycle with API setup', async ({
     data?: unknown,
     headers: Record<string, string> = {},
   ) =>
-    request.fetch(`http://127.0.0.1:3000${path}`, {
+    request.fetch(`${apiBaseUrl}${path}`, {
       method,
       headers: {
         authorization: ['Bearer', token].join(' '),
@@ -190,7 +192,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await expect
     .poll(
       async () => {
-        const res = await request.get('http://127.0.0.1:8025/api/v1/messages');
+        const res = await request.get(`${mailpitUrl}/api/v1/messages`);
         if (!res.ok()) return false;
         const body = (await res.json()) as {
           messages?: Array<{ ID: string; To?: unknown }>;
@@ -204,7 +206,7 @@ test('Community registration and admin lifecycle with API setup', async ({
     )
     .toBe(true);
   const fullMailResponse = await request.get(
-    `http://127.0.0.1:8025/api/v1/message/${mail.ID}`,
+    `${mailpitUrl}/api/v1/message/${mail.ID}`,
   );
   expect(
     fullMailResponse.ok(),
@@ -346,7 +348,7 @@ test('admin records payment from entry detail UI', async ({
   ).toHaveCount(0);
   expect(token, 'bearer token captured from admin requests').not.toBe('');
   const detail = await request.fetch(
-    `http://127.0.0.1:3000/admin/entries?eventId=${shared.eventId}`,
+    `${apiBaseUrl}/admin/entries?eventId=${shared.eventId}`,
     { headers: { authorization: ['Bearer', token].join(' ') } },
   );
   expect(await detail.text()).toMatch(/"paidCents":1000/);
