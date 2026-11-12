@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import {
+  EventClassSchema,
   MessageAttachmentRecordSchema,
   MessageCampaignRecordSchema,
   MessageErrorSchema,
@@ -49,6 +50,12 @@ const post = (body: unknown, signal?: AbortSignal): RequestInit => ({
   ...(signal ? { signal } : {}),
 });
 export const messagesApi = {
+  classes: (eventId: string, signal: AbortSignal) =>
+    call(
+      `/admin/events/${encodeURIComponent(eventId)}/classes`,
+      z.array(EventClassSchema.passthrough()),
+      { signal },
+    ),
   recipients: (
     eventId: string,
     filter: MessageRecipientFilter,

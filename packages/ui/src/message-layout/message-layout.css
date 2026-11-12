@@ -1,0 +1,63 @@
+.nb-message-layout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-6);
+  align-items: start;
+}
+.nb-message-editor,
+.nb-message-aside {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-6);
+}
+.nb-message-editor {
+  flex: 1 1 var(--width-form-max);
+  max-width: var(--width-form-max);
+}
+.nb-message-aside {
+  flex: 1 1 var(--width-aside-min);
+}
+.nb-message-layout .nb-form-section {
+  min-width: 0;
+}
+.nb-message-footer {
+  flex: 1 0 100%;
+  min-width: 0;
+}
+.nb-message-help {
+  padding: var(--space-4);
+  background: var(--color-white);
+  border: var(--line-section) solid var(--color-line);
+}
+.nb-message-help h2 {
+  margin: 0 0 var(--space-3);
+}
+.nb-message-help p {
+  margin: var(--space-2) 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.nb-message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+.nb-message-picks {
+  max-height: var(--height-selection-list);
+  overflow: auto;
+  display: grid;
+  gap: var(--space-2);
+}
+.nb-message-picks label {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.nb-message-section {
+  display: grid;
+  gap: var(--space-4);
+}
+.nb-message-alert {
+  color: var(--color-marshal-text);
+}

@@ -52,3 +52,5 @@
 @import url('./registration/registration-vehicle.css');
 @import url('./registration/registration-review.css');
 @import url('./registration/registration-footer.css');
+
+@import './message-layout/message-layout.css';

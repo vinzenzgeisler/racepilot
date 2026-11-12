@@ -513,6 +513,7 @@
     "MediaDetail",
     "Menu",
     "MenuItem",
+    "MessageLayout",
     "MessageTable",
     "Nameplate",
     "NavGroup",

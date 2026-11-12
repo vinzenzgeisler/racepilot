@@ -20,7 +20,7 @@ type EventOption = {
   slug?: string;
   registrationClosesAt?: string | null;
 };
-type View = 'entries' | 'workflow' | 'account';
+type View = 'entries' | 'workflow' | 'account' | 'messages';
 type NavItem = { id: View; label: string; icon: IconName; mobile?: boolean };
 export const APP_NAVIGATION_REGISTRY: Array<{
   label: string;
@@ -29,6 +29,10 @@ export const APP_NAVIGATION_REGISTRY: Array<{
   {
     label: 'Veranstaltung',
     items: [{ id: 'entries', label: 'Nennungen', icon: 'list' }],
+  },
+  {
+    label: 'Kommunikation',
+    items: [{ id: 'messages', label: 'Nachrichten', icon: 'mail' }],
   },
   {
     label: 'Konto',
@@ -53,6 +57,8 @@ export function AppShell({
   events = [],
   entryCount = 0,
   onEventChange,
+  messageEntryId,
+  onClearMessageSelection,
 }: {
   children: ReactNode | ((view: View) => ReactNode);
   previewOpen?: boolean;
@@ -63,8 +69,11 @@ export function AppShell({
   events?: EventOption[];
   entryCount?: number;
   onEventChange?: (id: string) => void;
+  messageEntryId?: string | null;
+  onClearMessageSelection?: () => void;
 }) {
   const [view, setView] = useState<View>('entries');
+  const currentView = messageEntryId && view === 'entries' ? 'messages' : view;
   const selectedEvent = events.find((event) => event.id === activeEvent);
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => {
@@ -106,8 +115,14 @@ export function AppShell({
               ...(item.id === 'entries' ? { count: entryCount } : {}),
             })),
           }))}
-          current={view}
-          onNavigate={(id) => setView(id as View)}
+          current={currentView}
+          onNavigate={(id) => {
+            onClearMessageSelection?.();
+            const item = APP_NAVIGATION_REGISTRY.flatMap(
+              (group) => group.items,
+            ).find((entry) => entry.id === id);
+            if (item) setView(item.id);
+          }}
           user={
             identity ? (
               <span className="nb-user-identity">
@@ -129,27 +144,31 @@ export function AppShell({
         />
       }
       header={
-        detailOpen && view === 'entries' ? null : (
+        detailOpen && currentView === 'entries' ? null : (
           <PageHeader
-            className={view === 'entries' ? 'nb-entry-page-header' : undefined}
+            className={
+              currentView === 'entries' ? 'nb-entry-page-header' : undefined
+            }
             title={
-              view === 'entries'
+              currentView === 'entries'
                 ? 'Nennungen'
-                : view === 'workflow'
+                : currentView === 'workflow'
                   ? 'Nennungsablauf'
-                  : 'Einstellungen'
+                  : currentView === 'messages'
+                    ? 'Nachrichten'
+                    : 'Einstellungen'
             }
             description={
-              view === 'entries' && closeDate
+              currentView === 'entries' && closeDate
                 ? `Nennungsschluss  ${closeDate.replace(', ', ' · ')}`
                 : undefined
             }
           />
         )
       }
-      inset={view !== 'entries'}
+      inset={currentView !== 'entries'}
     >
-      {typeof children === 'function' ? children(view) : children}
+      {typeof children === 'function' ? children(currentView) : children}
     </AdminWorkspace>
   );
 }
