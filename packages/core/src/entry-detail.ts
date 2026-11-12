@@ -10,6 +10,15 @@ export interface AdminEntryConsent {
   required: boolean | null;
 }
 
+export interface AdminEntryHistoryItem {
+  id: string;
+  kind: 'entry' | 'status' | 'payment' | 'email';
+  label: string;
+  actor: string;
+  occurredAt: string;
+  detail: string;
+}
+
 export interface AdminEntryDriver {
   /** Display name; edit the structured parts below, never split this string. */
   name: string;

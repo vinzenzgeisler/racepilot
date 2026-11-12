@@ -92,6 +92,21 @@ describe('mail outbox worker', () => {
       expect(rendered.html).toContain('registration/resume#token=opaque');
     }
   });
+  it('renders the latest driver note placeholder in status-change mail', () => {
+    const rendered = renderMailTemplate(
+      defaultMailTemplate('status-change', 'de'),
+      'status-change',
+      {
+        recipientName: 'Sam',
+        eventName: 'Bergpreis',
+        statusKey: 'accepted',
+        statusLabelDe: 'Angenommen',
+        statusLabelEn: 'Accepted',
+        driverNote: 'Bitte Unterlagen mitbringen',
+      },
+    );
+    expect(rendered.text).toContain('Bitte Unterlagen mitbringen');
+  });
   it('escapes HTML values and rejects unknown placeholders', () => {
     expect(
       renderMailTemplate(

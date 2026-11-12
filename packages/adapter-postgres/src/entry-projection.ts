@@ -40,6 +40,7 @@ export function mapEntry(
     acceptanceStatus:
       row.acceptanceStatus as import('@racepilot/core').Entry['acceptanceStatus'],
     createdAt: row.createdAt.toISOString(),
+    revision: row.revision,
     deletedAt: row.deletedAt?.toISOString() ?? null,
   };
 }

@@ -8,7 +8,7 @@ import {
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { request, type Outcome } from '../AdminEntriesModel.js';
 
-const failure = (status: number, action: string) =>
+const failure = (status: number, action: string, code?: string) =>
   status === 401
     ? 'Deine Anmeldung ist abgelaufen. Bitte melde dich erneut an.'
     : status === 403
@@ -16,12 +16,42 @@ const failure = (status: number, action: string) =>
       : status === 404
         ? 'Die Nennung wurde nicht gefunden.'
         : status === 409
-          ? 'Name, Geburtsdatum und Land gehören zur Person und gelten auch für ihre Nennungen in anderen Veranstaltungen. Sie lassen sich hier nicht ändern.'
-          : status === 400
-            ? 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
-            : 'Der Server konnte die Anfrage nicht ausführen.';
+          ? code === 'stale'
+            ? 'Die Nennung wurde inzwischen geändert. Bitte lade die Detailansicht neu.'
+            : code === 'capacity'
+              ? 'Die Zielklasse ist inzwischen voll.'
+              : code === 'class'
+                ? 'Die Zielklasse ist geschlossen oder gehört nicht zu dieser Veranstaltung.'
+                : 'Name, Geburtsdatum und Land gehören zur Person und gelten auch für ihre Nennungen in anderen Veranstaltungen. Sie lassen sich hier nicht ändern.'
+          : status === 422
+            ? code === 'reason'
+              ? 'Bitte gib eine Begründung ein.'
+              : code === 'amount'
+                ? 'Bitte gib einen gültigen Betrag ein.'
+                : code === 'note'
+                  ? 'Bitte gib einen Notiztext ein.'
+                  : 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
+            : status === 400
+              ? 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
+              : 'Der Server konnte die Anfrage nicht ausführen.';
 
 export type { Outcome };
+
+export type EntryAdminAction =
+  | {
+      kind: 'change_class';
+      classId: string;
+      reason: string;
+      expectedVersion: number;
+    }
+  | {
+      kind: 'adjust_amount';
+      amountCents: number;
+      reason: string;
+      expectedVersion: number;
+    }
+  | { kind: 'note'; visibility: 'internal' | 'driver'; text: string }
+  | { kind: 'delete'; reason: string; expectedVersion: number };
 
 /**
  * Admin calls of the entry detail; every successful change hands the fresh entry back.
@@ -30,26 +60,46 @@ export type { Outcome };
  */
 export function useEntryDetailApi(
   entry: Entry,
-  onUpdated: (entry: Entry) => void,
+  onUpdated: (entry: Entry | null, refresh?: boolean) => void,
 ) {
   const [busy, setBusy] = useState(false);
   const entryId = entry.id;
   const entryPath = `/admin/entries/${encodeURIComponent(entryId)}`;
   const scope = useRef<AbortController | null>(null);
+  const onUpdatedRef = useRef(onUpdated);
+  useEffect(() => {
+    onUpdatedRef.current = onUpdated;
+  }, [onUpdated]);
   useEffect(() => {
     const controller = new AbortController();
     scope.current = controller;
+    if (!entry.availableActions) {
+      void request(entryPath, { signal: controller.signal })
+        .then(async (response) => {
+          if (!response.ok) return;
+          const fresh = EntryResponse.safeParse(
+            await response.json().catch(() => null),
+          );
+          if (
+            !controller.signal.aborted &&
+            fresh.success &&
+            fresh.data.id === entryId
+          )
+            onUpdatedRef.current(fresh.data, false);
+        })
+        .catch(() => undefined);
+    }
     return () => {
       controller.abort();
       if (scope.current === controller) scope.current = null;
     };
-  }, [entryId]);
+  }, [entryId, entry.revision, entry.availableActions, entryPath]);
   const run = useCallback(
     async (
       path: string,
       init: RequestInit,
       action: string,
-      readEntry: boolean,
+      readEntry: boolean | 'none',
     ): Promise<Outcome> => {
       const controller = scope.current;
       const superseded: Outcome = { ok: false, message: '' };
@@ -59,9 +109,18 @@ export function useEntryDetailApi(
       try {
         const response = await request(path, { ...init, signal });
         if (signal.aborted) return superseded;
-        if (!response.ok)
-          return { ok: false, message: failure(response.status, action) };
         const body: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const code =
+            typeof body === 'object' &&
+            body !== null &&
+            'error' in body &&
+            typeof body.error === 'string'
+              ? body.error
+              : undefined;
+          return { ok: false, message: failure(response.status, action, code) };
+        }
+        if (readEntry === 'none') return { ok: true };
         const fresh = EntryResponse.safeParse(
           readEntry
             ? body
@@ -88,6 +147,13 @@ export function useEntryDetailApi(
   );
   return {
     busy,
+    performAdminAction: (action: EntryAdminAction) =>
+      run(
+        `${entryPath}/actions`,
+        { method: 'POST', body: JSON.stringify(action) },
+        'diese Nennung ändern',
+        action.kind === 'delete' ? 'none' : false,
+      ),
     saveDriver: (patch: EntryDriverUpdateRequest) =>
       run(
         `${entryPath}/driver`,

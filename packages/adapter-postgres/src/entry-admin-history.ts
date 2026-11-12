@@ -4,6 +4,10 @@ import {
   entryAuditEvents,
   entryDataAuditEvents,
 } from './schema/entries.js';
+import {
+  entryAdminActionAuditEvents,
+  entryNotes,
+} from './schema/entry-admin.js';
 import { eq, and, inArray } from 'drizzle-orm';
 import {
   organizationMemberships,
@@ -24,113 +28,138 @@ export async function loadEntryAdminHistory(
   ctx: RequestContext,
   ids: string[],
 ) {
-  const [entryAudits, dimensionAudits, paymentAudits, mailRows, dataAudits] =
-    await Promise.all([
-      db
-        .select()
-        .from(entryAuditEvents)
-        .where(
-          and(
-            eq(entryAuditEvents.organizationId, ctx.organizationId),
-            inArray(entryAuditEvents.entryId, ids),
-          ),
+  const [
+    entryAudits,
+    dimensionAudits,
+    paymentAudits,
+    mailRows,
+    dataAudits,
+    actionAudits,
+    notes,
+  ] = await Promise.all([
+    db
+      .select()
+      .from(entryAuditEvents)
+      .where(
+        and(
+          eq(entryAuditEvents.organizationId, ctx.organizationId),
+          inArray(entryAuditEvents.entryId, ids),
         ),
-      db
-        .select()
-        .from(entryStatusDimensionAudit)
-        .where(
-          and(
-            eq(entryStatusDimensionAudit.organizationId, ctx.organizationId),
-            inArray(entryStatusDimensionAudit.entryId, ids),
-          ),
+      ),
+    db
+      .select()
+      .from(entryStatusDimensionAudit)
+      .where(
+        and(
+          eq(entryStatusDimensionAudit.organizationId, ctx.organizationId),
+          inArray(entryStatusDimensionAudit.entryId, ids),
         ),
-      db
-        .select({
-          entryId: entries.id,
-          id: invoicePaymentAuditEvents.id,
-          action: invoicePaymentAuditEvents.action,
-          actor: invoicePaymentAuditEvents.actor,
-          reason: invoicePaymentAuditEvents.reason,
-          occurredAt: invoicePaymentAuditEvents.occurredAt,
-        })
-        .from(invoicePaymentAuditEvents)
-        .innerJoin(
-          invoicePayments,
-          and(
-            eq(invoicePayments.id, invoicePaymentAuditEvents.paymentId),
-            eq(invoicePayments.organizationId, ctx.organizationId),
-          ),
-        )
-        .innerJoin(
-          invoices,
-          and(
-            eq(invoices.id, invoicePayments.invoiceId),
-            eq(invoices.organizationId, ctx.organizationId),
-          ),
-        )
-        .innerJoin(
-          registrationGroups,
-          and(
-            eq(registrationGroups.id, invoices.registrationGroupId),
-            eq(registrationGroups.organizationId, ctx.organizationId),
-          ),
-        )
-        .innerJoin(
-          entries,
-          and(
-            eq(entries.registrationGroupId, registrationGroups.id),
-            eq(entries.organizationId, ctx.organizationId),
-          ),
-        )
-        .where(
-          and(
-            eq(invoicePaymentAuditEvents.organizationId, ctx.organizationId),
-            inArray(entries.id, ids),
-          ),
+      ),
+    db
+      .select({
+        entryId: entries.id,
+        id: invoicePaymentAuditEvents.id,
+        action: invoicePaymentAuditEvents.action,
+        actor: invoicePaymentAuditEvents.actor,
+        reason: invoicePaymentAuditEvents.reason,
+        occurredAt: invoicePaymentAuditEvents.occurredAt,
+      })
+      .from(invoicePaymentAuditEvents)
+      .innerJoin(
+        invoicePayments,
+        and(
+          eq(invoicePayments.id, invoicePaymentAuditEvents.paymentId),
+          eq(invoicePayments.organizationId, ctx.organizationId),
         ),
-      db
-        .select({
-          entryId: entries.id,
-          id: emailOutbox.id,
-          status: emailOutbox.status,
-          templateKey: emailOutbox.templateKey,
-          recipient: emailOutbox.recipient,
-          createdAt: emailOutbox.createdAt,
-          sentAt: emailOutbox.sentAt,
-        })
-        .from(emailOutbox)
-        .innerJoin(
-          registrationGroups,
-          and(
-            eq(registrationGroups.organizationId, emailOutbox.organizationId),
-            eq(registrationGroups.id, emailOutbox.registrationGroupId),
-            eq(registrationGroups.eventId, emailOutbox.eventId),
-          ),
-        )
-        .innerJoin(
-          entries,
-          and(
-            eq(entries.organizationId, registrationGroups.organizationId),
-            eq(entries.registrationGroupId, registrationGroups.id),
-            eq(entries.eventId, emailOutbox.eventId),
-          ),
-        )
-        .where(
-          and(
-            eq(emailOutbox.organizationId, ctx.organizationId),
-            inArray(entries.id, ids),
-          ),
+      )
+      .innerJoin(
+        invoices,
+        and(
+          eq(invoices.id, invoicePayments.invoiceId),
+          eq(invoices.organizationId, ctx.organizationId),
         ),
-      db
-        .select()
-        .from(entryDataAuditEvents)
-        .where(
-          and(
-            eq(entryDataAuditEvents.organizationId, ctx.organizationId),
-            inArray(entryDataAuditEvents.entryId, ids),
-          ),
+      )
+      .innerJoin(
+        registrationGroups,
+        and(
+          eq(registrationGroups.id, invoices.registrationGroupId),
+          eq(registrationGroups.organizationId, ctx.organizationId),
         ),
-    ]);
+      )
+      .innerJoin(
+        entries,
+        and(
+          eq(entries.registrationGroupId, registrationGroups.id),
+          eq(entries.organizationId, ctx.organizationId),
+        ),
+      )
+      .where(
+        and(
+          eq(invoicePaymentAuditEvents.organizationId, ctx.organizationId),
+          inArray(entries.id, ids),
+        ),
+      ),
+    db
+      .select({
+        entryId: entries.id,
+        id: emailOutbox.id,
+        status: emailOutbox.status,
+        templateKey: emailOutbox.templateKey,
+        recipient: emailOutbox.recipient,
+        createdAt: emailOutbox.createdAt,
+        sentAt: emailOutbox.sentAt,
+      })
+      .from(emailOutbox)
+      .innerJoin(
+        registrationGroups,
+        and(
+          eq(registrationGroups.organizationId, emailOutbox.organizationId),
+          eq(registrationGroups.id, emailOutbox.registrationGroupId),
+          eq(registrationGroups.eventId, emailOutbox.eventId),
+        ),
+      )
+      .innerJoin(
+        entries,
+        and(
+          eq(entries.organizationId, registrationGroups.organizationId),
+          eq(entries.registrationGroupId, registrationGroups.id),
+          eq(entries.eventId, emailOutbox.eventId),
+        ),
+      )
+      .where(
+        and(
+          eq(emailOutbox.organizationId, ctx.organizationId),
+          inArray(entries.id, ids),
+        ),
+      ),
+    db
+      .select()
+      .from(entryDataAuditEvents)
+      .where(
+        and(
+          eq(entryDataAuditEvents.organizationId, ctx.organizationId),
+          inArray(entryDataAuditEvents.entryId, ids),
+        ),
+      ),
+    db
+      .select()
+      .from(entryAdminActionAuditEvents)
+      .where(
+        and(
+          eq(entryAdminActionAuditEvents.organizationId, ctx.organizationId),
+          inArray(entryAdminActionAuditEvents.entryId, ids),
+        ),
+      ),
+    db
+      .select()
+      .from(entryNotes)
+      .where(
+        and(
+          eq(entryNotes.organizationId, ctx.organizationId),
+          inArray(entryNotes.entryId, ids),
+        ),
+      ),
+  ]);
   const historyByEntry = new Map<
     string,
     Array<{
@@ -184,6 +213,24 @@ export async function loadEntryAdminHistory(
       occurredAt: row.occurredAt,
       detail: row.reason,
     });
+  for (const row of actionAudits)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'entry',
+      label: row.action,
+      actor: row.actor,
+      occurredAt: row.occurredAt,
+      detail: row.reason,
+    });
+  for (const row of notes)
+    appendHistory(row.entryId, {
+      id: row.id,
+      kind: 'entry',
+      label: row.visibility === 'internal' ? 'internal_note' : 'driver_note',
+      actor: row.actor,
+      occurredAt: row.createdAt,
+      detail: row.body,
+    });
   for (const row of paymentAudits)
     appendHistory(row.entryId, {
       id: row.id,
@@ -203,6 +250,10 @@ export async function loadEntryAdminHistory(
       detail: row.recipient,
     });
   await resolveActorNames(db, ctx, historyByEntry);
+  for (const items of historyByEntry.values())
+    items.sort((left, right) =>
+      left.occurredAt.localeCompare(right.occurredAt),
+    );
   return historyByEntry;
 }
 

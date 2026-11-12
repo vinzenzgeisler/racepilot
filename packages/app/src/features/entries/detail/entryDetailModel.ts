@@ -1,3 +1,5 @@
+import { actorName } from './actorName.js';
+
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from '../AdminEntriesModel.js';
 
@@ -226,6 +228,36 @@ function describe(
   status: (key: string) => string,
 ): Pick<TimelineItem, 'title' | 'tone'> & { detail?: string } {
   const detail = event.detail || undefined;
+  if (event.label === 'internal_note')
+    return {
+      title: 'Interne Notiz',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'driver_note')
+    return {
+      title: 'Fahrernotiz',
+      tone: 'accent',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'class_changed')
+    return {
+      title: 'Klasse geändert',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'amount_adjusted')
+    return {
+      title: 'Betrag angepasst',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'deleted')
+    return {
+      title: 'Nennung gelöscht',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
   if (event.kind === 'payment')
     return {
       title:
@@ -282,15 +314,4 @@ function describe(
     tone: 'dark',
     ...(detail ? { detail } : {}),
   };
-}
-
-/** Actors are stored as "issuer#subject" when no member name is known. */
-export function actorName(actor: string) {
-  if (actor === 'System') return 'System';
-  if (
-    /https?:\/\//i.test(actor) ||
-    /\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i.test(actor)
-  )
-    return 'Veranstalter';
-  return actor;
 }

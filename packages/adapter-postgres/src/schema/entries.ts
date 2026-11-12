@@ -158,6 +158,7 @@ export const entries = pgTable(
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
+    revision: integer('revision').notNull().default(1),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
     deletionReason: text('deletion_reason'),
   },

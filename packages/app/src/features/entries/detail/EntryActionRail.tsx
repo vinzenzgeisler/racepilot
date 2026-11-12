@@ -33,6 +33,11 @@ export function statusSteps(
     ?.nextAction?.key.replace(/^entry:/, '');
   const steps = (workflow?.transitions ?? [])
     .filter((edge) => edge.from === entry.acceptanceStatus)
+    .filter(
+      (edge) =>
+        !entry.availableActions ||
+        entry.availableActions.includes(`acceptance:${edge.to}`),
+    )
     .map((edge): StatusStep => {
       const target = workflow?.statuses.find((item) => item.key === edge.to);
       const label = target?.labels.de ?? edge.to;
@@ -48,7 +53,15 @@ export function statusSteps(
   // A destructive outcome is never offered as the highlighted next step.
   const candidate = steps.find((step) => step.to === nextKey) ?? null;
   const primary = candidate && !candidate.danger ? candidate : null;
-  return { primary, others: steps.filter((step) => step !== primary) };
+  const others = steps.filter((step) => step !== primary);
+  // As in the design, destructive outcomes follow the regular ones.
+  return {
+    primary,
+    others: [
+      ...others.filter((step) => !step.danger),
+      ...others.filter((step) => step.danger),
+    ],
+  };
 }
 
 export function EntryActionRail({
@@ -59,6 +72,7 @@ export function EntryActionRail({
   onVerify,
   onPayment,
   onDimension,
+  onAdminAction,
 }: {
   entry: Entry;
   workflow: WorkflowView | null;
@@ -67,6 +81,9 @@ export function EntryActionRail({
   onVerify: () => void;
   onPayment: () => void;
   onDimension: (action: DimensionAction) => void;
+  onAdminAction: (
+    kind: 'change_class' | 'adjust_amount' | 'note' | 'delete',
+  ) => void;
 }) {
   const { primary, others } = statusSteps(entry, workflow);
   const missing = missingRequirements(entry);
@@ -137,6 +154,54 @@ export function EntryActionRail({
               {step.label}
             </RailAction>
           ))}
+        </ActionGroup>
+      )}
+      {(entry.availableActions ?? []).some(
+        (action) =>
+          action.startsWith('change_class:') ||
+          [
+            'change_class',
+            'adjust_amount',
+            'note:internal',
+            'note:driver',
+            'delete',
+          ].includes(action),
+      ) && (
+        <ActionGroup title="Nennung verwalten">
+          {(entry.availableActions?.includes('change_class') ||
+            entry.availableActions?.some((action) =>
+              action.startsWith('change_class:'),
+            )) && (
+            <RailAction
+              disabled={busy}
+              onClick={() => onAdminAction('change_class')}
+            >
+              Klasse ändern
+            </RailAction>
+          )}
+          {entry.availableActions?.includes('adjust_amount') && (
+            <RailAction
+              disabled={busy}
+              onClick={() => onAdminAction('adjust_amount')}
+            >
+              Betrag anpassen
+            </RailAction>
+          )}
+          {(entry.availableActions?.includes('note:internal') ||
+            entry.availableActions?.includes('note:driver')) && (
+            <RailAction disabled={busy} onClick={() => onAdminAction('note')}>
+              Notiz hinzufügen
+            </RailAction>
+          )}
+          {entry.availableActions?.includes('delete') && (
+            <RailAction
+              tone="danger"
+              disabled={busy}
+              onClick={() => onAdminAction('delete')}
+            >
+              Nennung löschen …
+            </RailAction>
+          )}
         </ActionGroup>
       )}
       <RailNote>

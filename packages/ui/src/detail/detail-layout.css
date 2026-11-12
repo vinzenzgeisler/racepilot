@@ -1,7 +1,7 @@
 .nb-detail {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas: 'header' 'rail' 'main';
+  grid-template-areas: 'header' 'main' 'rail';
   min-height: 100%;
   background: var(--color-white);
 }
@@ -18,7 +18,7 @@
 .nb-detail-rail {
   grid-area: rail;
   padding: var(--space-4);
-  border-bottom: 1px solid var(--color-line);
+  border-top: 1px solid var(--color-line);
   background: var(--color-ivory);
 }
 @media (width >= 1024px) {
@@ -34,7 +34,7 @@
   }
   .nb-detail-rail {
     padding: var(--space-6);
-    border-bottom: 0;
+    border-top: 0;
     border-left: 1px solid var(--color-line);
   }
 }

@@ -13,6 +13,8 @@ export function ReasonDialog({
   busy = false,
   error,
   confirmDisabled = false,
+  confirmTone = 'default',
+  reasonMaxLength = 1000,
   onConfirm,
   onClose,
   children,
@@ -27,6 +29,9 @@ export function ReasonDialog({
   busy?: boolean;
   error?: string | undefined;
   confirmDisabled?: boolean;
+  /** Destructive decisions confirm with the red secondary style instead of the primary one. */
+  confirmTone?: 'default' | 'danger';
+  reasonMaxLength?: number;
   onConfirm: (reason: string) => void;
   onClose: () => void;
   children?: ReactNode;
@@ -48,7 +53,11 @@ export function ReasonDialog({
           </button>
           <button
             type="button"
-            className="nb-confirm-primary"
+            className={
+              confirmTone === 'danger'
+                ? 'nb-confirm-danger'
+                : 'nb-confirm-primary'
+            }
             disabled={busy || confirmDisabled || !reason.trim()}
             onClick={() => onConfirm(reason.trim())}
           >
@@ -63,7 +72,7 @@ export function ReasonDialog({
         <Textarea
           label={reasonLabel}
           value={reason}
-          maxLength={1000}
+          maxLength={reasonMaxLength}
           required
           onChange={(event) => setReason(event.target.value)}
         />

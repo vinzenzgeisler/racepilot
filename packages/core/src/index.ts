@@ -28,3 +28,4 @@ export * from './documents.js';
 export * from './orga-code.js';
 export * from './overview.js';
 export * from './artifact-model.js';
+export * from './entry-admin-actions.js';

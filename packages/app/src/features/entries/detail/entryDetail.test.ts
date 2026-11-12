@@ -64,6 +64,56 @@ describe('entry detail model', () => {
     expect(JSON.stringify(items)).not.toMatch(/f_pending|x_raw|entry-received/);
   });
 
+  it('limits status actions to those approved by the server and labels admin history', () => {
+    const workflow = {
+      statuses: [
+        {
+          key: 'pending',
+          labels: { de: 'Offen', en: 'Pending' },
+          color: '',
+          category: 'pending',
+        },
+        {
+          key: 'rejected',
+          labels: { de: 'Abgelehnt', en: 'Rejected' },
+          color: '',
+          category: 'rejected',
+        },
+      ],
+      transitions: [{ from: 'pending', to: 'rejected', reasonRequired: true }],
+    };
+    const entry = {
+      acceptanceStatus: 'pending',
+      availableActions: [],
+      statusProjection: { dimensions: [] },
+    } as unknown as Entry;
+    expect(statusSteps(entry, workflow)).toEqual({ primary: null, others: [] });
+    const withHistory = {
+      createdAt: '2026-09-01T00:00:00.000Z',
+      adminHistory: [
+        {
+          id: 'note',
+          kind: 'entry',
+          label: 'internal_note',
+          actor: 'Admin',
+          occurredAt: '2026-09-02T00:00:00.000Z',
+          detail: 'Nur intern',
+        },
+        {
+          id: 'class',
+          kind: 'entry',
+          label: 'class_changed',
+          actor: 'Admin',
+          occurredAt: '2026-09-03T00:00:00.000Z',
+          detail: 'Klasse passt',
+        },
+      ],
+    } as unknown as Entry;
+    expect(
+      timelineFor(withHistory, null, new Map()).map((item) => item.title),
+    ).toEqual(['Klasse geändert', 'Interne Notiz', 'Nennung eingereicht']);
+  });
+
   it('names what still blocks a clean acceptance', () => {
     const entry = {
       statusProjection: {
@@ -125,8 +175,8 @@ describe('entry detail model', () => {
     const dangerous = statusSteps(entry('withdrawn'), workflow);
     expect(dangerous.primary).toBeNull();
     expect(dangerous.others.map((step) => step.label)).toEqual([
-      'Als abgesagt markieren …',
       'Zurück auf Offen',
+      'Als abgesagt markieren …',
     ]);
     expect(statusSteps(entry('pending'), workflow).primary?.label).toBe(
       'Zurück auf Offen',

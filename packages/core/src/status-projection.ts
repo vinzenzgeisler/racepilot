@@ -175,10 +175,13 @@ export function validateEntryWorkflow(workflow: EntryWorkflow): string[] {
         !/^[a-z][a-z0-9:._-]{0,99}$/.test(edge.permission))
     )
       errors.push(`Invalid permission: ${edge.from} -> ${edge.to}`);
+    if (edge.reopen && (edge.to !== 'pending' || !edge.reasonRequired))
+      errors.push(`Invalid reopen transition: ${edge.from} -> ${edge.to}`);
     if (pairs.has(pair))
       errors.push(`Duplicate transition: ${edge.from} -> ${edge.to}`);
     pairs.add(pair);
-    edges.set(edge.from, [...(edges.get(edge.from) ?? []), edge.to]);
+    if (!edge.reopen)
+      edges.set(edge.from, [...(edges.get(edge.from) ?? []), edge.to]);
   }
   const visiting = new Set<string>(),
     visited = new Set<string>();

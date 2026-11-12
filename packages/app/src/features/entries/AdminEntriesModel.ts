@@ -1,4 +1,5 @@
 import { adminFetch } from '../../auth.js';
+import type { Dispatch, SetStateAction } from 'react';
 import { EventSchema } from '@racepilot/contracts';
 
 export type Event = ReturnType<typeof EventSchema.parse>;
@@ -78,3 +79,21 @@ export function isCurrent(
 
 /** Result of a change request; `message` is meant for the dialog or form that started it. */
 export type Outcome = { ok: true } | { ok: false; message: string };
+
+export function applyEntrySort(
+  nextSort: string,
+  nextDirection: string,
+  setDraft: Dispatch<SetStateAction<EntryQuery>>,
+  setPage: Dispatch<SetStateAction<number>>,
+  clearSelection: () => void,
+  setApplied: Dispatch<SetStateAction<EntryQuery>>,
+) {
+  setDraft((value) => ({ ...value, sort: nextSort, direction: nextDirection }));
+  setPage(1);
+  clearSelection();
+  setApplied((value) => ({
+    ...value,
+    sort: nextSort,
+    direction: nextDirection,
+  }));
+}

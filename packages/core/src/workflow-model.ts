@@ -48,6 +48,8 @@ export interface EntryWorkflowTransition {
   readonly permission?: string;
   readonly roles?: readonly MembershipRole[];
   readonly notify?: boolean;
+  /** Explicit return to pending; excluded from the forward workflow DAG. */
+  readonly reopen?: boolean;
 }
 
 export interface EntryWorkflow {
@@ -184,6 +186,14 @@ export const defaultEntryWorkflow: EntryWorkflow = Object.freeze<EntryWorkflow>(
       { from: 'waitlisted', to: 'accepted', reasonRequired: false },
       { from: 'waitlisted', to: 'rejected', reasonRequired: false },
       { from: 'waitlisted', to: 'withdrawn', reasonRequired: false },
+      ...['accepted', 'rejected', 'waitlisted', 'withdrawn'].map((from) => ({
+        from,
+        to: 'pending',
+        reasonRequired: true,
+        permission: 'entry:write',
+        notify: true,
+        reopen: true,
+      })),
     ],
   },
 );

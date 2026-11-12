@@ -31,6 +31,7 @@ import {
   registrationGroups,
   entries,
   entryAuditEvents,
+  entryNotes,
   invoices,
   invoicePayments,
   invoicePaymentAuditEvents,
@@ -1617,6 +1618,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           'formSnapshotVersion',
           'priceSnapshot',
           'createdAt',
+          'revision',
           'deletedAt',
           'deletionReason',
           'statusProjection',
@@ -1875,6 +1877,13 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         .update(registrationGroups)
         .set({ contactEmail: null })
         .where(eq(registrationGroups.id, groupA!.id));
+      await db.insert(entryNotes).values({
+        organizationId: orgA!,
+        entryId: entryAfterChange!.id,
+        visibility: 'driver',
+        body: 'Bitte Unterlagen mitbringen',
+        actor: 'admin',
+      });
       const transitionedCustom = await transitionEntry(
         ctxA,
         entryAfterChange!.id,
@@ -1924,6 +1933,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           statusKey: 'documents_missing',
           statusLabelDe: 'Unterlagen fehlen',
           statusLabelEn: 'Documents missing',
+          driverNote: 'Bitte Unterlagen mitbringen',
         },
       });
       await expect(
