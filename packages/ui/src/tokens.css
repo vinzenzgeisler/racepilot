@@ -26,6 +26,10 @@
   --width-form-max: 45rem;
   --width-aside-min: 20rem;
   --height-selection-list: 18rem;
+  --metric-min-width: 12rem;
+  --occupancy-label-min: 6rem;
+  --occupancy-track-min: 6rem;
+  --occupancy-bar-height: var(--space-3);
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;

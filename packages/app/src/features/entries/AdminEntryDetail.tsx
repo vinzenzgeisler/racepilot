@@ -21,6 +21,7 @@ import { EntryConsentsSection } from './detail/EntryConsentsSection.js';
 import { EntryCustomAnswers } from './detail/EntryCustomAnswers.js';
 import { EntryDriverSection } from './detail/EntryDriverSection.js';
 import { EntryHistorySection } from './detail/EntryHistorySection.js';
+import { EntryConfirmation } from './detail/EntryConfirmation.js';
 import { EntryMessagesSection } from './detail/EntryMessagesSection.js';
 import { EntryPaymentDialog } from './detail/EntryPaymentDialog.js';
 import { EntryVehicleSection } from './detail/EntryVehicleSection.js';
@@ -244,6 +245,10 @@ export function AdminEntryDetail({
         <EntryMessagesSection
           messages={messages.items}
           failed={messages.failed}
+        />
+        <EntryConfirmation
+          eventId={selected.eventId}
+          groupId={selected.registrationGroupId}
         />
         <EntryHistorySection items={timeline} />
       </DetailLayout>

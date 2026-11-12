@@ -1,0 +1,45 @@
+.nb-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--metric-min-width), 1fr));
+  gap: 0;
+  margin: 0;
+  border-block: var(--line-section) solid var(--color-ink);
+  background: var(--color-white);
+}
+.nb-metric {
+  display: grid;
+  align-content: start;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border-inline-start: var(--line-group) solid var(--color-line);
+  border-block-start: var(--line-group) solid var(--color-line);
+}
+.nb-metric-grid > .nb-metric:first-child {
+  border-inline-start: 0;
+}
+.nb-metric dt {
+  color: var(--color-graphite);
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.nb-metric dd {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+}
+.nb-metric dd strong {
+  font: var(--text-app-h1);
+  letter-spacing: var(--type-h1-tracking);
+}
+.nb-metric dd small {
+  color: var(--color-graphite);
+  font: var(--text-body);
+}
+.nb-metric.is-attention dd strong {
+  color: var(--color-marshal-text);
+}
+.nb-metric-action {
+  margin-top: var(--space-1);
+}

@@ -4,6 +4,9 @@ import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from '../entries/AdminEntriesModel.js';
 import { AdminEntries } from '../entries/AdminEntries.js';
 import { AppShell } from './AppShell.js';
+import { AdminOverview } from '../overview/AdminOverview.js';
+import { AdminExports } from '../exports/AdminExports.js';
+import type { EntryFilters } from '../overview/overviewModel.js';
 import { AdminMessages } from '../messages/AdminMessages.js';
 import { EntryPreview } from './EntryPreview.js';
 import { RegistrationFormSettings } from '../registration/RegistrationFormSettings.js';
@@ -24,6 +27,10 @@ export function AdminApplication() {
     }>
   >([]);
   const [entryCount, setEntryCount] = useState(0);
+  const [entriesTarget, setEntriesTarget] = useState<{
+    revision: number;
+    filters: EntryFilters;
+  }>({ revision: 0, filters: {} });
   const [selectedEvent, setSelectedEvent] = useState('');
 
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
@@ -40,6 +47,7 @@ export function AdminApplication() {
   const changeEvent = useCallback((id: string) => {
     activeEvent.current = id;
     setSelectedEvent(id);
+    setEntriesTarget((current) => ({ ...current, filters: {} }));
     setSelectedEntry(null);
     setMessageEntryId(null);
     setDetailOpen(false);
@@ -197,6 +205,7 @@ export function AdminApplication() {
       onClearMessageSelection={() => setMessageEntryId(null)}
       activeEvent={selectedEvent}
       entryCount={entryCount}
+      entriesNavigationRevision={entriesTarget.revision}
       onEventChange={changeEvent}
       previewOpen={previewOpen && !detailOpen}
       detailOpen={detailOpen}
@@ -204,8 +213,24 @@ export function AdminApplication() {
       onClosePreview={closePreview}
     >
       {(view) =>
-        view === 'entries' ? (
+        view === 'overview' ? (
+          <AdminOverview
+            eventId={selectedEvent}
+            onOpenEntries={(filters) => {
+              setSelectedEntry(null);
+              setDetailOpen(false);
+              setEntriesTarget((current) => ({
+                revision: current.revision + 1,
+                filters,
+              }));
+            }}
+          />
+        ) : view === 'exports' ? (
+          <AdminExports eventId={selectedEvent} />
+        ) : view === 'entries' ? (
           <AdminEntries
+            filterRevision={entriesTarget.revision}
+            initialFilters={entriesTarget.filters}
             preview={previewOpen && !detailOpen ? entryPreview : undefined}
             mobilePreviewOpen={
               previewOpen && !detailOpen && Boolean(selectedEntry)
