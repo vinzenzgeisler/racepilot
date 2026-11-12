@@ -1,4 +1,4 @@
-import { Button, PreviewPanel, useWorkspacePreview } from '@racepilot/ui';
+import { PreviewPanel, useWorkspacePreview } from '@racepilot/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from '../entries/AdminEntriesModel.js';
@@ -9,59 +9,7 @@ import { EntryPreview } from './EntryPreview.js';
 import { RegistrationFormSettings } from '../registration/RegistrationFormSettings.js';
 import { AdminWorkflow } from '../workflow/AdminWorkflow.js';
 import { EventSetup } from '../event-setup/EventSetup.js';
-import {
-  adminFetch,
-  getAdminIdentity,
-  restoreAdminSession,
-  signIn,
-} from '../../auth.js';
-
-export function AuthenticatedAdmin() {
-  const [session, setSession] = useState<
-    'loading' | 'ready' | 'signed-out' | 'disabled' | 'error'
-  >('loading');
-  useEffect(() => {
-    let active = true;
-    void restoreAdminSession()
-      .then((result) => {
-        if (active) setSession(result);
-      })
-      .catch(() => {
-        if (active) setSession('error');
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  if (session === 'loading')
-    return (
-      <main className="shell" aria-busy="true">
-        <p role="status">NENNBOX lädt…</p>
-      </main>
-    );
-  if (session === 'ready') return <AdminApplication />;
-  return (
-    <main className="shell">
-      <h1>NENNBOX</h1>
-      {session === 'signed-out' ? (
-        <>
-          <p>Bitte anmelden, um die Veranstaltung zu verwalten.</p>
-          <Button
-            onClick={() => void signIn().catch(() => setSession('error'))}
-          >
-            Anmelden
-          </Button>
-        </>
-      ) : (
-        <p role="alert">
-          {session === 'disabled'
-            ? 'Die Anmeldung ist noch nicht eingerichtet.'
-            : 'Die Anmeldung ist derzeit nicht verfügbar.'}
-        </p>
-      )}
-    </main>
-  );
-}
+import { adminFetch, getAdminIdentity } from '../../auth.js';
 
 export function AdminApplication() {
   const previewViewport = useWorkspacePreview();
