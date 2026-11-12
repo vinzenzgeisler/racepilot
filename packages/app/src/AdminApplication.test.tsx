@@ -168,10 +168,11 @@ async function mount(slow: Array<'driver' | 'payment' | 'status'> = []) {
       return slow.includes('payment')
         ? deferred('payment')
         : Response.json({ id: 'p' }, { status: 201 });
-    if (url === `/admin/entries/${entryA}/transitions`)
-      return slow.includes('status')
-        ? deferred('status')
-        : Response.json(acceptedAlex());
+    if (url === `/admin/entries/${entryA}/transitions`) {
+      if (slow.includes('status')) return deferred('status');
+      listedEntries = [acceptedAlex()];
+      return Response.json(acceptedAlex());
+    }
     if (url === `/admin/entries/${entryA}`)
       return Response.json(
         listedEntries.find(
