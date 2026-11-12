@@ -51,21 +51,57 @@ test('Admin filters recipients, sends a message, and sees Mailpit delivery and s
     page.getByRole('heading', { level: 3, name: subject }),
   ).toBeVisible();
   const screenshotDir = process.env.MESSAGE_SCREENSHOT_DIR;
-  if (screenshotDir) {
-    mkdirSync(screenshotDir, { recursive: true });
-    for (const [width, height] of [
-      [1920, 1080],
-      [1440, 900],
-      [390, 844],
-    ]) {
-      await page.setViewportSize({ width: width ?? 0, height: height ?? 0 });
-      await page.evaluate(() => window.scrollTo(0, 0));
+  const editor = page.locator('.nb-message-editor');
+  const aside = page.locator('.nb-message-aside');
+  const formMax = await page.evaluate(() => {
+    const probe = document.createElement('div');
+    probe.style.width = 'var(--width-form-max)';
+    document.body.append(probe);
+    const width = probe.getBoundingClientRect().width;
+    probe.remove();
+    return width;
+  });
+  for (const [width, height] of [
+    [1920, 1080],
+    [1440, 900],
+    [390, 844],
+  ] as const) {
+    await page.setViewportSize({ width, height });
+    await page.evaluate(() => window.scrollTo(0, 0));
+    const form = await editor.boundingBox();
+    const help = await aside.boundingBox();
+    const main = await page.locator('main').first().boundingBox();
+    if (!form || !help || !main) throw new Error('layout boxes missing');
+    expect(form.width).toBeLessThanOrEqual(formMax + 1);
+    expect(form.x).toBeLessThanOrEqual(main.x + 64);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    expect(
+      await page.evaluate(() =>
+        [...document.querySelectorAll('.nb-message-editor *')].every(
+          (node) =>
+            node.getBoundingClientRect().right <=
+            (node.closest('.nb-message-editor')?.getBoundingClientRect()
+              .right ?? 0) +
+              1,
+        ),
+      ),
+    ).toBe(true);
+    if (width >= 1440)
+      expect(help.x).toBeGreaterThanOrEqual(form.x + form.width);
+    else expect(help.y).toBeGreaterThanOrEqual(form.y + form.height - 1);
+    if (screenshotDir) {
+      mkdirSync(screenshotDir, { recursive: true });
       await page.screenshot({
         path: `${screenshotDir}/messages-${width}x${height}.png`,
-        fullPage: false,
+        fullPage: true,
       });
     }
   }
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.getByRole('button', { name: 'Nachricht senden' }).click();
   const dialog = page.getByRole('dialog');
   await expect(dialog).toContainText(`an ${count} Empfänger`);
@@ -99,6 +135,11 @@ test('Admin filters recipients, sends a message, and sees Mailpit delivery and s
       { timeout: 60_000 },
     )
     .toBe(true);
+  if (screenshotDir)
+    await page.screenshot({
+      path: `${screenshotDir}/messages-outbox-sent-1440x900.png`,
+      fullPage: true,
+    });
   await page.setViewportSize({ width: 1920, height: 1080 });
   await page.getByRole('button', { name: 'Nennungen', exact: true }).click();
   await page
