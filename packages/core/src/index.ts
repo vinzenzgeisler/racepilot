@@ -27,5 +27,4 @@ export * from './registration-submission.js';
 export * from './documents.js';
 export * from './orga-code.js';
 export * from './overview.js';
-export * from './artifact-jobs.js';
 export * from './artifact-model.js';

@@ -18,6 +18,7 @@ describe('event overview use case', () => {
       openPayments: { count: 1, amountCents: 1200, currency: 'EUR' },
       classes: [],
       daysUntilRegistrationCloses: 4,
+      missingDocuments: { count: 0 },
       warnings: [],
     };
     let calls = 0;

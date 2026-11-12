@@ -25,7 +25,7 @@ export interface EventOverview {
   }[];
   readonly daysUntilRegistrationCloses: number | null;
   readonly warnings: readonly OverviewWarning[];
-  readonly missingDocuments?: { readonly count: number };
+  readonly missingDocuments: { readonly count: number };
 }
 
 export type OverviewRepositoryResult =

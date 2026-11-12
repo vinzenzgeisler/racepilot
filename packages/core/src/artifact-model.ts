@@ -1,6 +1,5 @@
 import type { JobContext, OrganizationId, RequestContext } from './context.js';
 import type { StoredObjectRef } from './providers.js';
-import type { PriceSnapshot } from './pricing.js';
 import type {
   EntryAcceptanceStatus,
   EntryVerificationStatus,
@@ -30,26 +29,6 @@ export interface EntryExportRepository {
     eventId: string,
     filters: EntryExportFilters,
   ): Promise<readonly EntryExportRow[]>;
-}
-
-export interface EntryConfirmationData {
-  readonly eventId: string;
-  readonly eventName: string;
-  readonly eventStartsOn: string;
-  readonly registrationGroupId: string;
-  readonly driverName: string;
-  readonly vehicles: readonly string[];
-  readonly classes: readonly string[];
-  readonly priceSnapshot: PriceSnapshot;
-  readonly paymentReference: string;
-}
-
-export interface EntryConfirmationRepository {
-  getByGroup(
-    ctx: RequestContext,
-    eventId: string,
-    registrationGroupId: string,
-  ): Promise<EntryConfirmationData | null>;
 }
 
 export type ArtifactKind = 'confirmation_pdf' | 'entries_csv';

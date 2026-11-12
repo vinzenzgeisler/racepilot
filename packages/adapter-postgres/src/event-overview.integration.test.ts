@@ -17,6 +17,7 @@ import {
   entries,
 } from './schema/entries.js';
 import { invoices } from './schema/billing.js';
+import { eventEntryDocumentTypes } from './schema/documents.js';
 
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL event overview', () => {
@@ -50,6 +51,13 @@ describe.skipIf(!url)('PostgreSQL event overview', () => {
           registrationClosesAt: new Date('2030-01-01T00:00:00.000Z'),
         })
         .returning();
+      await db.insert(eventEntryDocumentTypes).values({
+        organizationId: organizationIdForCleanup,
+        eventId: event!.id,
+        key: 'license',
+        name: 'Driver license',
+        required: true,
+      });
       const [eventClass] = await db
         .insert(eventClasses)
         .values({
@@ -94,6 +102,7 @@ describe.skipIf(!url)('PostgreSQL event overview', () => {
         registrationGroupId: group!.id,
         driverPersonId: person!.id,
         vehicleId: vehicle!.id,
+        orgaCode: `OVR-${suffix}`,
         acceptanceStatus: 'pending',
         verificationStatus: 'unverified',
       });
@@ -148,6 +157,7 @@ describe.skipIf(!url)('PostgreSQL event overview', () => {
             { classId: eventClass!.id, name: 'GT', occupied: 1, capacity: 4 },
           ],
           daysUntilRegistrationCloses: 1,
+          missingDocuments: { count: 1 },
           warnings: [
             {
               type: 'unverified-email',
