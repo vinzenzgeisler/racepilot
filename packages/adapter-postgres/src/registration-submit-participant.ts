@@ -1,4 +1,5 @@
 import type { RequestContext } from '@racepilot/core';
+import { RegistrationUnavailable } from '@racepilot/core';
 import { normalizeEmail } from '@racepilot/core';
 import { eq, and, inArray, sql } from 'drizzle-orm';
 import { people, entries } from './schema/entries.js';
@@ -25,7 +26,6 @@ export async function resolveRegistrationParticipant(args: {
   uniqueClassIds: string[];
 }> {
   const { tx, ctx, event, payload, settings } = args;
-  const unavailable = () => new Error('Registration unavailable');
   const emailNormalized = normalizeEmail(payload.person.email);
   await tx.execute(
     sql`select pg_advisory_xact_lock(hashtextextended(${`${ctx.organizationId}:email:${emailNormalized}`}, 0))`,
@@ -35,7 +35,8 @@ export async function resolveRegistrationParticipant(args: {
   );
   const dob = new Date(`${payload.person.dateOfBirth}T00:00:00.000Z`);
   const eventStart = new Date(`${event.startsOn}T00:00:00.000Z`);
-  if (!Number.isFinite(dob.getTime()) || dob > eventStart) throw unavailable();
+  if (!Number.isFinite(dob.getTime()) || dob > eventStart)
+    throw new RegistrationUnavailable('invalid-participant');
   let age = eventStart.getUTCFullYear() - dob.getUTCFullYear();
   if (
     eventStart.getUTCMonth() < dob.getUTCMonth() ||
@@ -44,18 +45,18 @@ export async function resolveRegistrationParticipant(args: {
   )
     age--;
   if (settings.minimumAge !== null && age < settings.minimumAge)
-    throw unavailable();
+    throw new RegistrationUnavailable('age-restricted');
   const needsGuardian = age < settings.guardianRequiredBelowAge;
   if (
     needsGuardian &&
     (!payload.person.guardianName?.trim() || !payload.person.guardianEmail)
   )
-    throw unavailable();
+    throw new RegistrationUnavailable('guardian-required');
   const uniqueClassIds = [
     ...new Set(payload.entries.map((entry) => entry.classId)),
   ];
   if (uniqueClassIds.length > settings.maximumClassesPerGroup)
-    throw unavailable();
+    throw new RegistrationUnavailable('too-many-classes');
   const classes = await tx
     .select()
     .from(eventClasses)
@@ -72,7 +73,7 @@ export async function resolveRegistrationParticipant(args: {
     classes.length !== uniqueClassIds.length ||
     classes.some((eventClass) => eventClass.closed)
   )
-    throw unavailable();
+    throw new RegistrationUnavailable('class-unavailable');
   for (const eventClass of classes) {
     const count = await tx
       .select({ count: sql<number>`count(*)::int` })
@@ -93,7 +94,7 @@ export async function resolveRegistrationParticipant(args: {
           .length >
         eventClass.maxParticipants
     )
-      throw unavailable();
+      throw new RegistrationUnavailable('capacity-exceeded');
   }
   const emailOwners = await tx
     .select({
@@ -122,7 +123,7 @@ export async function resolveRegistrationParticipant(args: {
     settings.sharedContactEmail === 'disallowed' &&
     emailOwners.some((person) => person.id !== samePerson?.id)
   )
-    throw unavailable();
+    throw new RegistrationUnavailable('shared-email-disallowed');
   let personId = samePerson?.id;
   if (!personId) {
     const sameBirthDate = await tx
@@ -148,7 +149,7 @@ export async function resolveRegistrationParticipant(args: {
             normalizedName(payload.person.lastName),
       )
     )
-      throw unavailable();
+      throw new RegistrationUnavailable('invalid-participant');
     const [person] = await tx
       .insert(people)
       .values({

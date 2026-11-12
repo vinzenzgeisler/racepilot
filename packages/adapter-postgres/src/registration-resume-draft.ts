@@ -8,6 +8,7 @@ import { sql } from 'drizzle-orm';
 import { randomBytes } from 'node:crypto';
 import { events } from './schema/organization.js';
 import type { PublicRegistrationDependencies } from './registration-public-types.js';
+import { RegistrationUnavailable } from '@racepilot/core';
 
 export function createRegistrationResumeDraftMethods(
   dependencies: PublicRegistrationDependencies,
@@ -58,7 +59,7 @@ export function createRegistrationResumeDraftMethods(
             ) {
               const objectId = (answer as { objectId?: unknown }).objectId;
               if (typeof objectId !== 'string')
-                throw new Error('Registration unavailable');
+                throw new RegistrationUnavailable('draft-upload-invalid');
               const token = randomBytes(32).toString('base64url');
               const [rotated] = await tx
                 .update(registrationFormUploads)
@@ -78,7 +79,7 @@ export function createRegistrationResumeDraftMethods(
                   ),
                 )
                 .returning({ id: registrationFormUploads.id });
-              if (!rotated) throw new Error('Registration unavailable');
+              if (!rotated) throw new RegistrationUnavailable('upload-missing');
               (answers as Record<string, unknown>)[fieldKey] = {
                 objectId,
                 uploadToken: token,

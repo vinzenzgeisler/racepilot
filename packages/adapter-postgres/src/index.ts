@@ -12,7 +12,7 @@ export { emailTemplateVersions } from './mail-schema.js';
 export { emailOutbox } from './mail-schema.js';
 export { emailDeliveries } from './mail-schema.js';
 export { createOrganizationRepository } from './organization.js';
-export { createEventRepository } from './events.js';
+export { createEventRepository, createEventSetupRepository } from './events.js';
 export { createEventClassRepository } from './events.js';
 export { createMembershipRepository } from './memberships.js';
 export { createPersonRepository } from './people.js';

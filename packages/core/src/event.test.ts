@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   assertEventTransition,
+  evaluateEventOpenReadiness,
+  mergeClassPriceRule,
   canRegister,
   updateEvent,
   organizationId,
@@ -17,6 +19,46 @@ describe('event lifecycle and registration eligibility', () => {
       /Invalid event transition/,
     );
     expect(() => assertEventTransition('archived', 'open')).toThrow();
+  });
+  it('reports all missing prerequisites before an event can be opened', () => {
+    const classRow = { id: 'class-1', closed: false };
+    const terms = [{ key: 'participation', text: 'Regeln' }];
+    expect(
+      evaluateEventOpenReadiness({ classes: [], prices: [], terms }),
+    ).toEqual({
+      ready: false,
+      issues: ['class-required', 'price-required'],
+    });
+    expect(
+      evaluateEventOpenReadiness({
+        classes: [classRow],
+        prices: [],
+        terms: [],
+      }),
+    ).toEqual({
+      ready: false,
+      issues: ['price-required', 'participation-terms-required'],
+    });
+    expect(
+      evaluateEventOpenReadiness({
+        classes: [classRow],
+        prices: [{ classId: classRow.id }],
+        terms,
+      }),
+    ).toEqual({ ready: true, issues: [] });
+  });
+  it('does not count closed classes or empty participation terms as ready', () => {
+    expect(
+      evaluateEventOpenReadiness({
+        classes: [{ id: 'class-1', closed: true }],
+        prices: [{ classId: 'class-1' }],
+        terms: [{ key: 'participation', text: '  ' }],
+      }).issues,
+    ).toEqual([
+      'class-required',
+      'price-required',
+      'participation-terms-required',
+    ]);
   });
   it('hides events outside registration window and rejects closed classes', () => {
     expect(
@@ -39,6 +81,28 @@ describe('event lifecycle and registration eligibility', () => {
       ),
     ).toBe(false);
   });
+  it('merges partial price updates and requires complete new price rules', () => {
+    const current = {
+      classId: 'class-1',
+      baseCents: 12500,
+      additionalEntryAdjustmentCents: -2000,
+      earlyBirdDeadline: '2027-04-01T00:00:00Z',
+      earlyBirdDiscountCents: 1000,
+    };
+    expect(
+      mergeClassPriceRule('class-1', current, { baseCents: 15000 }),
+    ).toEqual({
+      ok: true,
+      rule: {
+        ...current,
+        baseCents: 15000,
+      },
+    });
+    expect(mergeClassPriceRule('class-1', null, { baseCents: 15000 })).toEqual({
+      ok: false,
+      reason: 'price-fields-required',
+    });
+  });
   it('validates patched dates and windows against the persisted event', async () => {
     const current = {
       id: 'event',
@@ -57,6 +121,7 @@ describe('event lifecycle and registration eligibility', () => {
     const events = {
       listByOrganization: async () => [],
       getById: async () => current,
+      createSetup: async () => current,
       update: async () => current,
     };
     const ctx = {

@@ -13,6 +13,7 @@ import { organizations, events } from './schema/organization.js';
 import { eq, and } from 'drizzle-orm';
 import {
   ProviderError,
+  RegistrationUnavailable,
   registrationContactMatches,
   registrationVehicleDetailsMatch,
   resolveRegistrationFieldStates,
@@ -77,10 +78,9 @@ export function createPublicRegistrationService(
           )
           .for('share')
           .limit(1);
-        const unavailable = () => new Error('Registration unavailable');
         const submissionConflict = () =>
           new ProviderError('conflict', 'Submission ID conflict');
-        if (!event) throw unavailable();
+        if (!event) throw new RegistrationUnavailable('event-unavailable');
         const [existingSubmission] = await tx
           .select()
           .from(publicEntrySubmissions)
@@ -104,7 +104,7 @@ export function createPublicRegistrationService(
           (event.registrationClosesAt &&
             event.registrationClosesAt < receivedAt)
         )
-          throw unavailable();
+          throw new RegistrationUnavailable('registration-closed');
         const formConfig = (event.registrationFormConfig ?? {}) as Record<
           string,
           unknown
@@ -139,14 +139,14 @@ export function createPublicRegistrationService(
         if (
           Object.keys(customAnswers).some((key) => !customFieldByKey.has(key))
         )
-          throw unavailable();
+          throw new RegistrationUnavailable('custom-field-unknown');
 
         if (
           payload.entries.length > 1 &&
           (formFeatures.multipleEntries ?? orgFormFeatures.multipleEntries) ===
             false
         )
-          throw unavailable();
+          throw new RegistrationUnavailable('multiple-entries-disabled');
         const eventNumberState = (
           (formConfig.fields ?? {}) as Record<string, Record<string, unknown>>
         ).requestedStartNumber?.state;
@@ -160,8 +160,7 @@ export function createPublicRegistrationService(
           (eventNumberState ?? orgNumberState) === 'hidden' &&
           payload.entries.some((entry) => entry.requestedStartNumber)
         )
-          throw unavailable();
-        // The server checks exactly the fields the delivered form asks for.
+          throw new RegistrationUnavailable('requested-start-number-hidden');
         const fieldStates = resolveRegistrationFieldStates(
           orgFormConfig,
           formConfig,
@@ -173,7 +172,7 @@ export function createPublicRegistrationService(
               !registrationVehicleDetailsMatch(entry.vehicle, fieldStates),
           )
         )
-          throw unavailable();
+          throw new RegistrationUnavailable('invalid-participant');
         if (!existingSubmission) {
           const [reservation] = await tx
             .insert(publicEntrySubmissions)
@@ -198,12 +197,13 @@ export function createPublicRegistrationService(
               response: publicEntrySubmissions.response,
               inserted: sql<boolean>`xmax = 0`,
             });
-          if (!reservation) throw unavailable();
+          if (!reservation)
+            throw new RegistrationUnavailable('submission-in-progress');
           if (!reservation.inserted) {
             if (reservation.requestFingerprint !== requestFingerprint)
               throw submissionConflict();
             if (reservation.response) return reservation.response;
-            throw unavailable();
+            throw new RegistrationUnavailable('submission-in-progress');
           }
         }
         const { safeCustomAnswers, customFileUploads } =
@@ -224,7 +224,7 @@ export function createPublicRegistrationService(
           .from(organizations)
           .where(eq(organizations.id, ctx.organizationId))
           .limit(1);
-        if (!org) throw unavailable();
+        if (!org) throw new RegistrationUnavailable('organization-unavailable');
         const settings = org.settings ?? {
           sharedContactEmail: 'allowed' as const,
           minimumAge: null,

@@ -1,5 +1,6 @@
 import { desc, eq, and, inArray } from 'drizzle-orm';
 import {
+  RegistrationUnavailable,
   calculatePrice,
   mapRegistrationVehicleDetails,
   normalizeRequestedStartNumber,
@@ -54,7 +55,6 @@ export async function persistRegistrationSubmission(args: {
     uniqueClassIds,
     selectedTerms,
   } = args;
-  const unavailable = () => new Error('Registration unavailable');
   const [template] = await tx
     .select()
     .from(emailTemplateVersions)
@@ -81,7 +81,7 @@ export async function persistRegistrationSubmission(args: {
     uniqueClassIds.includes(rule.classId),
   );
   if (classRules.length > 0 && selectedRules.length !== uniqueClassIds.length)
-    throw unavailable();
+    throw new RegistrationUnavailable('class-price-missing');
   const snapshot =
     classRules.length > 0
       ? calculatePrice({

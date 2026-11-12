@@ -182,7 +182,7 @@ jobs:
       - run: npx playwright install chromium
       - name: Start local Community stack
         run: |
-          COMMUNITY_PRINT_PASSWORD=0 COMMUNITY_SEED_DEMO=1 bash scripts/community-up.sh > /tmp/community-up.log 2>&1 &
+          COMMUNITY_PRINT_PASSWORD=0 COMMUNITY_SEED_DEMO=0 bash scripts/community-up.sh > /tmp/community-up.log 2>&1 &
           echo $! > /tmp/community-up.pid
           for attempt in {1..120}; do
             if curl -fsS http://127.0.0.1:3000/health >/dev/null && curl -fsS http://127.0.0.1:5173/app >/dev/null; then exit 0; fi
@@ -194,6 +194,8 @@ jobs:
           done
           cat /tmp/community-up.log
           exit 1
+      - name: Seed Community demo data
+        run: COMMUNITY_DEMO_SEED=I_UNDERSTAND DEPLOYMENT_MODE=community DATABASE_URL='postgres://racepilot:racepilot-local@127.0.0.1:5433/racepilot' COMMUNITY_ORGANIZATION_SLUG=community npm run community:demo-seed
       - name: Browser login smoke test
         run: COMMUNITY_ADMIN_PASSWORD="$(node scripts/community-config.mjs --password)" npx playwright test --config packages/app/playwright.config.ts
       - name: Upload alpha-flow browser screenshots

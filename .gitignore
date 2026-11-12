@@ -5,5 +5,6 @@ product-artifacts/
 *.tsbuildinfo
 .DS_Store
 .community-local/
+.community-local-*/
 playwright-report/
 test-results/

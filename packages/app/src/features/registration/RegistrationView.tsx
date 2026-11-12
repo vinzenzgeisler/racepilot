@@ -189,7 +189,7 @@ export function RegistrationView({
                             <Checkbox
                               key={`${term.key}:${term.version}:${term.language}`}
                               label={`${term.required === false ? (locale === 'de' ? 'Freiwillig · ' : 'Optional · ') : locale === 'de' ? 'Erforderlich · ' : 'Required · '}${term.text} (${t.consent})`}
-                              required={term.required !== false}
+                              aria-required={term.required !== false}
                               checked={
                                 accepted[
                                   `${term.key}:${term.version}:${term.language}`

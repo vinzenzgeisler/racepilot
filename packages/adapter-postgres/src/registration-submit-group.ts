@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import {
+  RegistrationUnavailable,
   mapRegistrationContactDetails,
   type RequestContext,
 } from '@racepilot/core';
@@ -38,7 +39,6 @@ export async function createRegistrationGroup(args: {
     customFileUploads,
     receivedAt,
   } = args;
-  const unavailable = () => new Error('Registration unavailable');
   const consentTerms = event.consentTerms ?? [];
   const selectedTerms = payload.consents.map((consent) => {
     const term = consentTerms.find(
@@ -48,9 +48,10 @@ export async function createRegistrationGroup(args: {
         item.language === payload.language &&
         item.hash === consent.hash,
     );
-    if (!term) throw unavailable();
+    if (!term) throw new RegistrationUnavailable('terms-mismatch');
     const actualHash = createHash('sha256').update(term.text).digest('hex');
-    if (actualHash !== consent.hash) throw unavailable();
+    if (actualHash !== consent.hash)
+      throw new RegistrationUnavailable('terms-mismatch');
     return term;
   });
   if (
@@ -66,7 +67,7 @@ export async function createRegistrationGroup(args: {
         ),
     )
   )
-    throw unavailable();
+    throw new RegistrationUnavailable('terms-required');
   const [priorGroup] = await tx
     .select({ id: registrationGroups.id })
     .from(registrationGroups)
@@ -78,7 +79,7 @@ export async function createRegistrationGroup(args: {
       ),
     )
     .limit(1);
-  if (priorGroup) throw unavailable();
+  if (priorGroup) throw new RegistrationUnavailable('prior-group');
   const [group] = await tx
     .insert(registrationGroups)
     .values({
@@ -95,10 +96,11 @@ export async function createRegistrationGroup(args: {
       ...mapRegistrationContactDetails(payload.person),
     })
     .returning({ id: registrationGroups.id });
+  if (!group) throw new Error('Registration group insert failed');
   for (const upload of customFileUploads) {
     const [consumed] = await tx
       .update(registrationFormUploads)
-      .set({ registrationGroupId: group!.id, consumedAt: receivedAt })
+      .set({ registrationGroupId: group.id, consumedAt: receivedAt })
       .where(
         and(
           eq(registrationFormUploads.organizationId, ctx.organizationId),
@@ -110,7 +112,7 @@ export async function createRegistrationGroup(args: {
         ),
       )
       .returning({ id: registrationFormUploads.id });
-    if (!consumed) throw unavailable();
+    if (!consumed) throw new RegistrationUnavailable('upload-missing');
   }
-  return { groupId: group!.id, selectedTerms };
+  return { groupId: group.id, selectedTerms };
 }

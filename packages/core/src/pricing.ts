@@ -193,6 +193,53 @@ export function createTransferInstruction(input: {
   return lines.join('\n');
 }
 
+export type MergeClassPriceRuleResult =
+  | { ok: true; rule: ClassPriceRule }
+  | { ok: false; reason: 'class-id-required' | 'price-fields-required' };
+
+export function mergeClassPriceRule(
+  classId: string,
+  current: ClassPriceRule | null,
+  patch: {
+    baseCents?: number | undefined;
+    additionalEntryAdjustmentCents?: number | undefined;
+    earlyBirdDeadline?: string | null | undefined;
+    earlyBirdDiscountCents?: number | undefined;
+  },
+): MergeClassPriceRuleResult {
+  const baseCents = patch.baseCents ?? current?.baseCents;
+  const additionalEntryAdjustmentCents =
+    patch.additionalEntryAdjustmentCents ??
+    current?.additionalEntryAdjustmentCents;
+  const earlyBirdDeadline =
+    patch.earlyBirdDeadline !== undefined
+      ? patch.earlyBirdDeadline
+      : current?.earlyBirdDeadline;
+  const earlyBirdDiscountCents =
+    patch.earlyBirdDiscountCents ?? current?.earlyBirdDiscountCents;
+  if (
+    !classId.trim() ||
+    baseCents === undefined ||
+    additionalEntryAdjustmentCents === undefined ||
+    earlyBirdDeadline === undefined ||
+    earlyBirdDiscountCents === undefined
+  )
+    return {
+      ok: false,
+      reason: classId.trim() ? 'price-fields-required' : 'class-id-required',
+    };
+  return {
+    ok: true,
+    rule: {
+      classId,
+      baseCents,
+      additionalEntryAdjustmentCents,
+      earlyBirdDeadline,
+      earlyBirdDiscountCents,
+    },
+  };
+}
+
 export interface EventClassPricingRepository {
   listByEvent(ctx: RequestContext, eventId: string): Promise<ClassPriceRule[]>;
   upsert(

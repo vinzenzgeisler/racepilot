@@ -1,4 +1,5 @@
 import type { RequestContext } from '@racepilot/core';
+import { RegistrationUnavailable } from '@racepilot/core';
 import { eq, and, sql } from 'drizzle-orm';
 import { registrationFormUploads } from './schema/forms.js';
 import type {
@@ -36,7 +37,6 @@ export async function validateRegistrationCustomAnswers(args: {
     string | boolean | { objectId: string }
   > = {};
   const customFileUploads: RegistrationFileUploadReference[] = [];
-  const unavailable = () => new Error('Registration unavailable');
   for (const field of customFields) {
     const rawAnswer = customAnswers[field.key];
     const answer =
@@ -44,7 +44,7 @@ export async function validateRegistrationCustomAnswers(args: {
         ? rawAnswer.trim()
         : rawAnswer;
     if (answer === undefined || answer === '') {
-      if (field.required) throw unavailable();
+      if (field.required) throw new RegistrationUnavailable('required-answer');
       continue;
     }
     if (field.type === 'text' && typeof answer === 'string') {
@@ -78,7 +78,7 @@ export async function validateRegistrationCustomAnswers(args: {
         )
         .for('update')
         .limit(1);
-      if (!upload) throw unavailable();
+      if (!upload) throw new RegistrationUnavailable('upload-missing');
       safeCustomAnswers[field.key] = { objectId: upload.objectId };
       customFileUploads.push({
         fieldKey: field.key,
@@ -86,7 +86,7 @@ export async function validateRegistrationCustomAnswers(args: {
         tokenHash,
       });
     } else {
-      throw unavailable();
+      throw new RegistrationUnavailable('invalid-answer');
     }
   }
   return { safeCustomAnswers, customFileUploads };

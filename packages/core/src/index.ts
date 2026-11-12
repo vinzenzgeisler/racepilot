@@ -1,5 +1,7 @@
 export * from './context.js';
 export * from './events.js';
+export * from './event-setup.js';
+export * from './event-opening.js';
 export * from './organization.js';
 export * from './providers.js';
 export * from './workflow-model.js';
@@ -29,3 +31,6 @@ export * from './orga-code.js';
 export * from './overview.js';
 export * from './artifact-model.js';
 export * from './entry-admin-actions.js';
+
+export { RegistrationUnavailable } from './registration-errors.js';
+export type { RegistrationUnavailableReason } from './registration-errors.js';

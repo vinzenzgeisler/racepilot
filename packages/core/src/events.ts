@@ -169,7 +169,7 @@ export async function transitionEvent(
   return deps.events.transition(ctx, eventId, event.status, status, now);
 }
 
-function validateEventInput(
+export function validateEventInput(
   input: EventInput | EventPatch,
   partial = false,
 ): void {
@@ -257,7 +257,10 @@ export async function updateEventClass(
   return deps.classes.update(ctx, eventId, classId, patch);
 }
 
-function validateClass(input: Partial<EventClassInput>, partial = false): void {
+export function validateClass(
+  input: Partial<EventClassInput>,
+  partial = false,
+): void {
   if (
     (!partial || 'name' in input) &&
     (!input.name?.trim() || input.name.length > 120)

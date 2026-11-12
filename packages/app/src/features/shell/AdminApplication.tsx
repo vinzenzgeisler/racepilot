@@ -1,4 +1,4 @@
-import { Button, PreviewPanel, useWorkspacePreview } from '@racepilot/ui';
+import { PreviewPanel, useWorkspacePreview } from '@racepilot/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from '../entries/AdminEntriesModel.js';
@@ -8,59 +8,8 @@ import { AdminMessages } from '../messages/AdminMessages.js';
 import { EntryPreview } from './EntryPreview.js';
 import { RegistrationFormSettings } from '../registration/RegistrationFormSettings.js';
 import { AdminWorkflow } from '../workflow/AdminWorkflow.js';
-import {
-  adminFetch,
-  getAdminIdentity,
-  restoreAdminSession,
-  signIn,
-} from '../../auth.js';
-
-export function AuthenticatedAdmin() {
-  const [session, setSession] = useState<
-    'loading' | 'ready' | 'signed-out' | 'disabled' | 'error'
-  >('loading');
-  useEffect(() => {
-    let active = true;
-    void restoreAdminSession()
-      .then((result) => {
-        if (active) setSession(result);
-      })
-      .catch(() => {
-        if (active) setSession('error');
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-  if (session === 'loading')
-    return (
-      <main className="shell" aria-busy="true">
-        <p role="status">NENNBOX lädt…</p>
-      </main>
-    );
-  if (session === 'ready') return <AdminApplication />;
-  return (
-    <main className="shell">
-      <h1>NENNBOX</h1>
-      {session === 'signed-out' ? (
-        <>
-          <p>Bitte anmelden, um die Veranstaltung zu verwalten.</p>
-          <Button
-            onClick={() => void signIn().catch(() => setSession('error'))}
-          >
-            Anmelden
-          </Button>
-        </>
-      ) : (
-        <p role="alert">
-          {session === 'disabled'
-            ? 'Die Anmeldung ist noch nicht eingerichtet.'
-            : 'Die Anmeldung ist derzeit nicht verfügbar.'}
-        </p>
-      )}
-    </main>
-  );
-}
+import { EventSetup } from '../event-setup/EventSetup.js';
+import { adminFetch, getAdminIdentity } from '../../auth.js';
 
 export function AdminApplication() {
   const previewViewport = useWorkspacePreview();
@@ -71,6 +20,7 @@ export function AdminApplication() {
       name: string;
       slug: string;
       registrationClosesAt: string | null;
+      status: 'draft' | 'open' | 'closed' | 'archived';
     }>
   >([]);
   const [entryCount, setEntryCount] = useState(0);
@@ -139,6 +89,7 @@ export function AdminApplication() {
             name?: unknown;
             slug?: unknown;
             registrationClosesAt?: unknown;
+            status?: unknown;
           };
           return typeof value.id === 'string' && typeof value.name === 'string'
             ? [
@@ -150,6 +101,11 @@ export function AdminApplication() {
                     typeof value.registrationClosesAt === 'string'
                       ? value.registrationClosesAt
                       : null,
+                  status: (value.status === 'open' ||
+                  value.status === 'closed' ||
+                  value.status === 'archived'
+                    ? value.status
+                    : 'draft') as 'draft' | 'open' | 'closed' | 'archived',
                 },
               ]
             : [];
@@ -281,6 +237,16 @@ export function AdminApplication() {
           />
         ) : view === 'workflow' ? (
           <AdminWorkflow eventId={selectedEvent} events={events} />
+        ) : view === 'setup' ? (
+          <EventSetup
+            onCreated={(event) => {
+              setEvents((current) => [
+                ...current.filter((item) => item.id !== event.id),
+                { ...event, registrationClosesAt: null },
+              ]);
+              setSelectedEvent(event.id);
+            }}
+          />
         ) : view === 'account' ? (
           <RegistrationFormSettings eventId={selectedEvent} />
         ) : null

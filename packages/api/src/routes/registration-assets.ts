@@ -83,13 +83,14 @@ export function registerRegistrationAssetRoutes(
         !/^[a-z][a-z0-9_-]{0,39}$/.test(fieldKey)
       )
         return c.json({ error: 'Registration unavailable' }, 404);
+      if (!deps.publicRegistrationRateLimits)
+        return c.json({ error: 'Registration unavailable' }, 503);
       let configured;
       try {
-        configured =
-          await deps.publicRegistrationRateLimits!.resolvePublicEvent(
-            context,
-            eventSlug,
-          );
+        configured = await deps.publicRegistrationRateLimits.resolvePublicEvent(
+          context,
+          eventSlug,
+        );
       } catch {
         return c.json({ error: 'Registration unavailable' }, 503);
       }

@@ -26,6 +26,8 @@ import {
   entries,
   registrationGroups,
   vehicles,
+  emailTemplateVersions,
+  saveMailTemplateVersion,
 } from '@racepilot/adapter-postgres';
 
 if (
@@ -47,6 +49,26 @@ try {
   if (orgRows.length !== 1 || orgRows[0]!.slug !== slug)
     throw new Error('Community organization mismatch');
   const org = orgRows[0]!;
+  const [verificationTemplate] = await db
+    .select({ id: emailTemplateVersions.id })
+    .from(emailTemplateVersions)
+    .where(
+      and(
+        eq(emailTemplateVersions.organizationId, org.id),
+        eq(emailTemplateVersions.templateKey, 'verification'),
+        eq(emailTemplateVersions.locale, 'de'),
+      ),
+    )
+    .limit(1);
+  if (!verificationTemplate)
+    await saveMailTemplateVersion(db, org.id, {
+      templateKey: 'verification',
+      version: 1,
+      locale: 'de',
+      subject: 'Bitte bestätige deine Nennung, {{recipientName}}',
+      text: 'Hallo {{recipientName}}, bestätige deine E-Mail-Adresse: {{verificationUrl}}',
+      html: '<p>Hallo {{recipientName}},</p><p><a href="{{verificationUrl}}">E-Mail-Adresse bestätigen</a></p>',
+    });
   const ctx = {
     deploymentMode: 'community' as const,
     organizationId: organizationId(org.id),

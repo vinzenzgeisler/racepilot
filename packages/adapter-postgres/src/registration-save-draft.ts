@@ -11,6 +11,7 @@ import { sql } from 'drizzle-orm';
 import { enqueueMailOutbox } from './mail-outbox.js';
 import { randomUUID } from 'node:crypto';
 import type { PublicRegistrationDependencies } from './registration-public-types.js';
+import { RegistrationUnavailable } from '@racepilot/core';
 
 export function createRegistrationSaveDraftMethods(
   dependencies: PublicRegistrationDependencies,
@@ -46,7 +47,7 @@ export function createRegistrationSaveDraftMethods(
           !event ||
           (event.registrationClosesAt && event.registrationClosesAt <= now)
         )
-          throw new Error('Registration unavailable');
+          throw new RegistrationUnavailable('registration-closed');
         // Draft JSON is long-lived and must never retain an upload bearer token.
         // Validate each file reference against the tenant/event/field-scoped
         // upload row, then persist only its opaque object id. resumeDraft
@@ -83,14 +84,15 @@ export function createRegistrationSaveDraftMethods(
             draftAnswers as Record<string, unknown>,
           )) {
             const field = fieldsByKey.get(fieldKey);
-            if (!field) throw new Error('Registration unavailable');
+            if (!field)
+              throw new RegistrationUnavailable('draft-field-unknown');
             if (
               answer &&
               typeof answer === 'object' &&
               !Array.isArray(answer)
             ) {
               if (field.type !== 'file')
-                throw new Error('Registration unavailable');
+                throw new RegistrationUnavailable('draft-upload-invalid');
               const fileAnswer = answer as {
                 objectId?: unknown;
                 uploadToken?: unknown;
@@ -99,7 +101,7 @@ export function createRegistrationSaveDraftMethods(
                 typeof fileAnswer.objectId !== 'string' ||
                 typeof fileAnswer.uploadToken !== 'string'
               )
-                throw new Error('Registration unavailable');
+                throw new RegistrationUnavailable('draft-upload-invalid');
               const [upload] = await tx
                 .select({ id: registrationFormUploads.id })
                 .from(registrationFormUploads)
@@ -123,7 +125,7 @@ export function createRegistrationSaveDraftMethods(
                 )
                 .for('update')
                 .limit(1);
-              if (!upload) throw new Error('Registration unavailable');
+              if (!upload) throw new RegistrationUnavailable('upload-missing');
               (draftAnswers as Record<string, unknown>)[fieldKey] = {
                 objectId: fileAnswer.objectId,
               };
@@ -138,7 +140,7 @@ export function createRegistrationSaveDraftMethods(
                 (field.type === 'yes_no' && typeof answer === 'boolean')
               )
             ) {
-              throw new Error('Registration unavailable');
+              throw new RegistrationUnavailable('invalid-answer');
             }
           }
         }
