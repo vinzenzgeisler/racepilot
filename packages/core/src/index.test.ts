@@ -149,6 +149,6 @@ describe('entry CSV export', () => {
       '"\'\r\n  +1"',
       '"\'\u00a0@SUM(A1)"',
     ]);
-    expect(renderEntryCsv([['a"b', 'x,y']])).toBe('"a""b","x,y"\r\n');
+    expect(renderEntryCsv([['a"b', 'x,y']])).toBe('"a""b";"x,y"\r\n');
   });
 });

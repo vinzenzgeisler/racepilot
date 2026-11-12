@@ -12,6 +12,7 @@ import {
   type EntryWorkflowRepository,
   type EntryStatusDimensionRepository,
   type EntryExportRepository,
+  type OverviewRepository,
   type EntryConfirmationRepository,
   type EntryDocumentsRepository,
   type ArtifactJobRepository,
@@ -98,6 +99,7 @@ export interface ApiDeps {
   };
   entryDetails?: EntryDetailRepository;
   entryExports?: EntryExportRepository;
+  overview?: OverviewRepository;
   entryConfirmations?: EntryConfirmationRepository;
   entryDocuments?: EntryDocumentsRepository;
   artifactJobs?: ArtifactJobRepository;

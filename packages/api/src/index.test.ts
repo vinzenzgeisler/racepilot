@@ -272,6 +272,54 @@ describe('api entry', () => {
     // does not transition a foreign entry ID; the repository receives server-resolved organization context.
     expect(transitions).toBe(0);
   });
+  it('guards overview access and exhaustively maps unavailable and foreign events to 404', async () => {
+    const org = '11111111-1111-4111-8111-111111111111';
+    const eventId = '22222222-2222-4222-8222-222222222222';
+    let lookups = 0;
+    const base = {
+      config: { deploymentMode: 'community' as const, organizationId: org },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'member',
+        }),
+      },
+    };
+    const denied = createApp({
+      ...base,
+      memberships: { resolvePermissions: async () => new Set(['event:read']) },
+    });
+    expect(
+      (await denied.request(`/admin/events/${eventId}/overview`)).status,
+    ).toBe(403);
+    const unavailable = createApp({
+      ...base,
+      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
+      overview: {
+        getEventOverview: async () => {
+          lookups++;
+          return { ok: false, error: 'event-not-found' };
+        },
+      },
+    });
+    expect(
+      (await unavailable.request(`/admin/events/${eventId}/overview`)).status,
+    ).toBe(404);
+    expect(
+      (await unavailable.request('/admin/events/not-a-uuid/overview')).status,
+    ).toBe(404);
+    expect(lookups).toBe(1);
+    const missingDependency = createApp({
+      ...base,
+      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
+    });
+    expect(
+      (await missingDependency.request(`/admin/events/${eventId}/overview`))
+        .status,
+    ).toBe(404);
+  });
   it('requires entry:read for the paginated admin list', async () => {
     const org = '11111111-1111-4111-8111-111111111111';
     let called = false;
@@ -791,6 +839,9 @@ describe('event CSV export', () => {
     const orgId = '11111111-1111-4111-8111-111111111111';
     const eventId = '22222222-2222-4222-8222-222222222222';
     let enqueued = 0;
+    let queuedFilters: unknown;
+    let queuedDelimiter: unknown;
+    let forceConflict = false;
     const app = createApp({
       config: { deploymentMode: 'community', organizationId: orgId },
       organizations: { getById: async () => null, update: async () => null },
@@ -826,25 +877,36 @@ describe('event CSV export', () => {
       artifactJobs: {
         enqueue: async (_ctx, input) => {
           enqueued++;
+          queuedFilters = input.filters;
+          queuedDelimiter = input.delimiter;
+          if (forceConflict)
+            return { ok: false, error: 'idempotency-conflict' };
           return {
-            id: '33333333-3333-4333-8333-333333333333',
-            organizationId: orgId as never,
-            eventId,
-            kind: input.kind,
-            registrationGroupId: null,
-            fields: input.fields ?? [],
-            idempotencyKey: input.idempotencyKey,
-            status: 'queued',
-            objectId: null,
-            sha256: null,
-            contentType: null,
-            attempts: 0,
-            error: null,
-            createdAt: '2026-01-01T00:00:00.000Z',
-            updatedAt: '2026-01-01T00:00:00.000Z',
+            ok: true,
+            job: {
+              id: '33333333-3333-4333-8333-333333333333',
+              organizationId: orgId as never,
+              eventId,
+              kind: input.kind,
+              registrationGroupId: null,
+              fields: input.fields ?? [],
+              filters: input.filters ?? {},
+              delimiter: input.delimiter ?? ';',
+              expiresAt: null,
+              idempotencyKey: input.idempotencyKey,
+              status: 'queued',
+              objectId: null,
+              sha256: null,
+              contentType: null,
+              attempts: 0,
+              error: null,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
           };
         },
         getById: async () => null,
+        listByEvent: async () => [],
         claim: async () => null,
         release: async () => {},
         complete: async () => {},
@@ -859,7 +921,7 @@ describe('event CSV export', () => {
         delete: async () => {},
       },
     });
-    const url = `/admin/events/${eventId}/entries.csv?fields=driver,status`;
+    const url = `/admin/events/${eventId}/entries.csv?fields=driver,status&classId=33333333-3333-4333-8333-333333333333&acceptanceStatus=accepted&verificationStatus=unverified&paymentStatus=open&search=Ada&delimiter=%3B`;
     expect((await app.request(url)).status).toBe(400);
     expect(
       (
@@ -873,8 +935,98 @@ describe('event CSV export', () => {
       headers: { 'Idempotency-Key': 'csv-key' },
     });
     expect(response.status).toBe(202);
-    expect(await response.json()).toMatchObject({ status: 'queued' });
+    expect(await response.json()).toMatchObject({ status: 'running' });
     expect(enqueued).toBe(1);
+    forceConflict = true;
+    expect(
+      (
+        await app.request(url, {
+          headers: { 'Idempotency-Key': 'conflicting-key' },
+        })
+      ).status,
+    ).toBe(409);
+    expect(queuedFilters).toEqual({
+      classId: '33333333-3333-4333-8333-333333333333',
+      acceptanceStatus: 'accepted',
+      verificationStatus: 'unverified',
+      paymentStatus: 'open',
+      search: 'Ada',
+    });
+    expect(queuedDelimiter).toBe(';');
+  });
+});
+
+describe('export expiry route', () => {
+  it('returns expired status and prevents artifact reads after the bounded download window', async () => {
+    const orgId = '11111111-1111-4111-8111-111111111111';
+    const jobId = '33333333-3333-4333-8333-333333333333';
+    let storageReads = 0;
+    const app = createApp({
+      config: { deploymentMode: 'community', organizationId: orgId },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'viewer',
+        }),
+      },
+      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
+      artifactJobs: {
+        enqueue: async () => {
+          throw new Error('unused');
+        },
+        getById: async () => ({
+          id: jobId,
+          organizationId: orgId as never,
+          eventId: '22222222-2222-4222-8222-222222222222',
+          kind: 'entries_csv',
+          registrationGroupId: null,
+          fields: ['driver'],
+          filters: {},
+          delimiter: ';',
+          idempotencyKey: 'old-export',
+          status: 'ready',
+          objectId: '44444444-4444-4444-8444-444444444444',
+          sha256: 'a'.repeat(64),
+          contentType: 'text/csv; charset=utf-8',
+          attempts: 1,
+          error: null,
+          createdAt: '2020-01-01T00:00:00.000Z',
+          updatedAt: '2020-01-01T00:00:00.000Z',
+          expiresAt: '2020-01-02T00:00:00.000Z',
+        }),
+        listByEvent: async () => [],
+        claim: async () => null,
+        release: async () => {},
+        complete: async () => {},
+        fail: async () => {},
+      },
+      objectStorage: {
+        put: async () => {
+          throw new Error('unused');
+        },
+        get: async () => {
+          storageReads++;
+          return null;
+        },
+        head: async () => null,
+        delete: async () => {},
+      },
+    });
+    expect(
+      (await app.request(`/admin/artifact-jobs/${jobId}/status`)).status,
+    ).toBe(200);
+    expect(
+      await (await app.request(`/admin/artifact-jobs/${jobId}/status`)).json(),
+    ).toMatchObject({ status: 'expired' });
+    expect(
+      (await app.request(`/admin/artifact-jobs/${jobId}/download`)).status,
+    ).toBe(410);
+    expect((await app.request(`/admin/artifact-jobs/${jobId}`)).status).toBe(
+      410,
+    );
+    expect(storageReads).toBe(0);
   });
 });
 
@@ -957,21 +1109,27 @@ describe('entry confirmation artifact routes', () => {
       },
       artifactJobs: {
         enqueue: async (_ctx, input) => ({
-          id: docId,
-          organizationId: orgId as never,
-          eventId,
-          kind: input.kind,
-          registrationGroupId: groupId,
-          fields: [],
-          idempotencyKey: input.idempotencyKey,
-          status: 'queued',
-          objectId: null,
-          sha256: null,
-          contentType: null,
-          attempts: 0,
-          error: null,
-          createdAt: '2026-01-01T00:00:00.000Z',
-          updatedAt: '2026-01-01T00:00:00.000Z',
+          ok: true,
+          job: {
+            id: docId,
+            organizationId: orgId as never,
+            eventId,
+            kind: input.kind,
+            registrationGroupId: groupId,
+            fields: [],
+            filters: {},
+            delimiter: ';',
+            expiresAt: null,
+            idempotencyKey: input.idempotencyKey,
+            status: 'queued',
+            objectId: null,
+            sha256: null,
+            contentType: null,
+            attempts: 0,
+            error: null,
+            createdAt: '2026-01-01T00:00:00.000Z',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+          },
         }),
         getById: async (_ctx, id) =>
           id === docId
@@ -982,6 +1140,9 @@ describe('entry confirmation artifact routes', () => {
                 kind: 'confirmation_pdf',
                 registrationGroupId: groupId,
                 fields: [],
+                filters: {},
+                delimiter: ';',
+                expiresAt: null,
                 idempotencyKey: 'key',
                 status: 'ready',
                 objectId,
@@ -993,6 +1154,7 @@ describe('entry confirmation artifact routes', () => {
                 updatedAt: '2026-01-01T00:00:00.000Z',
               }
             : null,
+        listByEvent: async () => [],
         claim: async () => null,
         release: async () => {},
         complete: async () => {},

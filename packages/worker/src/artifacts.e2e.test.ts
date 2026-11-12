@@ -18,6 +18,9 @@ describe('artifact PDF end-to-end', () => {
       kind: 'confirmation_pdf',
       registrationGroupId: groupId,
       fields: [],
+      filters: {},
+      delimiter: ';',
+      expiresAt: null,
       idempotencyKey: 'confirmation-e2e',
       status: 'queued',
       objectId: null,
@@ -64,8 +67,9 @@ describe('artifact PDF end-to-end', () => {
       delete: async () => {},
     };
     const repos = {
-      enqueue: async () => job,
+      enqueue: async () => ({ ok: true as const, job }),
       getById: async () => job,
+      listByEvent: async () => [],
       claim: async () => {
         if (job.status !== 'queued') return null;
         job = { ...job, status: 'processing', attempts: job.attempts + 1 };

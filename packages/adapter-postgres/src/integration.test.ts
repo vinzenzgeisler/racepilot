@@ -60,6 +60,7 @@ import {
   createEntryConfirmationRepository,
   createArtifactJobRepository,
   artifactJobs as artifactJobTable,
+  artifactJobAudit,
   createModuleActivationRepository,
   moduleActivationAudit,
   eventModules,
@@ -1295,31 +1296,62 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       ).toBeNull();
       await runMigrations({ connectionString: url! });
       const artifactJobs = createArtifactJobRepository(db);
-      const firstArtifact = await artifactJobs.enqueue(ctxA, {
+      const firstArtifactResult = await artifactJobs.enqueue(ctxA, {
         eventId: eventA!.id,
         kind: 'confirmation_pdf',
         registrationGroupId: groupA!.id,
         idempotencyKey: `confirmation-${suffix}`,
       });
-      const duplicateArtifact = await artifactJobs.enqueue(ctxA, {
+      if (!firstArtifactResult.ok)
+        throw new Error('Unexpected artifact idempotency conflict');
+      const firstArtifact = firstArtifactResult.job;
+      const duplicateArtifactResult = await artifactJobs.enqueue(ctxA, {
         eventId: eventA!.id,
         kind: 'confirmation_pdf',
         registrationGroupId: groupA!.id,
         idempotencyKey: `confirmation-${suffix}`,
       });
+      if (!duplicateArtifactResult.ok)
+        throw new Error('Unexpected artifact idempotency conflict');
+      const duplicateArtifact = duplicateArtifactResult.job;
       expect(duplicateArtifact.id).toBe(firstArtifact.id);
       expect(firstArtifact.status).toBe('queued');
+      expect(
+        await artifactJobs.enqueue(ctxA, {
+          eventId: eventA!.id,
+          kind: 'confirmation_pdf',
+          registrationGroupId: groupA!.id,
+          delimiter: ',',
+          idempotencyKey: `confirmation-${suffix}`,
+        }),
+      ).toEqual({ ok: false, error: 'idempotency-conflict' });
+      const exportAuditRows = await db
+        .select()
+        .from(artifactJobAudit)
+        .where(
+          and(
+            eq(artifactJobAudit.organizationId, ctxA.organizationId),
+            eq(artifactJobAudit.artifactJobId, firstArtifact.id),
+          ),
+        );
+      expect(exportAuditRows).toHaveLength(1);
       const ctxB = { ...ctxA, organizationId: organizationId(orgB!) };
-      const staleSameTenant = await artifactJobs.enqueue(ctxA, {
+      const staleSameTenantResult = await artifactJobs.enqueue(ctxA, {
         eventId: eventA!.id,
         kind: 'entries_csv',
         idempotencyKey: `stale-same-tenant-${suffix}`,
       });
-      const staleForeignTenant = await artifactJobs.enqueue(ctxB, {
+      if (!staleSameTenantResult.ok)
+        throw new Error('Unexpected artifact idempotency conflict');
+      const staleSameTenant = staleSameTenantResult.job;
+      const staleForeignTenantResult = await artifactJobs.enqueue(ctxB, {
         eventId: eventB!.id,
         kind: 'entries_csv',
         idempotencyKey: `stale-foreign-tenant-${suffix}`,
       });
+      if (!staleForeignTenantResult.ok)
+        throw new Error('Unexpected artifact idempotency conflict');
+      const staleForeignTenant = staleForeignTenantResult.job;
       const staleClaimedAt = new Date(Date.now() - 10 * 60_000);
       const staleSameTenantToken = crypto.randomUUID();
       const staleForeignTenantToken = crypto.randomUUID();
@@ -1428,9 +1460,12 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           sha256: 'b'.repeat(64),
         },
       );
-      expect((await artifactJobs.getById(ctxA, firstArtifact.id))?.status).toBe(
-        'ready',
+      const completedArtifact = await artifactJobs.getById(
+        ctxA,
+        firstArtifact.id,
       );
+      expect(completedArtifact?.status).toBe('ready');
+      expect(completedArtifact?.expiresAt).not.toBeNull();
       expect(
         await artifactJobs.getById(
           { ...ctxA, organizationId: organizationId(orgB!) },
@@ -1684,6 +1719,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       const csvRows = await createEntryExportRepository(db).listByEvent(
         cloudCtxA,
         eventA!.id,
+        {},
       );
       expect(csvRows).toHaveLength(1);
       expect(csvRows[0]).toMatchObject({
@@ -1696,6 +1732,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         await createEntryExportRepository(db).listByEvent(
           cloudCtxA,
           eventB!.id,
+          {},
         ),
       ).toEqual([]);
       const confirmations = createEntryConfirmationRepository(db);

@@ -11,6 +11,9 @@ const job = {
   kind: 'entries_csv' as const,
   registrationGroupId: null,
   fields: ['driver', 'status'],
+  filters: {},
+  delimiter: ';' as const,
+  expiresAt: null,
   idempotencyKey: 'csv-key',
   status: 'queued' as const,
   objectId: null,
@@ -37,8 +40,9 @@ describe('artifact worker', () => {
       deploymentMode: 'cloud',
       getOrganization: async () => ({ status: 'active' }),
       jobs: {
-        enqueue: async () => activeJob,
+        enqueue: async () => ({ ok: true as const, job: activeJob }),
         getById: async () => activeJob,
+        listByEvent: async () => [],
         claim: async () => null,
         release: async () => {},
         complete: async () => {},
@@ -73,8 +77,9 @@ describe('artifact worker', () => {
       deploymentMode: 'cloud',
       getOrganization: async () => ({ status: 'active' }),
       jobs: {
-        enqueue: async () => job,
+        enqueue: async () => ({ ok: true, job }),
         getById: async () => job,
+        listByEvent: async () => [],
         claim: async (ctx, jobId) => {
           expect(ctx.organizationId).toBe(org);
           expect(jobId).toBe(id);
@@ -134,6 +139,9 @@ describe('artifact worker', () => {
       job: { id: 'graphile-1', attempts: 2, max_attempts: 3 },
     });
     expect(finished).toBe(true);
-    expect(new TextDecoder().decode(stored)).toContain("'=1+1");
+    const csv = new TextDecoder().decode(stored);
+    expect(Array.from(stored?.slice(0, 3) ?? [])).toEqual([0xef, 0xbb, 0xbf]);
+    expect(csv).toContain(';');
+    expect(csv).toContain("'=1+1");
   });
 });

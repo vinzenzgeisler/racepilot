@@ -4,6 +4,8 @@ import {
   renderEntryCsv,
   validatePaymentRecipient,
   type ArtifactJobRepository,
+  type EntryExportField,
+  type EntryExportRow,
   type EntryConfirmationRepository,
   type EntryExportRepository,
   type ObjectStorageProvider,
@@ -31,8 +33,14 @@ export function createArtifactTask(deps: {
   ) => {
     const envelope = JobEnvelope.safeParse(payload);
     if (!envelope.success || envelope.data.type !== 'artifact.generate') return;
-    const jobId = (envelope.data.payload as { artifactJobId?: unknown } | null)
-      ?.artifactJobId;
+    const artifactPayload = envelope.data.payload;
+    if (
+      !artifactPayload ||
+      typeof artifactPayload !== 'object' ||
+      !('artifactJobId' in artifactPayload)
+    )
+      return;
+    const jobId = artifactPayload.artifactJobId;
     if (typeof jobId !== 'string') return;
     const ctx = await createJobContext(envelope.data, {
       deploymentMode: deps.deploymentMode,
@@ -96,8 +104,12 @@ export function createArtifactTask(deps: {
         });
         contentType = 'application/pdf';
       } else {
-        const rows = await deps.exports.listByEvent(requestCtx, job.eventId);
-        const labels: Record<string, string> = {
+        const rows = await deps.exports.listByEvent(
+          requestCtx,
+          job.eventId,
+          job.filters,
+        );
+        const labels: Record<EntryExportField, string> = {
           driver: 'Driver',
           vehicle: 'Vehicle',
           class: 'Class',
@@ -105,25 +117,42 @@ export function createArtifactTask(deps: {
           status: 'Status',
           price: 'Price (minor units)',
         };
-        const fields = job.fields.filter((field) =>
-          entryExportFields.includes(
-            field as (typeof entryExportFields)[number],
-          ),
+        const fields = job.fields.filter((field): field is EntryExportField =>
+          entryExportFields.some((candidate) => candidate === field),
         );
         if (fields.length !== job.fields.length || fields.length === 0)
           throw new Error('Invalid persisted export fields');
-        bytes = new TextEncoder().encode(
-          renderEntryCsv([
-            fields.map((field) => labels[field]!),
-            ...rows.map((row) =>
-              fields.map((field) =>
-                field === 'price'
-                  ? row.priceCents
-                  : row[field as keyof typeof row],
-              ),
-            ),
-          ]),
+        const valueFor = (
+          row: EntryExportRow,
+          field: EntryExportField,
+        ): string | number | null => {
+          switch (field) {
+            case 'driver':
+              return row.driver;
+            case 'vehicle':
+              return row.vehicle;
+            case 'class':
+              return row.class;
+            case 'startNumber':
+              return row.startNumber;
+            case 'status':
+              return row.status;
+            case 'price':
+              return row.priceCents;
+            default: {
+              const exhaustive: never = field;
+              return exhaustive;
+            }
+          }
+        };
+        const csv = renderEntryCsv(
+          [
+            fields.map((field) => labels[field]),
+            ...rows.map((row) => fields.map((field) => valueFor(row, field))),
+          ],
+          job.delimiter,
         );
+        bytes = new TextEncoder().encode(`\uFEFF${csv}`);
         contentType = 'text/csv; charset=utf-8';
       }
       const ref = await deps.storage.put({
