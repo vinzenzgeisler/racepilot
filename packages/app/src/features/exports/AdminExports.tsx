@@ -30,7 +30,14 @@ function ExportsForEvent({ eventId }: { eventId: string }) {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const controller = useRef<AbortController | null>(null);
-  useEffect(() => () => controller.current?.abort(), []);
+  const downloadController = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      controller.current?.abort();
+      downloadController.current?.abort();
+    },
+    [],
+  );
   const loadOptions = useCallback(
     async (signal: AbortSignal) => {
       const [classes, statuses] = await Promise.all([
@@ -85,24 +92,33 @@ function ExportsForEvent({ eventId }: { eventId: string }) {
     }
   }
   async function download(job: ExportJob, path: string) {
+    downloadController.current?.abort();
+    const request = new AbortController();
+    downloadController.current = request;
     setDownloading(job.jobId);
     setError('');
     try {
-      await exportsApi.download(path, `nennungen-${eventId}.csv`);
+      await exportsApi.download(
+        path,
+        `nennungen-${eventId}.csv`,
+        request.signal,
+      );
     } catch {
-      setError('Die CSV-Datei konnte nicht heruntergeladen werden.');
-      jobs.reload();
+      if (!request.signal.aborted) {
+        setError('Die CSV-Datei konnte nicht heruntergeladen werden.');
+        jobs.reload();
+      }
     } finally {
-      setDownloading(null);
+      if (!request.signal.aborted) setDownloading(null);
     }
   }
   return (
     <div className="exports-view">
       {options.state.status === 'loading' ? (
-        <LoadingNotice subject="Die Exportoptionen" />
+        <LoadingNotice subject="Die Exportauswahl" />
       ) : options.state.status === 'error' ? (
         <RemoteError
-          subject="Die Exportoptionen"
+          subject="Die Exportauswahl"
           kind={options.state.kind}
           onRetry={options.reload}
         />
@@ -119,10 +135,10 @@ function ExportsForEvent({ eventId }: { eventId: string }) {
       {error && <Banner tone="error">{error}</Banner>}
       {notice && <Banner tone="success">{notice}</Banner>}
       {jobs.state.status === 'loading' ? (
-        <LoadingNotice subject="Die Exporte" />
+        <LoadingNotice subject="Die Exportliste" />
       ) : jobs.state.status === 'error' ? (
         <RemoteError
-          subject="Die Exporte"
+          subject="Die Exportliste"
           kind={jobs.state.kind}
           onRetry={jobs.reload}
         />

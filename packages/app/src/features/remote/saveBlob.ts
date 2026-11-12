@@ -6,10 +6,17 @@ const REVOKE_DELAY_MS = 1000;
 export async function downloadProtectedFile(
   path: string,
   filename: string,
+  signal?: AbortSignal,
 ): Promise<void> {
-  const response = await adminFetch(path, { cache: 'no-store' });
+  const response = await adminFetch(path, {
+    cache: 'no-store',
+    ...(signal ? { signal } : {}),
+  });
+  if (signal?.aborted) return;
   if (!response.ok) throw new Error(`Download rejected: ${response.status}`);
-  const url = URL.createObjectURL(await response.blob());
+  const body = await response.blob();
+  if (signal?.aborted) return;
+  const url = URL.createObjectURL(body);
   try {
     const link = document.createElement('a');
     link.href = url;

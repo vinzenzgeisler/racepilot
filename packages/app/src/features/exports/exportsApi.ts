@@ -25,7 +25,7 @@ const WorkflowStatusesSchema = z.object({
   }),
 });
 const ClassListSchema = z.array(
-  EventClassSchema.pick({ id: true, name: true }),
+  EventClassSchema.pick({ id: true, name: true }).strip(),
 );
 
 export const exportsApi = {

@@ -70,14 +70,19 @@ export function EntryConfirmation({
   }
   async function download() {
     if (!job) return;
+    controller.current?.abort();
+    const request = new AbortController();
+    controller.current = request;
     setError('');
     try {
       await downloadProtectedFile(
         `/admin/artifact-jobs/${encodeURIComponent(job.id)}/download`,
         'nennbestaetigung.pdf',
+        request.signal,
       );
     } catch {
-      setError('Die Nennbestätigung konnte nicht heruntergeladen werden.');
+      if (!request.signal.aborted)
+        setError('Die Nennbestätigung konnte nicht heruntergeladen werden.');
     }
   }
   return (

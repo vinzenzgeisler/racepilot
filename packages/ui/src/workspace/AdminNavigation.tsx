@@ -7,6 +7,7 @@ type NavItem = {
   icon: IconName;
   count?: number;
   mobile?: boolean;
+  mobileLabel?: string;
 };
 export type NavGroup = { label: string; items: NavItem[] };
 export type EventChoice = { id: string; label: string };
@@ -56,7 +57,7 @@ export function AdminNavigation({
       </select>
     </label>
   );
-  const item = (entry: NavItem) => (
+  const item = (entry: NavItem, mobile = false) => (
     <button
       key={entry.id}
       type="button"
@@ -66,7 +67,9 @@ export function AdminNavigation({
       onClick={() => onNavigate(entry.id)}
     >
       <Icon name={entry.icon} />
-      <span className="nb-admin-nav-label">{entry.label}</span>
+      <span className="nb-admin-nav-label">
+        {mobile ? (entry.mobileLabel ?? entry.label) : entry.label}
+      </span>
       {entry.count !== undefined && (
         <span className="nb-admin-nav-count">{entry.count}</span>
       )}
@@ -90,7 +93,7 @@ export function AdminNavigation({
               className="nb-admin-nav-group"
             >
               <h2>{group.label}</h2>
-              {group.items.map(item)}
+              {group.items.map((entry) => item(entry))}
             </section>
           ))}
         </nav>
@@ -98,7 +101,7 @@ export function AdminNavigation({
       </aside>
       <div className="nb-admin-mobile-event-picker">{eventPicker}</div>
       <nav className="nb-admin-mobile-nav" aria-label={ariaLabel}>
-        {items.map(item)}
+        {items.map((entry) => item(entry, true))}
       </nav>
     </>
   );

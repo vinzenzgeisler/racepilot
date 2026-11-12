@@ -391,6 +391,19 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(downloadPath, 'downloaded registration file path').toBeTruthy();
   if (!downloadPath) throw new Error('download path is missing');
   expect(readFileSync(downloadPath)).toEqual(uploadedPng);
+  await entryDetail.getByRole('button', { name: 'PDF erstellen' }).click();
+  const confirmationDownload = entryDetail.getByRole('button', {
+    name: 'PDF herunterladen',
+  });
+  await expect(confirmationDownload).toBeVisible({ timeout: 30_000 });
+  const [pdfDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    confirmationDownload.click(),
+  ]);
+  const pdfPath = await pdfDownload.path();
+  expect(pdfPath).toBeTruthy();
+  if (!pdfPath) throw new Error('PDF download path is missing');
+  expect(readFileSync(pdfPath).subarray(0, 4).toString()).toBe('%PDF');
   await shots('admin-entry-detail');
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
     /zugelassen|angenommen/i,
@@ -427,6 +440,7 @@ test('Community registration and admin lifecycle with API setup', async ({
     ['Übersicht', 'Übersicht'],
     ['Exporte', 'Exporte'],
   ]) {
+    await page.setViewportSize({ width: 1920, height: 1080 });
     await page
       .locator('.nb-admin-nav')
       .getByRole('button', { name: view })
@@ -434,7 +448,12 @@ test('Community registration and admin lifecycle with API setup', async ({
     await expect(
       page.getByRole('heading', { level: 1, name: title }),
     ).toBeVisible();
-    await expect(page.getByRole('status', { name: '' })).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', {
+        name:
+          view === 'Übersicht' ? 'Nennungen je Status' : 'Nennliste als CSV',
+      }),
+    ).toBeVisible();
     for (const [width, height] of [
       [1920, 1080],
       [1440, 900],

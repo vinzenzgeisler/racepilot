@@ -37,7 +37,13 @@ const VIEW_TITLES: Record<View, string> = {
   account: 'Einstellungen',
   messages: 'Nachrichten',
 };
-type NavItem = { id: View; label: string; icon: IconName; mobile?: boolean };
+type NavItem = {
+  id: View;
+  label: string;
+  icon: IconName;
+  mobile?: boolean;
+  mobileLabel?: string;
+};
 export const APP_NAVIGATION_REGISTRY: Array<{
   label: string;
   items: NavItem[];
@@ -47,18 +53,35 @@ export const APP_NAVIGATION_REGISTRY: Array<{
     items: [
       { id: 'overview', label: 'Übersicht', icon: 'overview' },
       { id: 'entries', label: 'Nennungen', icon: 'list' },
-      { id: 'setup', label: 'Einrichten', icon: 'calendar' },
+      {
+        id: 'setup',
+        label: 'Einrichten',
+        mobileLabel: 'Event',
+        icon: 'calendar',
+      },
     ],
   },
   {
     label: 'Kommunikation',
-    items: [{ id: 'messages', label: 'Nachrichten', icon: 'mail' }],
+    items: [
+      {
+        id: 'messages',
+        label: 'Nachrichten',
+        mobileLabel: 'Post',
+        icon: 'mail',
+      },
+    ],
   },
   {
     label: 'Konto',
     items: [
       { id: 'exports', label: 'Exporte', icon: 'export' },
-      { id: 'account', label: 'Einstellungen', icon: 'more' },
+      {
+        id: 'account',
+        label: 'Einstellungen',
+        mobileLabel: 'Konto',
+        icon: 'more',
+      },
       {
         id: 'workflow',
         label: 'Nennungsablauf',
