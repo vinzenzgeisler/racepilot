@@ -14,7 +14,9 @@ test('admin creates a class, terms and opens its public registration in the UI',
   await page.locator('#username').fill(email);
   await page.locator('#password').fill(password);
   await page.locator('#kc-login').click();
-  await expect(page.getByRole('heading', { name: 'Nennungen' })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { level: 1, name: 'Nennungen' }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Einrichten' }).click();
 
   const suffix = randomUUID().slice(0, 8);
