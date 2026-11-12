@@ -46,7 +46,7 @@ const post = (body: unknown, signal?: AbortSignal): RequestInit => ({
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify(body),
-  signal,
+  ...(signal ? { signal } : {}),
 });
 export const messagesApi = {
   recipients: (
