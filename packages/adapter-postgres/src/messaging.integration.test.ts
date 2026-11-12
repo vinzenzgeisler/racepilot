@@ -92,6 +92,7 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
             registrationGroupId: group!.id,
             driverPersonId: person!.id,
             vehicleId: vehicle!.id,
+            orgaCode: `TEST-${crypto.randomUUID()}`,
           })
           .returning();
         return { org: org!, event: event!, entry: entry!, group: group! };

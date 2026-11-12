@@ -155,6 +155,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         .insert(entries)
         .values([
           {
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: orgId,
             eventId,
             classId: klass!.id,
@@ -164,6 +165,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
             requestedStartNumber: '41',
           },
           {
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: orgId,
             eventId,
             classId: klass!.id,
@@ -470,6 +472,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
       const [entry] = await db
         .insert(entries)
         .values({
+          orgaCode: `TEST-${crypto.randomUUID()}`,
           organizationId: orgA!.id,
           eventId: eventA1!.id,
           classId: eventClass!.id,
@@ -525,7 +528,10 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           ({ key }) => key === 'technical_inspection',
         )?.value,
       ).toBe('reinspection');
-      expect(projected?.statusProjection?.documents.total).toBe(2);
+      expect(projected?.statusProjection?.documents).toEqual({
+        complete: 0,
+        total: 0,
+      });
       expect(
         projected?.statusProjection?.hints.find(
           ({ key }) => key === 'passenger',
@@ -1075,6 +1081,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         'id',
         'name',
         'openedAt',
+        'orgaCodePrefix',
         'organizationId',
         'registrationClosesAt',
         'registrationOpensAt',
@@ -1450,6 +1457,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         db
           .insert(entries)
           .values({
+            orgaCode: `TEST-${crypto.randomUUID()}`,
             organizationId: orgA!,
             eventId: eventA!.id,
             classId: clsId,
@@ -1494,6 +1502,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           db
             .insert(entries)
             .values({
+              orgaCode: `TEST-${crypto.randomUUID()}`,
               organizationId: orgB!,
               eventId: eventB!.id,
               classId: classB!.id,
@@ -1560,6 +1569,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
         [
           'id',
           'organizationId',
+          'orgaCode',
           'eventId',
           'classId',
           'registrationGroupId',
@@ -1575,6 +1585,7 @@ describe.skipIf(!url)('PostgreSQL integration', () => {
           'deletedAt',
           'deletionReason',
           'statusProjection',
+          'documentProjection',
           'adminHistory',
           'adminDetails',
         ].sort(),
@@ -2133,6 +2144,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       const [entry] = await db
         .insert(entries)
         .values({
+          orgaCode: `TEST-${crypto.randomUUID()}`,
           organizationId: a!.id,
           eventId: ea!.id,
           classId: klass!.id,
@@ -2708,6 +2720,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           .from(emailOutbox)
           .where(eq(emailOutbox.organizationId, org!.id))
       )[0]!;
+      expect(outbox.variables.orgaCodes).toContain('-');
       const verificationUrl = outbox.variables.verificationUrl!;
       const token = new URL(verificationUrl).searchParams.get('token')!;
       expect(new URL(verificationUrl).origin).toBe(

@@ -6,6 +6,8 @@ export * from './workflow-model.js';
 export * from './status-config.js';
 export * from './status-projection.js';
 export * from './entries-model.js';
+export * from './artifact-jobs.js';
+export * from './entry-confirmation.js';
 export * from './entries-workflow.js';
 export * from './pricing.js';
 export * from './payments.js';
@@ -22,3 +24,5 @@ export {
 } from '@racepilot/contracts';
 export * from './registration-fields.js';
 export * from './registration-submission.js';
+export * from './documents.js';
+export * from './orga-code.js';

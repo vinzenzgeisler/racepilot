@@ -2,11 +2,9 @@ import { EntryAcceptanceStatus } from './workflow-model.js';
 import { EntryStatusProjection } from './status-config.js';
 import { EntryVerificationStatus } from './workflow-model.js';
 import { EntryWorkflowCategory } from './workflow-model.js';
-import { JobContext } from './context.js';
 import { OrganizationId } from './context.js';
 import { PriceSnapshot } from './pricing.js';
 import { RequestContext } from './context.js';
-import { StoredObjectRef } from './providers.js';
 import type { AdminEntryDetails } from './entry-detail.js';
 
 export interface Person {
@@ -72,6 +70,8 @@ export interface Entry {
   }>;
   adminDetails?: AdminEntryDetails;
   statusProjection?: EntryStatusProjection;
+  orgaCode: string;
+  documentProjection?: import('./documents.js').EntryDocumentProjection;
 }
 
 export interface EntryAuditEvent {
@@ -162,79 +162,6 @@ export interface EntryExportRepository {
     ctx: RequestContext,
     eventId: string,
   ): Promise<readonly EntryExportRow[]>;
-}
-
-export interface EntryConfirmationData {
-  readonly eventId: string;
-  readonly eventName: string;
-  readonly eventStartsOn: string;
-  readonly registrationGroupId: string;
-  readonly driverName: string;
-  readonly vehicles: readonly string[];
-  readonly classes: readonly string[];
-  readonly priceSnapshot: PriceSnapshot;
-  readonly paymentReference: string;
-}
-
-export interface EntryConfirmationRepository {
-  getByGroup(
-    ctx: RequestContext,
-    eventId: string,
-    registrationGroupId: string,
-  ): Promise<EntryConfirmationData | null>;
-}
-
-export type ArtifactKind = 'confirmation_pdf' | 'entries_csv';
-
-export type ArtifactStatus = 'queued' | 'processing' | 'ready' | 'failed';
-
-export interface ArtifactJob {
-  readonly id: string;
-  readonly organizationId: OrganizationId;
-  readonly eventId: string;
-  readonly kind: ArtifactKind;
-  readonly registrationGroupId: string | null;
-  readonly fields: readonly string[];
-  readonly idempotencyKey: string;
-  readonly status: ArtifactStatus;
-  readonly objectId: string | null;
-  readonly sha256: string | null;
-  readonly contentType: string | null;
-  readonly attempts: number;
-  readonly error: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
-export interface ArtifactJobRepository {
-  enqueue(
-    ctx: RequestContext,
-    input: {
-      eventId: string;
-      kind: ArtifactKind;
-      registrationGroupId?: string;
-      fields?: readonly string[];
-      idempotencyKey: string;
-    },
-  ): Promise<ArtifactJob>;
-  getById(ctx: RequestContext, id: string): Promise<ArtifactJob | null>;
-  claim(
-    ctx: JobContext,
-    id: string,
-  ): Promise<(ArtifactJob & { claimToken: string }) | null>;
-  release(ctx: JobContext, id: string, claimToken: string): Promise<void>;
-  complete(
-    ctx: JobContext,
-    id: string,
-    claimToken: string,
-    ref: StoredObjectRef,
-  ): Promise<void>;
-  fail(
-    ctx: JobContext,
-    id: string,
-    claimToken: string,
-    error: string,
-  ): Promise<void>;
 }
 
 export interface EntryRepository {

@@ -71,3 +71,5 @@ export {
   messageCampaignAudits,
   messageTemplates,
 } from './messaging-schema.js';
+export { createEntryDocumentsRepository } from './entry-documents.js';
+export * from './schema/documents.js';

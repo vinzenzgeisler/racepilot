@@ -85,6 +85,7 @@ export function createArtifactTask(deps: {
           priceSnapshot: data.priceSnapshot,
           paymentRecipient,
           paymentReference: data.paymentReference,
+          orgaCodes: data.orgaCodes,
           bankTransferCapability: paymentRecipient !== null,
           branding: {
             organizationName: organization.name,

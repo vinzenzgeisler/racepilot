@@ -28,6 +28,7 @@ export interface Event {
   id: string;
   organizationId: OrganizationId;
   slug: string;
+  orgaCodePrefix?: string | null;
   name: string;
   startsOn: string;
   endsOn: string;
@@ -43,6 +44,7 @@ export type EventStatus = 'draft' | 'open' | 'closed' | 'archived';
 
 export interface EventInput {
   slug: string;
+  orgaCodePrefix?: string | null;
   name: string;
   startsOn: string;
   endsOn: string;
@@ -171,6 +173,12 @@ function validateEventInput(
   input: EventInput | EventPatch,
   partial = false,
 ): void {
+  if (
+    input.orgaCodePrefix !== undefined &&
+    input.orgaCodePrefix !== null &&
+    !/^[A-Z0-9]{1,12}$/.test(input.orgaCodePrefix.trim().toUpperCase())
+  )
+    throw new Error('Invalid organization code prefix');
   if (
     (!partial || 'slug' in input) &&
     (!input.slug || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(input.slug))

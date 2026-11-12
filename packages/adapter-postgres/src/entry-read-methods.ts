@@ -64,6 +64,7 @@ export function createEntryReadMethods(
           predicates.push(
             or(
               ilike(entries.requestedStartNumber, pattern),
+              ilike(entries.orgaCode, pattern),
               sql`${entries.id}::text ilike ${pattern}`,
               ilike(people.firstName, pattern),
               ilike(people.lastName, pattern),

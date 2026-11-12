@@ -69,6 +69,7 @@ export function createEntryTransitionMethod(
               >`coalesce(${registrationGroups.contactEmail}, ${people.email})`,
               recipientName: sql<string>`concat_ws(' ', ${people.firstName}, ${people.lastName})`,
               eventName: events.name,
+              orgaCode: entries.orgaCode,
               locale: organizations.locale,
             })
             .from(entries)
@@ -120,6 +121,7 @@ export function createEntryTransitionMethod(
                 variables: {
                   recipientName: recipient.recipientName,
                   eventName: recipient.eventName,
+                  orgaCode: recipient.orgaCode,
                   statusKey: workflow.notification.statusKey,
                   statusLabelDe: workflow.notification.statusLabelDe,
                   statusLabelEn: workflow.notification.statusLabelEn,

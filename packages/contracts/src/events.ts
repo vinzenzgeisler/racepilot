@@ -24,6 +24,7 @@ export const EventSchema = z
     id: z.string().uuid(),
     organizationId: z.string().uuid(),
     slug: z.string(),
+    orgaCodePrefix: z.string().nullable().optional(),
     name: z.string(),
     startsOn: z.string(),
     endsOn: z.string(),
@@ -38,6 +39,12 @@ export const EventSchema = z
 export const CreateEventRequest = z
   .object({
     slug: z.string(),
+    orgaCodePrefix: z
+      .string()
+      .trim()
+      .regex(/^[A-Za-z0-9]{1,12}$/)
+      .nullable()
+      .optional(),
     name: z.string(),
     startsOn: z.string(),
     endsOn: z.string(),

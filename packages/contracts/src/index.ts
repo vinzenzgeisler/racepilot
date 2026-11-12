@@ -96,5 +96,18 @@ export type {
   MessageTemplate,
   MessageCampaignCreate,
 } from './messages.js';
-
 export { RegistrationContactFieldsSchema } from './registration-details.js';
+
+export {
+  ENTRY_DOCUMENT_MAX_BYTES,
+  ENTRY_DOCUMENT_CONTENT_TYPES,
+  EntryDocumentContentType,
+  EntryDocumentStatus,
+  EntryDocumentTypeSchema,
+  UpdateEntryDocumentTypesRequest,
+  EntryDocumentUploadRequest,
+  EntryDocumentDecisionRequest,
+  EntryDocumentRecordSchema,
+  EntryDocumentLineSchema,
+  EntryDocumentProjectionSchema,
+} from './documents.js';

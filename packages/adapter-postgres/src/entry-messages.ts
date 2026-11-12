@@ -18,6 +18,7 @@ export async function listEntryMessages(
       groupId: entries.registrationGroupId,
       eventId: entries.eventId,
       eventName: events.name,
+      orgaCode: entries.orgaCode,
     })
     .from(entries)
     .innerJoin(
@@ -75,7 +76,11 @@ export async function listEntryMessages(
             row.templateKey,
             row.locale,
             row.subjectTemplate,
-            { eventName: entry.eventName, ...row.variables },
+            {
+              eventName: entry.eventName,
+              orgaCode: entry.orgaCode,
+              ...row.variables,
+            },
           ),
     templateKey: row.templateKey,
     recipient: row.recipient,
