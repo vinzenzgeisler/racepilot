@@ -1,12 +1,5 @@
 import { useState } from 'react';
-import {
-  Button,
-  Dialog,
-  ReasonDialog,
-  SelectField,
-  TextInput,
-  Textarea,
-} from '@racepilot/ui';
+import { ReasonDialog, SelectField, TextInput } from '@racepilot/ui';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { formatMoney } from './entryDetailModel.js';
 import type { EntryAdminAction } from './useEntryDetailApi.js';
@@ -44,58 +37,35 @@ export function EntryAdminActionDialog({
   const [visibility, setVisibility] = useState<'internal' | 'driver'>(
     'internal',
   );
-  const [text, setText] = useState('');
   const version = entry.revision;
   const cents = parseAmount(amount);
 
   if (kind === 'note')
     return (
-      <Dialog
+      <ReasonDialog
         open
         title="Notiz hinzufügen"
+        reasonLabel="Notiz"
+        reasonMaxLength={4000}
+        confirmLabel="Notiz speichern"
+        cancelLabel="Abbrechen"
         closeLabel="Dialog schließen"
+        busy={busy}
+        error={error}
         onClose={onClose}
-        actions={
-          <>
-            <Button variant="secondary" onClick={onClose}>
-              Abbrechen
-            </Button>
-            <Button
-              disabled={busy || !text.trim()}
-              onClick={() =>
-                onConfirm({ kind: 'note', visibility, text: text.trim() })
-              }
-            >
-              Notiz speichern
-            </Button>
-          </>
-        }
+        onConfirm={(text) => onConfirm({ kind: 'note', visibility, text })}
       >
-        <div className="nb-reason-body">
-          <SelectField
-            label="Sichtbarkeit"
-            value={visibility}
-            onChange={(event) =>
-              setVisibility(event.target.value as 'internal' | 'driver')
-            }
-          >
-            <option value="internal">Nur intern</option>
-            <option value="driver">Für Fahrer sichtbar</option>
-          </SelectField>
-          <Textarea
-            label="Notiz"
-            value={text}
-            maxLength={4000}
-            required
-            onChange={(event) => setText(event.target.value)}
-          />
-          {error && (
-            <p role="alert" className="nb-reason-error">
-              {error}
-            </p>
-          )}
-        </div>
-      </Dialog>
+        <SelectField
+          label="Sichtbarkeit"
+          value={visibility}
+          onChange={(event) =>
+            setVisibility(event.target.value as 'internal' | 'driver')
+          }
+        >
+          <option value="internal">Nur intern</option>
+          <option value="driver">Für Fahrer sichtbar</option>
+        </SelectField>
+      </ReasonDialog>
     );
 
   const isDelete = kind === 'delete';
@@ -135,6 +105,7 @@ export function EntryAdminActionDialog({
       }
       reasonLabel="Begründung (für das Protokoll erforderlich)"
       confirmLabel={confirmLabel}
+      confirmTone={isDelete ? 'danger' : 'default'}
       cancelLabel="Abbrechen"
       closeLabel="Dialog schließen"
       busy={busy}

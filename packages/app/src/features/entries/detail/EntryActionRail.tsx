@@ -53,7 +53,15 @@ export function statusSteps(
   // A destructive outcome is never offered as the highlighted next step.
   const candidate = steps.find((step) => step.to === nextKey) ?? null;
   const primary = candidate && !candidate.danger ? candidate : null;
-  return { primary, others: steps.filter((step) => step !== primary) };
+  const others = steps.filter((step) => step !== primary);
+  // As in the design, destructive outcomes follow the regular ones.
+  return {
+    primary,
+    others: [
+      ...others.filter((step) => !step.danger),
+      ...others.filter((step) => step.danger),
+    ],
+  };
 }
 
 export function EntryActionRail({

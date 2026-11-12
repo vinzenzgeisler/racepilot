@@ -8,6 +8,17 @@
   color: var(--color-graphite);
   cursor: not-allowed;
 }
+.nb-dialog footer .nb-confirm-danger {
+  border-color: var(--color-marshal-text);
+  background: transparent;
+  color: var(--color-marshal-text);
+}
+.nb-dialog footer .nb-confirm-danger:disabled {
+  border-color: var(--color-line);
+  background: var(--color-sage);
+  color: var(--color-graphite);
+  cursor: not-allowed;
+}
 .nb-reason-body {
   display: grid;
   gap: var(--space-3);

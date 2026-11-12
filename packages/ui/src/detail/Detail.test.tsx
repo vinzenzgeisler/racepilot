@@ -200,6 +200,26 @@ it('keeps the confirmation disabled until a reason is typed', () => {
   expect(html).toContain('role="alert"');
 });
 
+it('confirms destructive decisions with the danger style and honours the reason limit', () => {
+  const html = renderToStaticMarkup(
+    <ReasonDialog
+      open
+      title="Nennung löschen"
+      reasonLabel="Begründung"
+      reasonMaxLength={4000}
+      confirmLabel="Nennung löschen"
+      confirmTone="danger"
+      cancelLabel="Abbrechen"
+      closeLabel="Schließen"
+      onConfirm={vi.fn()}
+      onClose={vi.fn()}
+    />,
+  );
+  expect(html).toMatch(/nb-confirm-danger"[^>]*disabled/);
+  expect(html).not.toContain('nb-confirm-primary');
+  expect(html).toContain('maxLength="4000"');
+});
+
 it('shows a placeholder instead of an invented value', () => {
   const html = renderToStaticMarkup(
     <>

@@ -175,8 +175,8 @@ describe('entry detail model', () => {
     const dangerous = statusSteps(entry('withdrawn'), workflow);
     expect(dangerous.primary).toBeNull();
     expect(dangerous.others.map((step) => step.label)).toEqual([
-      'Als abgesagt markieren …',
       'Zurück auf Offen',
+      'Als abgesagt markieren …',
     ]);
     expect(statusSteps(entry('pending'), workflow).primary?.label).toBe(
       'Zurück auf Offen',

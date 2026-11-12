@@ -158,12 +158,18 @@ export function AdminEntryDetail({
       onBack();
     } else close();
   }
-  const dialog =
+  const dialog: {
+    title: string;
+    message: string;
+    confirm: string;
+    danger?: boolean;
+  } | null =
     pending?.kind === 'status'
       ? {
           title: pending.step.label.replace(/ …$/, ''),
           message: `Die Nennung wird auf „${workflow?.statuses.find((item) => item.key === pending.step.to)?.labels.de ?? pending.step.to}“ gesetzt. Die Entscheidung wird im Verlauf protokolliert.`,
           confirm: 'Status ändern',
+          danger: pending.step.danger,
         }
       : pending?.kind === 'verify'
         ? {
@@ -248,6 +254,7 @@ export function AdminEntryDetail({
           message={dialog.message}
           reasonLabel="Begründung (für das Protokoll erforderlich)"
           confirmLabel={dialog.confirm}
+          confirmTone={dialog.danger ? 'danger' : 'default'}
           cancelLabel="Abbrechen"
           closeLabel="Dialog schließen"
           busy={busy || api.busy}
