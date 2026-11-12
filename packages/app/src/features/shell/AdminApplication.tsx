@@ -4,6 +4,7 @@ import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from '../entries/AdminEntriesModel.js';
 import { AdminEntries } from '../entries/AdminEntries.js';
 import { AppShell } from './AppShell.js';
+import { AdminMessages } from '../messages/AdminMessages.js';
 import { EntryPreview } from './EntryPreview.js';
 import { RegistrationFormSettings } from '../registration/RegistrationFormSettings.js';
 import { AdminWorkflow } from '../workflow/AdminWorkflow.js';
@@ -76,6 +77,7 @@ export function AdminApplication() {
   const [selectedEvent, setSelectedEvent] = useState('');
 
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
+  const [messageEntryId, setMessageEntryId] = useState<string | null>(null);
   const [previewWorkflow, setPreviewWorkflow] = useState<WorkflowView | null>(
     null,
   );
@@ -89,6 +91,7 @@ export function AdminApplication() {
     activeEvent.current = id;
     setSelectedEvent(id);
     setSelectedEntry(null);
+    setMessageEntryId(null);
     setDetailOpen(false);
     setPreviewOpen(true);
     setPreviewBusy(false);
@@ -183,6 +186,11 @@ export function AdminApplication() {
       workflow={previewWorkflow}
       busy={previewBusy}
       onClose={closePreview}
+      onMessage={() => {
+        setMessageEntryId(selectedEntry.id);
+        setDetailOpen(false);
+        setPreviewOpen(false);
+      }}
       onOpenDetail={() => {
         setDetailOpen(true);
         setPreviewOpen(false);
@@ -229,6 +237,8 @@ export function AdminApplication() {
   return (
     <AppShell
       events={events}
+      messageEntryId={messageEntryId}
+      onClearMessageSelection={() => setMessageEntryId(null)}
       activeEvent={selectedEvent}
       entryCount={entryCount}
       onEventChange={changeEvent}
@@ -263,6 +273,11 @@ export function AdminApplication() {
             previewAdvance={previewAdvance}
             onPreviewAdvanceHandled={() => setPreviewAdvance(null)}
             selectedEntry={selectedEntry}
+          />
+        ) : view === 'messages' ? (
+          <AdminMessages
+            eventId={selectedEvent}
+            initialEntryId={messageEntryId ?? undefined}
           />
         ) : view === 'workflow' ? (
           <AdminWorkflow eventId={selectedEvent} events={events} />

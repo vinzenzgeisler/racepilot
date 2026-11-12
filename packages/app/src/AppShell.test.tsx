@@ -22,6 +22,7 @@ describe('AppShell', () => {
     );
     expect(APP_NAVIGATION_REGISTRY.map((group) => group.label)).toEqual([
       'Veranstaltung',
+      'Kommunikation',
       'Konto',
     ]);
     expect(
@@ -30,6 +31,9 @@ describe('AppShell', () => {
     expect(
       container.querySelector('[aria-label="Nennungsablauf"]'),
     ).toBeTruthy();
+    expect(container.querySelector('[aria-label="Nachrichten"]')?.tagName).toBe(
+      'BUTTON',
+    );
     const event = container.querySelector<HTMLSelectElement>('select')!;
     expect(event.closest('label')?.querySelector('span')?.className).toBe(
       'nb-visually-hidden',
@@ -54,7 +58,6 @@ describe('AppShell', () => {
       ),
     );
     expect(container.querySelector('[aria-label="Rennbetrieb"]')).toBeNull();
-    expect(container.querySelector('[aria-label="Nachrichten"]')).toBeNull();
     await act(async () => root.unmount());
   });
   it('closes the wide preview with Escape and keeps navigation keyboard focusable', async () => {

@@ -45,3 +45,4 @@ export * from './detail/ReasonDialog.js';
 export * from './detail/MessageTable.js';
 export * from './detail/MediaDetail.js';
 export * from './detail/EvidenceList.js';
+export * from './message-layout/MessageLayout.js';

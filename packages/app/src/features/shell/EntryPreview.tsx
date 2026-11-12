@@ -35,6 +35,7 @@ export function EntryPreview({
   onNextAction,
   onClose,
   onOpenDetail,
+  onMessage,
   busy,
 }: {
   entry: Entry;
@@ -42,6 +43,7 @@ export function EntryPreview({
   onNextAction: (status: string) => Promise<void>;
   onClose: () => void;
   onOpenDetail: () => void;
+  onMessage: () => void;
   busy: boolean;
 }) {
   const details = entry.adminDetails;
@@ -147,7 +149,7 @@ export function EntryPreview({
             </p>
           )}
           <div className="nb-preview-secondary-actions">
-            <Button variant="secondary" disabled>
+            <Button variant="secondary" onClick={onMessage}>
               Nachricht
             </Button>
             <Button variant="secondary" onClick={onOpenDetail}>

@@ -23,6 +23,9 @@
   --font-archivo: 'Archivo Variable', Archivo, sans-serif;
   --font-plex: 'IBM Plex Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
+  --width-form-max: 45rem;
+  --width-aside-min: 20rem;
+  --height-selection-list: 18rem;
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
