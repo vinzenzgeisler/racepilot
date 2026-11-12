@@ -88,6 +88,12 @@ export {
   MessageTemplateSchema,
   MessageCampaignCreateSchema,
   MessageCampaignStatusSchema,
+  MessageRecipientPreviewSchema,
+  MessageTemplateRecordSchema,
+  MessageRenderedPreviewSchema,
+  MessageCampaignRecordSchema,
+  MessageAttachmentRecordSchema,
+  MessageErrorSchema,
   MESSAGE_ATTACHMENT_LIMITS,
   MESSAGE_VERIFICATION_TOKEN_TTL_MS,
 } from './messages.js';
@@ -95,6 +101,11 @@ export type {
   MessageRecipientFilter,
   MessageTemplate,
   MessageCampaignCreate,
+  MessageRecipientPreview,
+  MessageTemplateRecord,
+  MessageRenderedPreview,
+  MessageCampaignRecord,
+  MessageAttachmentRecord,
 } from './messages.js';
 export { RegistrationContactFieldsSchema } from './registration-details.js';
 

@@ -66,3 +66,71 @@ export type MessageRecipientFilter = z.infer<
 >;
 export type MessageTemplate = z.infer<typeof MessageTemplateSchema>;
 export type MessageCampaignCreate = z.infer<typeof MessageCampaignCreateSchema>;
+
+export const MessageRecipientPreviewSchema = z.object({
+  count: z.number().int(),
+  recipients: z.array(
+    z
+      .object({
+        entryId: z.string().uuid().nullable(),
+        email: z.string().email(),
+        name: z.string(),
+      })
+      .passthrough(),
+  ),
+});
+export const MessageTemplateRecordSchema = z
+  .object({
+    id: z.string().uuid(),
+    eventId: z.string().uuid().nullable(),
+    name: z.string(),
+    subject: z.string(),
+    textBody: z.string(),
+  })
+  .passthrough();
+export const MessageRenderedPreviewSchema = z.object({
+  recipient: z.object({ email: z.string(), name: z.string() }),
+  subject: z.string(),
+  text: z.string(),
+});
+export const MessageCampaignRecordSchema = z.object({
+  id: z.string().uuid(),
+  eventId: z.string().uuid(),
+  subject: z.string(),
+  status: MessageCampaignStatusSchema,
+  createdAt: z.string(),
+  total: z.number(),
+  sent: z.number(),
+  failed: z.number(),
+  recipients: z.array(
+    z.object({
+      id: z.string().uuid(),
+      entryId: z.string().nullable(),
+      email: z.string(),
+      subject: z.string(),
+      status: MessageCampaignStatusSchema,
+    }),
+  ),
+});
+export const MessageAttachmentRecordSchema = z.object({
+  objectId: z.string().uuid(),
+  filename: z.string(),
+  size: z.number(),
+  contentType: z.literal('application/pdf'),
+});
+export const MessageErrorSchema = z.object({
+  error: z.string(),
+  code: z.string().optional(),
+  details: z.array(z.string()).optional(),
+});
+export type MessageRecipientPreview = z.infer<
+  typeof MessageRecipientPreviewSchema
+>;
+export type MessageTemplateRecord = z.infer<typeof MessageTemplateRecordSchema>;
+export type MessageRenderedPreview = z.infer<
+  typeof MessageRenderedPreviewSchema
+>;
+export type MessageCampaignRecord = z.infer<typeof MessageCampaignRecordSchema>;
+export type MessageAttachmentRecord = z.infer<
+  typeof MessageAttachmentRecordSchema
+>;
