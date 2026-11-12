@@ -88,7 +88,7 @@ export function RegistrationReview({
                 <Checkbox
                   key={`${term.key}:${term.version}:${term.language}`}
                   label={term.text}
-                  required
+                  aria-required="true"
                   checked={
                     model.accepted[
                       `${term.key}:${term.version}:${term.language}`

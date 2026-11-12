@@ -19,6 +19,7 @@ import {
   createDatabase,
   ensureCommunityOrganization,
   createEventRepository,
+  createEventSetupRepository,
   createEventClassRepository,
   organizations,
   events,
@@ -73,6 +74,76 @@ import {
 } from './index.js';
 const url = process.env.RACEPILOT_TEST_DATABASE_URL;
 describe.skipIf(!url)('PostgreSQL integration', () => {
+  it('rolls back the whole event setup when inserting a later class fails', async () => {
+    const { db, pool } = await createDatabase(url!);
+    const suffix = crypto.randomUUID();
+    const slug = `atomic-setup-${suffix}`;
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          slug: `atomic-setup-org-${suffix}`,
+          name: 'Atomic setup',
+          timezone: 'UTC',
+          locale: 'en',
+        })
+        .returning();
+      const ctx = createRequestContext({
+        deploymentMode: 'community',
+        organizationId: organizationId(org!.id),
+        permissions: new Set(['event:write', 'class:write']),
+        capabilities: new Set(),
+        correlationId: suffix,
+      });
+      const repo = createEventSetupRepository(db);
+      const terms = [
+        {
+          key: 'participation',
+          version: '1',
+          language: 'de' as const,
+          text: 'Terms',
+          hash: 'a'.repeat(64),
+          required: true,
+        },
+      ];
+      await expect(
+        repo.createSetup(ctx, {
+          event: {
+            slug,
+            name: 'Atomic setup',
+            startsOn: '2027-01-01',
+            endsOn: '2027-01-02',
+          },
+          classes: [0, 1].map((index) => ({
+            name: `Class ${index}`,
+            code: 'DUPLICATE',
+            vehicleType: 'car' as const,
+            sortOrder: index,
+            maxParticipants: null,
+            closed: false,
+            price: {
+              classId: `class:${index}`,
+              baseCents: 1000,
+              additionalEntryAdjustmentCents: 0,
+              earlyBirdDeadline: null,
+              earlyBirdDiscountCents: 0,
+            },
+          })),
+          terms,
+          actor: 'integration-test',
+        }),
+      ).rejects.toThrow();
+      expect(
+        await db.select().from(events).where(eq(events.slug, slug)),
+      ).toHaveLength(0);
+    } finally {
+      await db
+        .delete(organizations)
+        .where(eq(organizations.slug, `atomic-setup-org-${suffix}`));
+      await pool.end();
+    }
+  });
+
   it('keeps shared-email outbox history group-specific and returns chronological tenant-scoped entry history', async () => {
     await runMigrations({ connectionString: url! });
     const { db, pool } = await createDatabase(url!);
@@ -2534,7 +2605,11 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       };
       await expect(
         service.submit(ctx, event!.slug, foreignClassPayload),
-      ).rejects.toThrow('Registration unavailable');
+      ).rejects.toMatchObject({
+        name: 'RegistrationUnavailable',
+        message: 'Registration unavailable',
+        reason: 'class-unavailable',
+      });
       expect(
         await db
           .select()
@@ -2591,13 +2666,13 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
           ...body,
           customAnswers: { ...body.customAnswers, vehicle_kind: 'forged' },
         }),
-      ).rejects.toThrow('Registration unavailable');
+      ).rejects.toMatchObject({ reason: 'invalid-answer' });
       await expect(
         service.submit(ctx, event!.slug, {
           ...body,
           customAnswers: { ...body.customAnswers, club_name: '   ' },
         }),
-      ).rejects.toThrow('Registration unavailable');
+      ).rejects.toMatchObject({ reason: 'required-answer' });
       expect(
         await Promise.all([
           service.submit(ctx, event!.slug, body),

@@ -4,7 +4,11 @@ import { registerRegistrationAssetRoutes } from './registration-assets.js';
 import { z } from 'zod';
 
 import { resolveRegistrationRateLimits } from '../rate-limit.js';
-import { createRequestContext, ProviderError } from '@racepilot/core';
+import {
+  createRequestContext,
+  ProviderError,
+  RegistrationUnavailable,
+} from '@racepilot/core';
 import {
   PublicRegistrationRequestSchema,
   SaveRegistrationDraftRequestSchema,
@@ -35,10 +39,12 @@ export function registerPublicRegistrationRoutes(
       )
         return c.json({ error: 'Registration unavailable' }, 404);
       const eventSlug = c.req.param('slug');
+      if (!deps.publicRegistrationRateLimits)
+        return c.json({ error: 'Registration unavailable' }, 503);
       let configuredRateLimits;
       try {
         configuredRateLimits =
-          await deps.publicRegistrationRateLimits!.resolvePublicEvent(
+          await deps.publicRegistrationRateLimits.resolvePublicEvent(
             context,
             eventSlug,
           );
@@ -91,6 +97,15 @@ export function registerPublicRegistrationRoutes(
       } catch (error) {
         if (error instanceof ProviderError && error.code === 'conflict')
           return c.json({ error: 'Submission ID conflict' }, 409);
+        if (error instanceof RegistrationUnavailable) {
+          console.warn('Public registration unavailable', {
+            reason: error.reason,
+          });
+          return c.json({ error: 'Registration unavailable' }, 400);
+        }
+        console.warn('Public registration submission failed', {
+          errorName: error instanceof Error ? error.name : 'unknown',
+        });
         return c.json({ error: 'Registration unavailable' }, 400);
       }
     },

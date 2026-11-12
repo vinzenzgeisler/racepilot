@@ -1,5 +1,6 @@
 import type { ApiRoutesContext } from './context.js';
 import { z } from 'zod';
+import { registerEventSetupRoute } from './event-setup.js';
 import {
   getEvent,
   updateEvent,
@@ -10,6 +11,8 @@ import {
   updateEventClass,
   type EventClassInput,
   setClassPriceRule,
+  openEvent,
+  mergeClassPriceRule,
 } from '@racepilot/core';
 import {
   CreateEventRequest,
@@ -20,6 +23,7 @@ import {
 
 export function registerEventsRoutes(context: ApiRoutesContext): void {
   const { app, deps, resolvePublicContext, resolveMemberContext } = context;
+  registerEventSetupRoute(context);
   app.get('/admin/events/:eventId', async (c) => {
     const context = await resolveMemberContext(c.req.raw);
     if (!context) return c.json({ error: 'Unauthorized' }, 401);
@@ -87,6 +91,35 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
       .enum(['open', 'closed', 'archived'])
       .safeParse(body?.status);
     if (!status.success) return c.json({ error: 'Invalid request' }, 400);
+    if (status.data === 'open') {
+      if (!deps.classes || !deps.pricing || !deps.eventConsents)
+        throw new Error('Event opening dependencies are not configured');
+      const result = await openEvent(context, c.req.param('eventId'), {
+        events: deps.events,
+        classes: deps.classes,
+        pricing: deps.pricing,
+        consents: deps.eventConsents,
+      });
+      if (result.status === 'forbidden')
+        return c.json({ error: 'Forbidden' }, 403);
+      if (result.status === 'not-found')
+        return c.json({ error: 'Not found' }, 404);
+      if (result.status === 'not-ready') {
+        const messages = {
+          'class-required':
+            'Zum Öffnen wird mindestens eine offene Klasse benötigt.',
+          'price-required':
+            'Zum Öffnen wird für mindestens eine offene Klasse ein Startgeld benötigt.',
+          'participation-terms-required':
+            'Zum Öffnen müssen veröffentlichte Teilnahmebedingungen hinterlegt sein.',
+        };
+        return c.json(
+          { error: result.issues.map((issue) => messages[issue]).join(' ') },
+          409,
+        );
+      }
+      return c.json(EventResponse.parse(result.event));
+    }
     try {
       const result = await transitionEvent(
         context,
@@ -120,22 +153,30 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
     if (!deps.pricing) return c.json({ error: 'Not found' }, 404);
     const parsed = z
       .object({
-        baseCents: z.number().int().nonnegative(),
-        additionalEntryAdjustmentCents: z.number().int(),
-        earlyBirdDeadline: z.string().datetime({ offset: true }).nullable(),
-        earlyBirdDiscountCents: z.number().int().nonnegative(),
+        baseCents: z.number().int().nonnegative().optional(),
+        additionalEntryAdjustmentCents: z.number().int().optional(),
+        earlyBirdDeadline: z
+          .string()
+          .datetime({ offset: true })
+          .nullable()
+          .optional(),
+        earlyBirdDiscountCents: z.number().int().nonnegative().optional(),
       })
       .strict()
       .safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
     try {
+      const classId = c.req.param('classId');
+      const current =
+        (await deps.pricing.listByEvent(context, c.req.param('eventId'))).find(
+          (rule) => rule.classId === classId,
+        ) ?? null;
+      const merged = mergeClassPriceRule(classId, current, parsed.data);
+      if (!merged.ok) return c.json({ error: 'Invalid price rule' }, 422);
       return c.json(
-        await setClassPriceRule(
-          context,
-          c.req.param('eventId'),
-          { ...parsed.data, classId: c.req.param('classId') },
-          { pricing: deps.pricing },
-        ),
+        await setClassPriceRule(context, c.req.param('eventId'), merged.rule, {
+          pricing: deps.pricing,
+        }),
       );
     } catch {
       return c.json({ error: 'Forbidden or invalid price rule' }, 403);

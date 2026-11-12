@@ -4,12 +4,23 @@ import { mkdirSync, readFileSync } from 'node:fs';
 
 // The payment test continues with the entry that the lifecycle test registered.
 test.describe.configure({ mode: 'serial' });
-const apiBaseUrl = process.env.RACEPILOT_API_URL ?? 'http://127.0.0.1:3000';
-const mailpitUrl = process.env.RACEPILOT_MAILPIT_URL ?? 'http://127.0.0.1:8025';
-const shared: { eventId: string; participant: string } = {
+const shared: {
+  eventId: string;
+  participant: string;
+  participantName: string;
+} = {
   eventId: '',
   participant: '',
+  participantName: '',
 };
+const mailpitBaseUrl =
+  process.env.RACEPILOT_MAILPIT_URL ??
+  process.env.COMMUNITY_MAILPIT_BASE_URL ??
+  'http://127.0.0.1:8025';
+const apiBaseUrl =
+  process.env.RACEPILOT_API_URL ??
+  process.env.COMMUNITY_API_BASE_URL ??
+  'http://127.0.0.1:3000';
 const adminPassword = () => {
   const password = process.env.COMMUNITY_ADMIN_PASSWORD;
   if (!password) throw new Error('COMMUNITY_ADMIN_PASSWORD is required');
@@ -152,9 +163,12 @@ test('Community registration and admin lifecycle with API setup', async ({
     status: 'open',
   });
 
-  const participant = `alpha-${randomUUID().slice(0, 8)}@example.test`;
+  const participantSuffix = randomUUID().slice(0, 8);
+  const participant = `alpha-${participantSuffix}@example.test`;
+  const participantName = `Ada Lovelace ${participantSuffix}`;
   shared.eventId = event.id;
   shared.participant = participant;
+  shared.participantName = participantName;
   mkdirSync('packages/app/test-results/alpha', { recursive: true });
   const shots = async (name: string) => {
     const viewport = page.viewportSize();
@@ -177,7 +191,7 @@ test('Community registration and admin lifecycle with API setup', async ({
   await page.goto(`/events/${slug}/register`);
   await expect(page.getByRole('heading', { name: event.name })).toBeVisible();
   await page.getByLabel('Vorname').fill('Ada');
-  await page.getByLabel('Nachname').fill('Lovelace');
+  await page.getByLabel('Nachname').fill(`Lovelace ${participantSuffix}`);
   await page.getByLabel('Kontakt-E-Mail').fill(participant);
   await page.getByLabel('Geburtsdatum').fill('1990-12-10');
   // The event hides the city, so there is no such field; the phone number is required.
@@ -220,15 +234,29 @@ test('Community registration and admin lifecycle with API setup', async ({
     .click();
   await expect(page.getByRole('group', { name: 'Bitte prüfen' })).toBeVisible();
   await expect(page.getByText(consent)).toBeVisible();
-  await page.getByRole('checkbox').check();
-  await shots('public-review-step');
+  await expect(page.getByRole('checkbox')).toHaveAttribute(
+    'aria-required',
+    'true',
+  );
+  await shots('public-consent-step');
   await page.getByRole('button', { name: 'Nennung absenden' }).click();
-  await expect(page.getByRole('status')).toContainText('Bitte bestätige');
+  await expect(page.getByRole('alert')).toContainText('Bitte bestätige');
+  await page.getByRole('checkbox').check();
+  await shots('public-consent-accepted');
+  const submissionResponsePromise = page.waitForResponse(
+    (response) =>
+      response.url().includes('/registration/submissions') &&
+      response.request().method() === 'POST',
+  );
+  await page.getByRole('button', { name: 'Nennung absenden' }).click();
+  const submissionResponse = await submissionResponsePromise;
+  const submissionBody = await submissionResponse.json();
+  expect(submissionResponse.status(), JSON.stringify(submissionBody)).toBe(202);
   let mail: { ID: string };
   await expect
     .poll(
       async () => {
-        const res = await request.get(`${mailpitUrl}/api/v1/messages`);
+        const res = await request.get(`${mailpitBaseUrl}/api/v1/messages`);
         if (!res.ok()) return false;
         const body = (await res.json()) as {
           messages?: Array<{ ID: string; To?: unknown }>;
@@ -242,7 +270,7 @@ test('Community registration and admin lifecycle with API setup', async ({
     )
     .toBe(true);
   const fullMailResponse = await request.get(
-    `${mailpitUrl}/api/v1/message/${mail.ID}`,
+    `${mailpitBaseUrl}/api/v1/message/${mail.ID}`,
   );
   expect(
     fullMailResponse.ok(),
@@ -252,7 +280,8 @@ test('Community registration and admin lifecycle with API setup', async ({
   const text = `${fullMail.Text ?? ''}\n${fullMail.HTML ?? ''}`;
   const link = text.match(/https?:\/\/[^\s"<>]+/)?.[0];
   expect(link, 'verification link from Mailpit').toBeTruthy();
-  await page.goto(link!);
+  if (!link) throw new Error('verification link from Mailpit is missing');
+  await page.goto(link);
   await expect(page.getByRole('status')).toContainText(
     /E-Mail bestätigt|Email verified/i,
   );
@@ -263,10 +292,12 @@ test('Community registration and admin lifecycle with API setup', async ({
   await page
     .getByRole('combobox', { name: 'Veranstaltung' })
     .selectOption(event.id);
-  const row = page.getByRole('row').filter({ hasText: 'Ada Lovelace' });
+  const row = page.getByRole('row').filter({ hasText: participantName });
   await expect(row).toBeVisible();
   await shots('admin-populated-list');
-  await row.getByRole('button', { name: 'Ada Lovelace Lotus Seven' }).click();
+  await row
+    .getByRole('button', { name: `${participantName} Lotus Seven` })
+    .click();
   const preview = page.getByRole('complementary', { name: 'Nennungsvorschau' });
   await expect(preview).toContainText('Ada Lovelace');
   await shots('admin-entry-preview');
@@ -307,7 +338,10 @@ test('Community registration and admin lifecycle with API setup', async ({
     fileDownload.click(),
   ]);
   expect(download.suggestedFilename()).toMatch(/^registration-upload-/);
-  expect(readFileSync(await download.path()!)).toEqual(uploadedPng);
+  const downloadPath = await download.path();
+  expect(downloadPath, 'downloaded registration file path').toBeTruthy();
+  if (!downloadPath) throw new Error('download path is missing');
+  expect(readFileSync(downloadPath)).toEqual(uploadedPng);
   await shots('admin-entry-detail');
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
     /zugelassen|angenommen/i,
@@ -365,7 +399,7 @@ test('Community registration and admin lifecycle with API setup', async ({
       { timeout: 30000 },
     )
     .toBe(200);
-  expect(csv).toContain('Ada Lovelace');
+  expect(csv).toContain(participantName);
   expect(csv).toContain('Lotus Seven');
 });
 
@@ -392,7 +426,7 @@ test('admin records payment from entry detail UI', async ({
     .selectOption(shared.eventId);
   await page
     .getByRole('row')
-    .filter({ hasText: 'Ada Lovelace' })
+    .filter({ hasText: shared.participantName })
     .locator('button[data-entry-action]')
     .click();
   const entryDetail = page.getByRole('region', {

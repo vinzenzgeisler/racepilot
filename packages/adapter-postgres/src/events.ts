@@ -9,9 +9,13 @@ import type {
   EventInput,
   EventPatch,
   EventClassInput,
+  EventSetupInput,
+  EventSetupRepository,
 } from '@racepilot/core';
 
 import { events, eventClasses } from './schema/organization.js';
+import { eventClassPricingRules } from './schema/billing.js';
+import { eventConsentTermsAudit } from './schema/forms.js';
 
 import { organizationId } from '@racepilot/core';
 
@@ -198,5 +202,85 @@ export function createEventClassRepository(db: Database): EventClassRepository {
         .returning();
       return row ? mapEventClass(row) : null;
     },
+  };
+}
+
+export function createEventSetupRepository(db: Database): EventSetupRepository {
+  const mapEvent = (row: typeof events.$inferSelect): Event => ({
+    id: row.id,
+    organizationId: organizationId(row.organizationId),
+    slug: row.slug,
+    name: row.name,
+    startsOn: row.startsOn,
+    endsOn: row.endsOn,
+    status: row.status as EventStatus,
+    registrationOpensAt: row.registrationOpensAt?.toISOString() ?? null,
+    registrationClosesAt: row.registrationClosesAt?.toISOString() ?? null,
+    openedAt: row.openedAt?.toISOString() ?? null,
+    closedAt: row.closedAt?.toISOString() ?? null,
+    archivedAt: row.archivedAt?.toISOString() ?? null,
+  });
+  return {
+    createSetup: async (ctx, input: EventSetupInput) =>
+      db.transaction(async (tx) => {
+        const [row] = await tx
+          .insert(events)
+          .values({
+            organizationId: ctx.organizationId,
+            ...input.event,
+            registrationOpensAt: input.event.registrationOpensAt
+              ? new Date(input.event.registrationOpensAt)
+              : null,
+            registrationClosesAt: input.event.registrationClosesAt
+              ? new Date(input.event.registrationClosesAt)
+              : null,
+            consentTerms: input.terms,
+          })
+          .returning();
+        if (!row) throw new Error('Event setup insert failed');
+        const eventClassesCreated = await tx
+          .insert(eventClasses)
+          .values(
+            input.classes.map((item, sortOrder) => ({
+              organizationId: ctx.organizationId,
+              eventId: row.id,
+              name: item.name,
+              code: item.code,
+              vehicleType: item.vehicleType,
+              sortOrder,
+              maxParticipants: item.maxParticipants ?? null,
+              closed: item.closed ?? false,
+            })),
+          )
+          .returning();
+        const priceRows = input.classes.flatMap((setupClass, index) => {
+          const createdClass = eventClassesCreated[index];
+          if (!createdClass)
+            throw new Error('Event setup class pairing failed');
+          return [
+            {
+              organizationId: ctx.organizationId,
+              eventId: row.id,
+              classId: createdClass.id,
+              baseCents: setupClass.price.baseCents,
+              additionalEntryAdjustmentCents:
+                setupClass.price.additionalEntryAdjustmentCents,
+              earlyBirdDeadline: setupClass.price.earlyBirdDeadline
+                ? new Date(setupClass.price.earlyBirdDeadline)
+                : null,
+              earlyBirdDiscountCents: setupClass.price.earlyBirdDiscountCents,
+            },
+          ];
+        });
+        await tx.insert(eventClassPricingRules).values(priceRows);
+        await tx.insert(eventConsentTermsAudit).values({
+          organizationId: ctx.organizationId,
+          eventId: row.id,
+          actor: input.actor,
+          beforeTerms: [],
+          afterTerms: input.terms,
+        });
+        return mapEvent(row);
+      }),
   };
 }

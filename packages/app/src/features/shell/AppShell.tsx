@@ -20,7 +20,14 @@ type EventOption = {
   slug?: string;
   registrationClosesAt?: string | null;
 };
-type View = 'entries' | 'workflow' | 'account' | 'messages';
+type View = 'entries' | 'workflow' | 'setup' | 'account' | 'messages';
+const VIEW_TITLES: Record<View, string> = {
+  entries: 'Nennungen',
+  workflow: 'Nennungsablauf',
+  setup: 'Veranstaltung einrichten',
+  account: 'Einstellungen',
+  messages: 'Nachrichten',
+};
 type NavItem = { id: View; label: string; icon: IconName; mobile?: boolean };
 export const APP_NAVIGATION_REGISTRY: Array<{
   label: string;
@@ -28,7 +35,10 @@ export const APP_NAVIGATION_REGISTRY: Array<{
 }> = [
   {
     label: 'Veranstaltung',
-    items: [{ id: 'entries', label: 'Nennungen', icon: 'list' }],
+    items: [
+      { id: 'entries', label: 'Nennungen', icon: 'list' },
+      { id: 'setup', label: 'Einrichten', icon: 'calendar' },
+    ],
   },
   {
     label: 'Kommunikation',
@@ -149,15 +159,7 @@ export function AppShell({
             className={
               currentView === 'entries' ? 'nb-entry-page-header' : undefined
             }
-            title={
-              currentView === 'entries'
-                ? 'Nennungen'
-                : currentView === 'workflow'
-                  ? 'Nennungsablauf'
-                  : currentView === 'messages'
-                    ? 'Nachrichten'
-                    : 'Einstellungen'
-            }
+            title={VIEW_TITLES[currentView]}
             description={
               currentView === 'entries' && closeDate
                 ? `Nennungsschluss  ${closeDate.replace(', ', ' · ')}`

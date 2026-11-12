@@ -20,6 +20,8 @@ import {
   type ObjectStorageProvider,
   type OrganizationRepository,
   type EventRepository,
+  type EventConsentTerm,
+  type EventSetupRepository,
   type MembershipRepository,
   type MembershipBootstrap,
   type ExternalIdentity,
@@ -47,6 +49,7 @@ export interface ApiDeps {
   };
   organizations: OrganizationRepository;
   events: EventRepository;
+  eventSetup?: EventSetupRepository;
   classes?: EventClassRepository;
   entries?: EntryRepository;
   messages?: {
@@ -233,13 +236,7 @@ export interface ApiDeps {
     get(
       context: import('@racepilot/core').RequestContext,
       eventId: string,
-    ): Promise<Array<{
-      key: string;
-      version: string;
-      language: 'de' | 'en';
-      text: string;
-      hash: string;
-    }> | null>;
+    ): Promise<EventConsentTerm[] | null>;
     update(
       context: import('@racepilot/core').RequestContext,
       eventId: string,
