@@ -1,5 +1,7 @@
 {
-  "packages/adapter-local-storage/src/index.ts": ["createLocalObjectStorage"],
+  "packages/adapter-local-storage/src/index.ts": [
+    "createLocalObjectStorage"
+  ],
   "packages/adapter-oidc/src/index.ts": [
     "OIDCConfig",
     "createOIDCIdentityProvider"
@@ -155,12 +157,23 @@
     "JobEnvelope",
     "MESSAGE_ATTACHMENT_LIMITS",
     "MESSAGE_VERIFICATION_TOKEN_TTL_MS",
+    "MessageAttachmentRecord",
+    "MessageAttachmentRecordSchema",
     "MessageCampaignCreate",
     "MessageCampaignCreateSchema",
+    "MessageCampaignRecord",
+    "MessageCampaignRecordSchema",
     "MessageCampaignStatusSchema",
+    "MessageErrorSchema",
     "MessageRecipientFilter",
     "MessageRecipientFilterSchema",
+    "MessageRecipientPreview",
+    "MessageRecipientPreviewSchema",
+    "MessageRenderedPreview",
+    "MessageRenderedPreviewSchema",
     "MessageTemplate",
+    "MessageTemplateRecord",
+    "MessageTemplateRecordSchema",
     "MessageTemplateSchema",
     "ModuleChangeRequest",
     "ModuleJobPayload",
