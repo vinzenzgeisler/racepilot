@@ -369,12 +369,6 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(csv).toContain('Lotus Seven');
 });
 
-test.fixme('participant uploads a PDF supporting document during registration', async () => {
-  /* Image custom-field uploads (PNG/JPEG/WebP) work; PDF documents are not accepted. */
-});
-test.fixme('admin reviews each uploaded document from entry detail', async () => {
-  /* Uploaded images are downloadable from entry detail; per-document review status is absent. */
-});
 test('admin records payment from entry detail UI', async ({
   page,
   request,
@@ -490,10 +484,4 @@ test('admin records payment from entry detail UI', async ({
   await expect(
     page.getByRole('row').filter({ hasText: 'Ada Lovelace' }),
   ).toHaveCount(0);
-});
-test.fixme('admin starts CSV export from Nennungen screen', async () => {
-  /* API/worker exist; export control absent. */
-});
-test.fixme('admin creates event/classes/form and opens registration in UI', async () => {
-  /* Setup endpoints exist; setup controls absent. */
 });

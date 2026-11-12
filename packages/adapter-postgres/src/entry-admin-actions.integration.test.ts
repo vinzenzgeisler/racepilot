@@ -165,6 +165,7 @@ describe.skipIf(!url)('entry admin actions', () => {
               registrationGroupId: group.id,
               driverPersonId: person.id,
               vehicleId: vehicle.id,
+              orgaCode: `TEST-${crypto.randomUUID()}`,
               priceSnapshotVersion: snapshot.version,
               priceSnapshot: snapshot,
             })

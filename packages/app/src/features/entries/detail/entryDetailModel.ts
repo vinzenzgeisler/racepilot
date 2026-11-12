@@ -1,3 +1,5 @@
+import { actorName } from './actorName.js';
+
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from '../AdminEntriesModel.js';
 
@@ -312,15 +314,4 @@ function describe(
     tone: 'dark',
     ...(detail ? { detail } : {}),
   };
-}
-
-/** Actors are stored as "issuer#subject" when no member name is known. */
-export function actorName(actor: string) {
-  if (actor === 'System') return 'System';
-  if (
-    /https?:\/\//i.test(actor) ||
-    /\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/i.test(actor)
-  )
-    return 'Veranstalter';
-  return actor;
 }

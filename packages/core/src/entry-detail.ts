@@ -8,6 +8,8 @@ export interface AdminEntryConsent {
   acceptedAt: string;
   text: string | null;
   required: boolean | null;
+}
+
 export interface AdminEntryHistoryItem {
   id: string;
   kind: 'entry' | 'status' | 'payment' | 'email';
