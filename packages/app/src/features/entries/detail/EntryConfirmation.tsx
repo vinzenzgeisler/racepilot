@@ -60,7 +60,7 @@ export function EntryConfirmation({
       );
       const queued = await readJson(response, ExportQueuedSchema);
       if (!request.signal.aborted)
-        setJob({ id: queued.jobId, status: queued.status });
+        setJob({ id: queued.jobId, status: 'running' });
     } catch {
       if (!request.signal.aborted)
         setError('Die Nennbestätigung konnte nicht erstellt werden.');

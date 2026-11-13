@@ -100,8 +100,9 @@ export const ExportJobStatusSchema = z.object({
 });
 export type ExportJobStatus = z.infer<typeof ExportJobStatusSchema>;
 
+/** A freshly queued artifact job: the CSV route says `running`, the confirmation route `queued`. */
 export const ExportQueuedSchema = z.object({
   jobId: z.string().uuid(),
-  status: z.literal('running'),
+  status: z.enum(['queued', 'running']),
 });
 export type ExportQueued = z.infer<typeof ExportQueuedSchema>;
