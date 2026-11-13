@@ -163,6 +163,7 @@ function mapEventClass(row: typeof eventClasses.$inferSelect): EventClass {
     ...row,
     organizationId: organizationId(row.organizationId),
     vehicleType: row.vehicleType as EventClass['vehicleType'],
+    passengerMode: row.passengerMode as EventClass['passengerMode'],
   };
 }
 
@@ -250,6 +251,7 @@ export function createEventSetupRepository(db: Database): EventSetupRepository {
               sortOrder,
               maxParticipants: item.maxParticipants ?? null,
               closed: item.closed ?? false,
+              passengerMode: item.passengerMode ?? 'optional',
             })),
           )
           .returning();

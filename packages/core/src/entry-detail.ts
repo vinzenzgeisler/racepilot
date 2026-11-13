@@ -1,4 +1,9 @@
 import type { RequestContext } from './context.js';
+import type {
+  AdminEntryPassenger,
+  AdminEntrySpareVehicle,
+  PassengerMode,
+} from './passengers.js';
 
 /** One recorded acceptance of a versioned text; `text` is null when the event no longer carries it. */
 export interface AdminEntryConsent {
@@ -69,6 +74,10 @@ export interface AdminEntryDetails {
   vehicle: AdminEntryVehicle;
   invoice?: AdminEntryInvoice | null;
   consents?: AdminEntryConsent[];
+  /** Whether this entry's class, under the event's form setting, takes a co-driver. */
+  passengerMode?: PassengerMode;
+  passenger?: AdminEntryPassenger | null;
+  spareVehicle?: AdminEntrySpareVehicle | null;
   eventClass: {
     code: string;
     name: string;

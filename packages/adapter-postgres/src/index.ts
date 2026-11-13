@@ -46,6 +46,7 @@ export * from './schema/status.js';
 export * from './schema/billing.js';
 export * from './schema/public-registration.js';
 export * from './schema/forms.js';
+export * from './schema/passengers.js';
 export * from './schema/modules.js';
 
 export { createModuleActivationRepository } from './module-activation.js';
@@ -78,3 +79,5 @@ export * from './schema/documents.js';
 export { createOverviewRepository } from './event-overview.js';
 export { createEntryAdminActionsRepository } from './entry-admin-actions.js';
 export * from './schema/entry-admin.js';
+export { createPassengerAdminRepository } from './passenger-admin.js';
+export { createPassengerPublicRepository } from './passenger-public.js';

@@ -1,5 +1,6 @@
 import { OrganizationId } from './context.js';
 import { RequestContext } from './context.js';
+import type { PassengerMode } from './passengers.js';
 
 export interface EventRepository {
   listByOrganization(ctx: RequestContext): Promise<unknown[]>;
@@ -66,12 +67,13 @@ export interface EventClass {
   sortOrder: number;
   maxParticipants: number | null;
   closed: boolean;
+  passengerMode: PassengerMode;
 }
 
 export type EventClassInput = Omit<
   EventClass,
-  'id' | 'organizationId' | 'eventId'
->;
+  'id' | 'organizationId' | 'eventId' | 'passengerMode'
+> & { passengerMode?: PassengerMode };
 
 export interface EventClassRepository {
   listByEvent(ctx: RequestContext, eventId: string): Promise<EventClass[]>;
@@ -281,6 +283,11 @@ export function validateClass(
     (!Number.isInteger(input.sortOrder) || input.sortOrder < 0)
   )
     throw new Error('Invalid sort order');
+  if (
+    input.passengerMode !== undefined &&
+    !['none', 'optional', 'required'].includes(input.passengerMode)
+  )
+    throw new Error('Invalid passenger mode');
   if (
     input.maxParticipants !== undefined &&
     input.maxParticipants !== null &&

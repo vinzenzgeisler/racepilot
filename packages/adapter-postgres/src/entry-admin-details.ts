@@ -8,12 +8,18 @@ import {
 } from './schema/entries.js';
 import { organizations, events, eventClasses } from './schema/organization.js';
 import { eq, and, inArray } from 'drizzle-orm';
+import {
+  effectivePassengerMode,
+  registrationFeatureEnabled,
+  type PassengerMode,
+} from '@racepilot/core';
 import { registrationFormUploads } from './schema/forms.js';
 import { sql } from 'drizzle-orm';
 import { loadConsentEvidence } from './entry-admin-consents.js';
 import { loadDriverContexts } from './entry-admin-driver-context.js';
 import { loadInvoiceSummaries } from './entry-admin-invoice.js';
 import { loadEntryAdminHistory } from './entry-admin-history.js';
+import { loadPassengerDetails } from './passenger-detail.js';
 
 export async function attachAdminEntryDetails(
   db: Pick<Database, 'select'>,
@@ -203,6 +209,7 @@ export async function attachAdminEntryDetails(
       code: eventClasses.code,
       name: eventClasses.name,
       vehicleType: eventClasses.vehicleType,
+      passengerMode: eventClasses.passengerMode,
     })
     .from(entries)
     .innerJoin(
@@ -223,9 +230,28 @@ export async function attachAdminEntryDetails(
   const driverContexts = await loadDriverContexts(db, ctx, ids);
   const consentsByGroup = await loadConsentEvidence(db, ctx, groupIds);
   const historyByEntry = await loadEntryAdminHistory(db, ctx, ids);
+  const { passengers, spareVehicles } = await loadPassengerDetails(
+    db,
+    ctx,
+    ids,
+  );
   const drivers = new Map(peopleRows.map((row) => [row.entryId, row]));
   const vehiclesByEntry = new Map(vehicleRows.map((row) => [row.entryId, row]));
   const classesByEntry = new Map(classRows.map((row) => [row.entryId, row]));
+  const passengerModeFor = (
+    item: import('@racepilot/core').Entry,
+    classMode: string | undefined,
+  ): PassengerMode => {
+    const group = groupById.get(item.registrationGroupId);
+    return effectivePassengerMode(
+      registrationFeatureEnabled(
+        group?.organizationConfig as never,
+        group?.eventConfig as never,
+        'passenger',
+      ),
+      (classMode ?? 'none') as PassengerMode,
+    );
+  };
   return items.map((item) => {
     const driver = drivers.get(item.id);
     const context = driverContexts.get(item.id);
@@ -268,6 +294,9 @@ export async function attachAdminEntryDetails(
           ownerName: vehicle?.ownerName ?? null,
           history: vehicle?.history ?? null,
         },
+        passengerMode: passengerModeFor(item, eventClass?.passengerMode),
+        passenger: passengers.get(item.id) ?? null,
+        spareVehicle: spareVehicles.get(item.id) ?? null,
         invoice: invoiceByGroup.get(item.registrationGroupId) ?? null,
         consents: consentsByGroup.get(item.registrationGroupId) ?? [],
         eventClass: {

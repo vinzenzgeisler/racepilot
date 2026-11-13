@@ -155,3 +155,21 @@ export type {
   EntryDocumentLine,
   EntryDocumentProjection,
 } from './documents.js';
+export {
+  PassengerModeSchema,
+  RegistrationPassengerSchema,
+  RegistrationSpareVehicleSchema,
+  AdminPassengerCreateRequest,
+  AdminPassengerLinkRequest,
+  AdminPassengerLinkResponse,
+  PassengerLinkResolveRequest,
+  PassengerLinkViewSchema,
+  PassengerCompletionRequest,
+  passengerTokenPattern,
+} from './passenger.js';
+export type {
+  PassengerMode,
+  RegistrationPassenger,
+  RegistrationSpareVehicle,
+  PassengerLinkView,
+} from './passenger.js';

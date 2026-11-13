@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import { createEventSetup } from '@racepilot/core';
-import { CreateEventRequest, EventResponse } from '@racepilot/contracts';
+import {
+  CreateEventRequest,
+  EventResponse,
+  PassengerModeSchema,
+} from '@racepilot/contracts';
 import type { ApiRoutesContext } from './context.js';
 
 export function registerEventSetupRoute(apiContext: ApiRoutesContext): void {
@@ -25,6 +29,7 @@ export function registerEventSetupRoute(apiContext: ApiRoutesContext): void {
                   .nullable()
                   .optional(),
                 closed: z.boolean().optional(),
+                passengerMode: PassengerModeSchema.optional(),
                 price: z.object({
                   baseCents: z.number().int().nonnegative(),
                   additionalEntryAdjustmentCents: z.number().int(),
@@ -77,6 +82,9 @@ export function registerEventSetupRoute(apiContext: ApiRoutesContext): void {
             sortOrder: index,
             maxParticipants: item.maxParticipants ?? null,
             closed: item.closed ?? false,
+            ...(item.passengerMode
+              ? { passengerMode: item.passengerMode }
+              : {}),
             price: { classId: `class:${index}`, ...item.price },
           })),
           terms: parsed.data.terms,

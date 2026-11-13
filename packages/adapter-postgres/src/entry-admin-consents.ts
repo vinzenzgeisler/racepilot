@@ -43,23 +43,42 @@ export async function loadConsentEvidence(
   for (const row of rows.sort(
     (a, b) => a.acceptedAt.getTime() - b.acceptedAt.getTime(),
   )) {
-    const term = (row.terms ?? []).find(
-      (item) =>
-        item.key === row.key &&
-        item.version === row.version &&
-        item.language === row.language &&
-        item.hash === row.textHash,
-    );
     const list = result.get(row.groupId) ?? [];
-    list.push({
-      key: row.key,
-      version: row.version,
-      language: row.language === 'en' ? 'en' : 'de',
-      acceptedAt: row.acceptedAt.toISOString(),
-      text: term?.text ?? null,
-      required: term ? term.required !== false : null,
-    });
+    list.push(toAdminConsent(row));
     result.set(row.groupId, list);
   }
   return result;
+}
+
+/** One stored acceptance with the wording that carries exactly its version and hash, if the event still has it. */
+export function toAdminConsent(row: {
+  key: string;
+  version: string;
+  language: string;
+  textHash: string;
+  acceptedAt: Date;
+  terms: Array<{
+    key: string;
+    version: string;
+    language: string;
+    text: string;
+    hash: string;
+    required?: boolean;
+  }> | null;
+}): AdminEntryConsent {
+  const term = (row.terms ?? []).find(
+    (item) =>
+      item.key === row.key &&
+      item.version === row.version &&
+      item.language === row.language &&
+      item.hash === row.textHash,
+  );
+  return {
+    key: row.key,
+    version: row.version,
+    language: row.language === 'en' ? 'en' : 'de',
+    acceptedAt: row.acceptedAt.toISOString(),
+    text: term?.text ?? null,
+    required: term ? term.required !== false : null,
+  };
 }

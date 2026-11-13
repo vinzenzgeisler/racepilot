@@ -1,4 +1,5 @@
 import type {
+  PassengerMode,
   StandardRegistrationForm,
   RegistrationSettings,
   RegistrationFormConfig,
@@ -27,6 +28,7 @@ export type FormPayload = {
     code: string;
     vehicleType: string;
     closed: boolean;
+    passengerMode: PassengerMode;
   }>;
   consents: Array<{
     key: string;
@@ -50,6 +52,15 @@ export type VehicleEntry = {
   cylinders: string;
   ownerName: string;
   history: string;
+  passengerEnabled: boolean;
+  passengerFirstName: string;
+  passengerLastName: string;
+  passengerEmail: string;
+  spareVehicleEnabled: boolean;
+  spareVehicleMake: string;
+  spareVehicleModel: string;
+  spareVehicleYear: string;
+  spareVehicleRegistration: string;
 };
 export const emptyVehicle = (): VehicleEntry => ({
   classId: '',
@@ -62,6 +73,15 @@ export const emptyVehicle = (): VehicleEntry => ({
   cylinders: '',
   ownerName: '',
   history: '',
+  passengerEnabled: false,
+  passengerFirstName: '',
+  passengerLastName: '',
+  passengerEmail: '',
+  spareVehicleEnabled: false,
+  spareVehicleMake: '',
+  spareVehicleModel: '',
+  spareVehicleYear: '',
+  spareVehicleRegistration: '',
 });
 export type DriverContact = {
   phone: string;
@@ -165,6 +185,21 @@ export const translations = {
     cylinders: 'Zylinder',
     owner: 'Besitzer',
     history: 'Fahrzeughistorie',
+    addPassenger: 'Beifahrer hinzufügen',
+    passengerRequired: 'Für diese Klasse ist ein Beifahrer erforderlich.',
+    passengerHint:
+      'Mit E-Mail-Adresse erhält dein Beifahrer einen persönlichen Link, um seine Daten und Einwilligungen selbst abzuschließen. Der Link wird nach der Bestätigung deiner E-Mail-Adresse versendet.',
+    passengerFirstName: 'Vorname Beifahrer',
+    passengerLastName: 'Nachname Beifahrer',
+    passengerEmail: 'E-Mail Beifahrer',
+    addSpareVehicle: 'Ersatzfahrzeug erfassen',
+    spareVehicleHint: 'Das Ersatzfahrzeug zählt nicht als eigene Startmeldung.',
+    spareVehicleMake: 'Hersteller Ersatzfahrzeug',
+    spareVehicleModel: 'Modell Ersatzfahrzeug',
+    spareVehicleYear: 'Baujahr Ersatzfahrzeug',
+    spareVehicleRegistration: 'Kennzeichen Ersatzfahrzeug',
+    passenger: 'Beifahrer',
+    spareVehicle: 'Ersatzfahrzeug',
   },
   en: {
     loading: 'Loading registration form …',
@@ -216,8 +251,38 @@ export const translations = {
     cylinders: 'Cylinders',
     owner: 'Owner',
     history: 'Vehicle history',
+    addPassenger: 'Add co-driver',
+    passengerRequired: 'This class requires a co-driver.',
+    passengerHint:
+      'With an email address your co-driver receives a personal link to complete their own details and consents. The link is sent once your email address is verified.',
+    passengerFirstName: 'Co-driver first name',
+    passengerLastName: 'Co-driver last name',
+    passengerEmail: 'Co-driver email',
+    addSpareVehicle: 'Add spare vehicle',
+    spareVehicleHint: 'A spare vehicle does not count as a separate entry.',
+    spareVehicleMake: 'Spare vehicle make',
+    spareVehicleModel: 'Spare vehicle model',
+    spareVehicleYear: 'Spare vehicle year',
+    spareVehicleRegistration: 'Spare vehicle registration',
+    passenger: 'Co-driver',
+    spareVehicle: 'Spare vehicle',
   },
 } as const;
+
+/** What a start entry may add: a co-driver where the class takes one, a spare vehicle where the event offers it. */
+export function vehicleExtras(
+  payload: Pick<FormPayload, 'classes' | 'registrationFormConfig'>,
+  classId: string,
+) {
+  const mode: PassengerMode = payload.registrationFormConfig.features.passenger
+    ? (payload.classes.find((item) => item.id === classId)?.passengerMode ??
+      'none')
+    : 'none';
+  return {
+    passengerMode: mode,
+    spareVehicle: payload.registrationFormConfig.features.spareVehicle,
+  };
+}
 
 export function getAge(dob: string, on: string): number {
   if (!dob || !on) return 100;
@@ -231,4 +296,19 @@ export function getAge(dob: string, on: string): number {
   )
     age--;
   return age;
+}
+
+/** What one start entry actually carries: the class decides on the co-driver, the event on the spare vehicle. */
+export function entryExtras(
+  payload: Pick<FormPayload, 'classes' | 'registrationFormConfig'>,
+  vehicle: VehicleEntry,
+) {
+  const extras = vehicleExtras(payload, vehicle.classId);
+  return {
+    ...extras,
+    hasPassenger:
+      extras.passengerMode === 'required' ||
+      (extras.passengerMode === 'optional' && vehicle.passengerEnabled),
+    hasSpareVehicle: extras.spareVehicle && vehicle.spareVehicleEnabled,
+  };
 }

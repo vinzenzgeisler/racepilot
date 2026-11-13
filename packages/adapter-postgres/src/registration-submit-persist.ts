@@ -2,7 +2,10 @@ import { desc, eq, and, inArray } from 'drizzle-orm';
 import {
   RegistrationUnavailable,
   calculatePrice,
+  effectivePassengerMode,
+  type PassengerMode,
   mapRegistrationVehicleDetails,
+  normalizeEmail,
   normalizeRequestedStartNumber,
   MESSAGE_VERIFICATION_TOKEN_TTL_MS,
 } from '@racepilot/core';
@@ -17,6 +20,7 @@ import { publicEntrySubmissions } from './schema/public-registration.js';
 import { createEntryRepository } from './entry-repository.js';
 import { createInvoiceRepository } from './billing-invoices.js';
 import { enqueueMailOutbox } from './mail-outbox.js';
+import { entryPassengers } from './schema/passengers.js';
 import type { Database, TransactionDatabase } from './database.js';
 import type { PublicRegistrationPayload } from './registration-settings.js';
 import type { RegistrationSubmissionEvent } from './registration-submit-types.js';
@@ -37,6 +41,8 @@ export async function persistRegistrationSubmission(args: {
   personId: string;
   uniqueClassIds: string[];
   selectedTerms: NonNullable<RegistrationSubmissionEvent['consentTerms']>;
+  /** What the event's form offers beyond the standard entry. */
+  features: { passenger: boolean; spareVehicle: boolean };
 }): Promise<{ accepted: true; entryCount: number }> {
   const {
     db,
@@ -54,6 +60,7 @@ export async function persistRegistrationSubmission(args: {
     personId,
     uniqueClassIds,
     selectedTerms,
+    features,
   } = args;
   const [template] = await tx
     .select()
@@ -103,19 +110,38 @@ export async function persistRegistrationSubmission(args: {
           })),
         })
       : null;
-  const classTypes = new Map(
-    (
-      await tx
-        .select({ id: eventClasses.id, vehicleType: eventClasses.vehicleType })
-        .from(eventClasses)
-        .where(
-          and(
-            eq(eventClasses.organizationId, ctx.organizationId),
-            eq(eventClasses.eventId, event.id),
-          ),
-        )
-    ).map((row) => [row.id, row.vehicleType]),
+  const classRows = await tx
+    .select({
+      id: eventClasses.id,
+      vehicleType: eventClasses.vehicleType,
+      passengerMode: eventClasses.passengerMode,
+    })
+    .from(eventClasses)
+    .where(
+      and(
+        eq(eventClasses.organizationId, ctx.organizationId),
+        eq(eventClasses.eventId, event.id),
+      ),
+    );
+  const classTypes = new Map(classRows.map((row) => [row.id, row.vehicleType]));
+  const passengerModes = new Map(
+    classRows.map((row) => [
+      row.id,
+      effectivePassengerMode(
+        features.passenger,
+        row.passengerMode as PassengerMode,
+      ),
+    ]),
   );
+  for (const requestEntry of payload.entries) {
+    const mode = passengerModes.get(requestEntry.classId) ?? 'none';
+    if (requestEntry.passenger && mode === 'none')
+      throw new RegistrationUnavailable('passenger-unavailable');
+    if (!requestEntry.passenger && mode === 'required')
+      throw new RegistrationUnavailable('passenger-required');
+    if (requestEntry.spareVehicle && !features.spareVehicle)
+      throw new RegistrationUnavailable('spare-vehicle-unavailable');
+  }
   const entryRepo = createEntryRepository(db);
   const invoiceRepo = createInvoiceRepository(db);
   const entryIds: string[] = [];
@@ -133,6 +159,22 @@ export async function persistRegistrationSubmission(args: {
         ...mapRegistrationVehicleDetails(requestEntry.vehicle),
       })
       .returning({ id: vehicles.id });
+    const spare = requestEntry.spareVehicle
+      ? (
+          await tx
+            .insert(vehicles)
+            .values({
+              organizationId: ctx.organizationId,
+              make: requestEntry.spareVehicle.make.trim(),
+              model: requestEntry.spareVehicle.model.trim(),
+              year: requestEntry.spareVehicle.year,
+              registration:
+                requestEntry.spareVehicle.registration?.trim() || null,
+              vehicleType: classTypes.get(requestEntry.classId) ?? null,
+            })
+            .returning({ id: vehicles.id })
+        )[0]
+      : undefined;
     const entry = await entryRepo.create!(
       ctx,
       {
@@ -141,6 +183,7 @@ export async function persistRegistrationSubmission(args: {
         registrationGroupId: groupId,
         driverPersonId: personId,
         vehicleId: vehicle!.id,
+        spareVehicleId: spare?.id ?? null,
         requestedStartNumber: normalizeRequestedStartNumber(
           requestEntry.requestedStartNumber,
         ),
@@ -151,6 +194,21 @@ export async function persistRegistrationSubmission(args: {
       tx,
     );
     entryIds.push(entry.id);
+    if (requestEntry.passenger)
+      await tx.insert(entryPassengers).values({
+        organizationId: ctx.organizationId,
+        eventId: event.id,
+        entryId: entry.id,
+        firstName: requestEntry.passenger.firstName.trim(),
+        lastName: requestEntry.passenger.lastName.trim(),
+        email: requestEntry.passenger.email?.trim() || null,
+        emailNormalized: requestEntry.passenger.email
+          ? normalizeEmail(requestEntry.passenger.email)
+          : null,
+        language: payload.language,
+        source: 'registration',
+        createdBy: `${payload.person.firstName.trim()} ${payload.person.lastName.trim()}`,
+      });
   }
   if (snapshot) await invoiceRepo.issue(ctx, event.id, groupId, snapshot, tx);
   for (const term of selectedTerms)

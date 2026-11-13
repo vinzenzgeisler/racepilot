@@ -27,6 +27,7 @@ export function createEntryWriteMethods(
               registrationGroupId: input.registrationGroupId,
               driverPersonId: input.driverPersonId,
               vehicleId: input.vehicleId,
+              spareVehicleId: input.spareVehicleId ?? null,
               acceptanceStatus: 'pending',
               requestedStartNumber: normalizeRequestedStartNumber(
                 input.requestedStartNumber,

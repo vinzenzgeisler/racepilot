@@ -54,7 +54,7 @@ export const emailTemplateVersions = pgTable(
     }).onDelete('cascade'),
     check(
       'email_template_version_key_check',
-      sql`${t.templateKey} in ('verification','registration-resume','entry-received','accepted','rejected','status-change','message-campaign')`,
+      sql`${t.templateKey} in ('verification','registration-resume','entry-received','accepted','rejected','status-change','message-campaign','passenger-link')`,
     ),
     check('email_template_version_version_check', sql`${t.version} > 0`),
     check(
@@ -143,7 +143,7 @@ export const emailOutbox = pgTable(
     check('email_outbox_attempts_check', sql`${t.attempts} >= 0`),
     check(
       'email_outbox_template_key_check',
-      sql`${t.templateKey} in ('verification','registration-resume','entry-received','accepted','rejected','status-change','message-campaign')`,
+      sql`${t.templateKey} in ('verification','registration-resume','entry-received','accepted','rejected','status-change','message-campaign','passenger-link')`,
     ),
     check('email_outbox_locale_check', sql`${t.locale} in ('de','en')`),
     check(

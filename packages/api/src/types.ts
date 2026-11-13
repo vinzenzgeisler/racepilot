@@ -24,6 +24,8 @@ import type {
   InvoicePaymentRepository,
   OrganizationRepository,
   OverviewRepository,
+  PassengerAdminRepository,
+  PassengerPublicRepository,
   PaymentRecipientRepository,
 } from '@racepilot/core';
 import type { ModuleApiDeps } from './modules.js';
@@ -90,6 +92,12 @@ export interface PublicRegistrationModule {
   rateLimiter: RegistrationRateLimiter;
 }
 
+/** Co-driver maintenance and the personal link; needs mail and a canonical origin like public registration. */
+export interface PassengerModule {
+  admin: PassengerAdminRepository;
+  public: PassengerPublicRepository;
+}
+
 export interface RuntimeBootstrapConfig {
   configurationVersion: string;
   branding?: {
@@ -110,6 +118,7 @@ export interface EditionApiDeps {
   /** Documents, exports, uploads, and message attachments need object storage. */
   objectStorage?: ObjectStorageProvider;
   publicRegistration?: PublicRegistrationModule;
+  passengers?: PassengerModule;
   authenticator?: Authenticator;
   memberships?: MembershipRepository;
   bootstrap?: MembershipBootstrap;

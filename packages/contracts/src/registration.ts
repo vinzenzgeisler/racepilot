@@ -4,6 +4,10 @@ import {
   RegistrationContactFieldsSchema,
   registrationVehicleDetailsShape,
 } from './registration-details.js';
+import {
+  RegistrationPassengerSchema,
+  RegistrationSpareVehicleSchema,
+} from './passenger.js';
 
 export const StandardRegistrationFormSchema = z
   .object({
@@ -119,6 +123,8 @@ export const PublicRegistrationRequestSchema = z
                 ...registrationVehicleDetailsShape,
               })
               .strict(),
+            passenger: RegistrationPassengerSchema.nullable().optional(),
+            spareVehicle: RegistrationSpareVehicleSchema.nullable().optional(),
           })
           .strict(),
       )
@@ -175,6 +181,15 @@ export const RegistrationDraftSchema = z
             cylinders: z.string().max(2).default(''),
             ownerName: z.string().max(200).default(''),
             history: z.string().max(4000).default(''),
+            passengerEnabled: z.boolean().default(false),
+            passengerFirstName: z.string().max(100).default(''),
+            passengerLastName: z.string().max(100).default(''),
+            passengerEmail: z.string().max(254).default(''),
+            spareVehicleEnabled: z.boolean().default(false),
+            spareVehicleMake: z.string().max(100).default(''),
+            spareVehicleModel: z.string().max(100).default(''),
+            spareVehicleYear: z.string().max(4).default(''),
+            spareVehicleRegistration: z.string().max(64).default(''),
           })
           .strict(),
       )

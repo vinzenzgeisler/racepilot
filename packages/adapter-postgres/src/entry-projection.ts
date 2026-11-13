@@ -17,6 +17,7 @@ import { invoices } from './schema/billing.js';
 import { events } from './schema/organization.js';
 import { eventEntryDocumentTypes, entryDocuments } from './schema/documents.js';
 import { projectEntryDocumentLines } from './entry-document-projection.js';
+import { entryPassengers } from './schema/passengers.js';
 
 export function mapEntry(
   row: typeof entries.$inferSelect,
@@ -75,6 +76,7 @@ export async function projectEntryRows(
     starterResult,
     documentTypes,
     documentRows,
+    passengerRows,
   ] = await Promise.all([
     revisionIds.length
       ? db.execute(sql`
@@ -162,7 +164,17 @@ export async function projectEntryRows(
         sql`${entryDocuments.uploadedAt} desc`,
         sql`${entryDocuments.id} desc`,
       ),
+    db
+      .select({ entryId: entryPassengers.entryId })
+      .from(entryPassengers)
+      .where(
+        and(
+          eq(entryPassengers.organizationId, ctx.organizationId),
+          inArray(entryPassengers.entryId, ids),
+        ),
+      ),
   ]);
+  const passengerEntryIds = new Set(passengerRows.map((row) => row.entryId));
   type WorkflowRow = {
     id: string;
     workflow: import('@racepilot/core').EntryWorkflow;
@@ -206,7 +218,7 @@ export async function projectEntryRows(
     const hints = {
       double_starter:
         rawHints.double_starter || starterMap.get(row.id) === true,
-      passenger: rawHints.passenger,
+      passenger: rawHints.passenger || passengerEntryIds.has(row.id),
       late_entry:
         rawHints.late_entry || Boolean(closesAt && row.createdAt > closesAt),
     };

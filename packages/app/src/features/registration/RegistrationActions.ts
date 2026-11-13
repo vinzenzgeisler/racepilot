@@ -5,7 +5,12 @@ import {
   RegistrationDraftSchema,
 } from '@racepilot/contracts';
 import type { RegistrationModel } from './RegistrationModel.js';
-import { fieldState, nullIfEmpty, numberOrNull } from './RegistrationDomain.js';
+import {
+  fieldState,
+  nullIfEmpty,
+  numberOrNull,
+  entryExtras,
+} from './RegistrationDomain.js';
 
 type Config = RegistrationModel['payload']['registrationFormConfig'];
 /** A field the event no longer asks for is never sent, even if an older draft still holds a value. */
@@ -123,28 +128,51 @@ export function createRegistrationActions(
           : {}),
       },
       customAnswers,
-      entries: vehicles.map((item) => ({
-        classId: item.classId,
-        requestedStartNumber: item.requestedStartNumber || null,
-        vehicle: {
-          make: item.make,
-          model: item.model,
-          year: item.year ? Number(item.year) : null,
-          registration: item.registration || null,
-          displacementCc: asked(payload!.registrationFormConfig, 'displacement')
-            ? numberOrNull(item.displacementCc)
+      entries: vehicles.map((item) => {
+        const extras = entryExtras(payload!, item);
+        return {
+          classId: item.classId,
+          requestedStartNumber: item.requestedStartNumber || null,
+          passenger: extras.hasPassenger
+            ? {
+                firstName: item.passengerFirstName,
+                lastName: item.passengerLastName,
+                email: nullIfEmpty(item.passengerEmail),
+              }
             : null,
-          cylinders: asked(payload!.registrationFormConfig, 'cylinders')
-            ? numberOrNull(item.cylinders)
+          spareVehicle: extras.hasSpareVehicle
+            ? {
+                make: item.spareVehicleMake,
+                model: item.spareVehicleModel,
+                year: item.spareVehicleYear
+                  ? Number(item.spareVehicleYear)
+                  : null,
+                registration: nullIfEmpty(item.spareVehicleRegistration),
+              }
             : null,
-          ownerName: asked(payload!.registrationFormConfig, 'owner')
-            ? nullIfEmpty(item.ownerName)
-            : null,
-          history: asked(payload!.registrationFormConfig, 'history')
-            ? nullIfEmpty(item.history)
-            : null,
-        },
-      })),
+          vehicle: {
+            make: item.make,
+            model: item.model,
+            year: item.year ? Number(item.year) : null,
+            registration: item.registration || null,
+            displacementCc: asked(
+              payload!.registrationFormConfig,
+              'displacement',
+            )
+              ? numberOrNull(item.displacementCc)
+              : null,
+            cylinders: asked(payload!.registrationFormConfig, 'cylinders')
+              ? numberOrNull(item.cylinders)
+              : null,
+            ownerName: asked(payload!.registrationFormConfig, 'owner')
+              ? nullIfEmpty(item.ownerName)
+              : null,
+            history: asked(payload!.registrationFormConfig, 'history')
+              ? nullIfEmpty(item.history)
+              : null,
+          },
+        };
+      }),
       consents: payload!.consents
         .filter(
           (item) =>

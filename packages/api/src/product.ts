@@ -20,6 +20,8 @@ import {
   createModuleActivationRepository,
   createOrganizationRepository,
   createOverviewRepository,
+  createPassengerAdminRepository,
+  createPassengerPublicRepository,
   createPaymentRecipientRepository,
   createPostgresRegistrationRateLimiter,
   createPublicRegistrationRateLimitSettingsRepository,
@@ -144,6 +146,13 @@ export function createProductApi(options: ProductApiOptions): Hono {
             createPostgresRegistrationRateLimiter(db),
         }
       : undefined;
+  const passengers =
+    mail && canonicalOrigin
+      ? {
+          admin: createPassengerAdminRepository(db, { canonicalOrigin }),
+          public: createPassengerPublicRepository(db),
+        }
+      : undefined;
   return createApp({
     ...edit,
     config: { ...edit.config, ...options.rateLimits },
@@ -165,6 +174,7 @@ export function createProductApi(options: ProductApiOptions): Hono {
     publicRegistrationRateLimits:
       createPublicRegistrationRateLimitSettingsRepository(db),
     ...(publicRegistration ? { publicRegistration } : {}),
+    ...(passengers ? { passengers } : {}),
     memberships: createMembershipRepository(db),
     payments: createInvoicePaymentRepository(db),
     entryDetails: createEntryDetailRepository(db),

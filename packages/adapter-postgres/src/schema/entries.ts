@@ -139,6 +139,7 @@ export const entries = pgTable(
     registrationGroupId: uuid('registration_group_id').notNull(),
     driverPersonId: uuid('driver_person_id').notNull(),
     vehicleId: uuid('vehicle_id').notNull(),
+    spareVehicleId: uuid('spare_vehicle_id'),
     verificationStatus: text('verification_status')
       .notNull()
       .default('unverified'),
@@ -209,6 +210,15 @@ export const entries = pgTable(
       foreignColumns: [vehicles.organizationId, vehicles.id],
       name: 'entry_org_vehicle_fk',
     }),
+    foreignKey({
+      columns: [t.organizationId, t.spareVehicleId],
+      foreignColumns: [vehicles.organizationId, vehicles.id],
+      name: 'entry_org_spare_vehicle_fk',
+    }),
+    check(
+      'entry_spare_vehicle_distinct_check',
+      sql`${t.spareVehicleId} is null or ${t.spareVehicleId} <> ${t.vehicleId}`,
+    ),
     check(
       'entry_verification_status_check',
       sql`${t.verificationStatus} in ('unverified','verified')`,

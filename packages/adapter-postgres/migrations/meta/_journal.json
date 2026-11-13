@@ -218,6 +218,13 @@
       "when": 1794422128486,
       "tag": "0030_entry_admin_actions",
       "breakpoints": false
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1794422200000,
+      "tag": "0031_passenger_spare_vehicle",
+      "breakpoints": false
     }
   ]
 }

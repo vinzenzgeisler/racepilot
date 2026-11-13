@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { EntryDocumentProjectionSchema } from './documents.js';
+import { PassengerModeSchema } from './passenger.js';
 
 export const PriceSnapshotSchema = z
   .object({
@@ -111,6 +112,51 @@ export const EntryResponse = z
               })
               .strict(),
           )
+          .optional(),
+        passengerMode: PassengerModeSchema.optional(),
+        passenger: z
+          .object({
+            firstName: z.string(),
+            lastName: z.string(),
+            email: z.string().nullable(),
+            dateOfBirth: z.string().nullable(),
+            country: z.string().nullable(),
+            phone: z.string().nullable(),
+            street: z.string().nullable(),
+            postalCode: z.string().nullable(),
+            city: z.string().nullable(),
+            emergencyContactName: z.string().nullable(),
+            emergencyContactPhone: z.string().nullable(),
+            source: z.enum(['registration', 'admin']),
+            /** recorded: no link yet or expired; invited: a link is open; completed: the co-driver finished. */
+            status: z.enum(['recorded', 'invited', 'completed']),
+            completedAt: z.string().datetime({ offset: true }).nullable(),
+            linkExpiresAt: z.string().datetime({ offset: true }).nullable(),
+            consents: z.array(
+              z
+                .object({
+                  key: z.string(),
+                  version: z.string(),
+                  language: z.enum(['de', 'en']),
+                  acceptedAt: z.string().datetime({ offset: true }),
+                  text: z.string().nullable(),
+                  required: z.boolean().nullable(),
+                })
+                .strict(),
+            ),
+          })
+          .strict()
+          .nullable()
+          .optional(),
+        spareVehicle: z
+          .object({
+            make: z.string(),
+            model: z.string(),
+            year: z.number().int().nullable(),
+            registration: z.string().nullable(),
+          })
+          .strict()
+          .nullable()
           .optional(),
         invoice: z
           .object({

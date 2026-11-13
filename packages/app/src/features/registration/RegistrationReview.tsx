@@ -1,4 +1,5 @@
 import { Button, Checkbox } from '@racepilot/ui';
+import { entryExtras } from './RegistrationDomain.js';
 import type { RegistrationModel } from './RegistrationModel.js';
 
 export function RegistrationReview({
@@ -52,6 +53,7 @@ export function RegistrationReview({
           const selectedClass = payload.classes.find(
             (item) => item.id === vehicle.classId,
           );
+          const extras = entryExtras(payload, vehicle);
           return (
             <p
               className="registration-review-entry"
@@ -62,6 +64,10 @@ export function RegistrationReview({
                 .filter(Boolean)
                 .join(' ') || '—'}{' '}
               · {selectedClass?.code ?? (de ? 'Klasse offen' : 'Class pending')}
+              {extras.hasPassenger &&
+                ` · ${de ? 'Beifahrer' : 'Co-driver'} ${vehicle.passengerFirstName} ${vehicle.passengerLastName}`}
+              {extras.hasSpareVehicle &&
+                ` · ${de ? 'Ersatzfahrzeug' : 'Spare'} ${[vehicle.spareVehicleMake, vehicle.spareVehicleModel].filter(Boolean).join(' ')}`}
             </p>
           );
         })}

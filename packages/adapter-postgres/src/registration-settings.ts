@@ -187,6 +187,23 @@ export interface PublicRegistrationPayload {
       ownerName?: string | null | undefined;
       history?: string | null | undefined;
     };
+    passenger?:
+      | {
+          firstName: string;
+          lastName: string;
+          email?: string | null | undefined;
+        }
+      | null
+      | undefined;
+    spareVehicle?:
+      | {
+          make: string;
+          model: string;
+          year: number | null;
+          registration: string | null;
+        }
+      | null
+      | undefined;
   }>;
   consents: Array<{
     key: string;

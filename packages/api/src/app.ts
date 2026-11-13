@@ -6,6 +6,10 @@ import { registerEntriesRoutes } from './routes/entries.js';
 import { registerEventsRoutes } from './routes/events.js';
 import { registerMessageRoutes } from './routes/messages.js';
 import { registerOrganizationRoutes } from './routes/organization.js';
+import {
+  registerPassengerAdminRoutes,
+  registerPassengerPublicRoutes,
+} from './routes/passengers.js';
 import { registerPaymentsRoutes } from './routes/payments.js';
 import { registerPublicRegistrationRoutes } from './routes/public-registration.js';
 import {
@@ -67,11 +71,13 @@ export function createApp(deps: ApiDeps) {
   registerOrganizationRoutes(routes);
   registerEventsRoutes(routes);
   registerEntriesRoutes(routes);
+  registerPassengerAdminRoutes(routes);
   registerMessageRoutes(routes);
   registerPaymentsRoutes(routes);
   registerRegistrationRoutes(routes);
   if (registration) {
     registerPublicRegistrationRoutes(routes, registration);
+    registerPassengerPublicRoutes(routes, registration);
     registerPublicFormRoute(routes, registration.service);
     registerRegistrationResumeRoutes(routes, registration.service);
   } else registerPublicEventFormRoute(routes);

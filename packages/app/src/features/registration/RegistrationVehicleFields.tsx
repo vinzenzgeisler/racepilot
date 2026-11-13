@@ -1,7 +1,12 @@
 import { Button, Field, SelectField } from '@racepilot/ui';
 import { useState, type Dispatch, type SetStateAction } from 'react';
 import type { FormPayload, VehicleEntry } from './RegistrationDomain.js';
-import { emptyVehicle, translations } from './RegistrationDomain.js';
+import {
+  emptyVehicle,
+  translations,
+  vehicleExtras,
+} from './RegistrationDomain.js';
+import { RegistrationVehicleExtras } from './RegistrationVehicleExtras.js';
 import { RegistrationVehicleDetailFields } from './RegistrationVehicleDetailFields.js';
 
 type Locale = 'de' | 'en';
@@ -42,6 +47,13 @@ export function RegistrationVehicleFields({
   const [activeIndex, setActiveIndex] = useState<number | null>(
     vehicles.length - 1,
   );
+  const extrasFor = (classId: string) => {
+    const extras = vehicleExtras(payload, classId);
+    return {
+      passengerMode: extras.passengerMode,
+      spareVehicle: extras.spareVehicle,
+    };
+  };
   const remove = (index: number) => {
     numberLookupRef.current = {};
     setNumberAvailability({});
@@ -216,6 +228,12 @@ export function RegistrationVehicleFields({
               <RegistrationVehicleDetailFields
                 config={payload.registrationFormConfig}
                 vehicle={item}
+                onChange={(patch) => setVehicle(index, patch)}
+                t={t}
+              />
+              <RegistrationVehicleExtras
+                vehicle={item}
+                {...extrasFor(item.classId)}
                 onChange={(patch) => setVehicle(index, patch)}
                 t={t}
               />

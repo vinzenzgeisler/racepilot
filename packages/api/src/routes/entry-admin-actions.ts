@@ -1,6 +1,9 @@
 import type { ApiRoutesContext } from './context.js';
 import { z } from 'zod';
-import { performEntryAdminAction } from '@racepilot/core';
+import {
+  availablePassengerActions,
+  performEntryAdminAction,
+} from '@racepilot/core';
 
 export function registerEntryAdminActionRoutes(
   context: ApiRoutesContext,
@@ -38,6 +41,10 @@ export function registerEntryAdminActionRoutes(
         availableActions.push(`acceptance:${edge.to}`);
       }
     }
+    if (deps.passengers && context.permissions.has('entry:write'))
+      availableActions.push(
+        ...availablePassengerActions(entry.adminDetails ?? {}),
+      );
     return c.json({ ...entry, availableActions });
   });
   app.post('/admin/entries/:entryId/actions', async (c) => {

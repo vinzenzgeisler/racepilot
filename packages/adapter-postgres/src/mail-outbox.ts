@@ -101,7 +101,8 @@ export function createMailOutboxRepository(
       | 'accepted'
       | 'rejected'
       | 'status-change'
-      | 'message-campaign',
+      | 'message-campaign'
+      | 'passenger-link',
     templateVersion: row.templateVersion,
     locale: row.locale as 'de' | 'en',
     recipient: row.recipient,

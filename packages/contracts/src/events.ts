@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { PassengerModeSchema } from './passenger.js';
 
 export const EventStatusSchema = z.enum([
   'draft',
@@ -17,6 +18,7 @@ export const EventClassSchema = z
     sortOrder: z.number().int(),
     maxParticipants: z.number().int().positive().nullable(),
     closed: z.boolean(),
+    passengerMode: PassengerModeSchema.default('optional'),
   })
   .strict();
 export const EventSchema = z
@@ -68,6 +70,9 @@ export const CreateEventClassRequest = EventClassSchema.omit({
   id: true,
   organizationId: true,
   eventId: true,
-}).strict();
+})
+  // A request that omits the mode keeps the stored one; the response default does not apply.
+  .extend({ passengerMode: PassengerModeSchema.optional() })
+  .strict();
 export const UpdateEventClassRequest =
   CreateEventClassRequest.partial().strict();

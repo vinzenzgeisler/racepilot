@@ -140,6 +140,7 @@ export const eventClasses = pgTable(
     sortOrder: integer('sort_order').notNull().default(0),
     maxParticipants: integer('max_participants'),
     closed: boolean('closed').notNull().default(false),
+    passengerMode: text('passenger_mode').notNull().default('optional'),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -163,6 +164,10 @@ export const eventClasses = pgTable(
       sql`${t.vehicleType} in ('car','motorcycle','kart','other')`,
     ),
     check('event_class_sort_order_check', sql`${t.sortOrder} >= 0`),
+    check(
+      'event_class_passenger_mode_check',
+      sql`${t.passengerMode} in ('none','optional','required')`,
+    ),
     check(
       'event_class_max_participants_check',
       sql`${t.maxParticipants} is null or ${t.maxParticipants} > 0`,

@@ -18,6 +18,7 @@ import {
   RegistrationUnavailable,
   registrationContactMatches,
   registrationVehicleDetailsMatch,
+  registrationFeatureEnabled,
   resolveRegistrationFieldStates,
 } from '@racepilot/core';
 import { publicEntrySubmissions } from './schema/public-registration.js';
@@ -270,6 +271,18 @@ export function createPublicRegistrationService(
           personId,
           uniqueClassIds,
           selectedTerms,
+          features: {
+            passenger: registrationFeatureEnabled(
+              orgFormConfig,
+              formConfig,
+              'passenger',
+            ),
+            spareVehicle: registrationFeatureEnabled(
+              orgFormConfig,
+              formConfig,
+              'spareVehicle',
+            ),
+          },
         });
       });
     },

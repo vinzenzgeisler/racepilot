@@ -22,6 +22,9 @@ export type RegistrationUnavailableReason =
   | 'shared-email-disallowed'
   | 'draft-field-unknown'
   | 'draft-upload-invalid'
+  | 'passenger-unavailable'
+  | 'passenger-required'
+  | 'spare-vehicle-unavailable'
   | 'origin-unavailable';
 
 export class RegistrationUnavailable extends Error {

@@ -110,7 +110,7 @@ export type EntryInput = Pick<
   | 'priceSnapshotVersion'
   | 'priceSnapshot'
   | 'formSnapshotVersion'
->;
+> & { spareVehicleId?: string | null };
 
 export interface PersonRepository {
   create?(ctx: RequestContext, input: PersonInput): Promise<Person>;

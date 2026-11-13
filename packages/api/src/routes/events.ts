@@ -206,10 +206,18 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);
     try {
       return c.json(
-        await createEventClass(context, c.req.param('eventId'), parsed.data, {
-          events: deps.events,
-          classes: deps.classes,
-        }),
+        await createEventClass(
+          context,
+          c.req.param('eventId'),
+          {
+            ...parsed.data,
+            passengerMode: parsed.data.passengerMode ?? 'optional',
+          },
+          {
+            events: deps.events,
+            classes: deps.classes,
+          },
+        ),
         201,
       );
     } catch {
@@ -237,7 +245,7 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
         context,
         c.req.param('eventId'),
         c.req.param('classId'),
-        parsed.data as Partial<EventClassInput>,
+        parsed.data as unknown as Partial<EventClassInput>,
         { events: deps.events, classes: deps.classes },
       );
       return result ? c.json(result) : c.json({ error: 'Not found' }, 404);

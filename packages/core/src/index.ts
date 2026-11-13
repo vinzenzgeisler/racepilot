@@ -19,6 +19,7 @@ export * from './exports.js';
 export * from './modules.js';
 export * from './timing.js';
 export * from './entry-detail.js';
+export * from './passengers.js';
 export * from './messages.js';
 export * from './message-campaign-send.js';
 export * from './message-campaign-delivery.js';

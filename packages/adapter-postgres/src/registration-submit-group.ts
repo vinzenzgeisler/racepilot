@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import {
   RegistrationUnavailable,
   mapRegistrationContactDetails,
@@ -7,6 +6,7 @@ import {
 import { eq, and, sql } from 'drizzle-orm';
 import { registrationGroups } from './schema/entries.js';
 import { registrationFormUploads } from './schema/forms.js';
+import { matchAcceptedTerms } from './consent-terms.js';
 import type {
   RegistrationFileUploadReference,
   RegistrationSubmissionEvent,
@@ -39,35 +39,13 @@ export async function createRegistrationGroup(args: {
     customFileUploads,
     receivedAt,
   } = args;
-  const consentTerms = event.consentTerms ?? [];
-  const selectedTerms = payload.consents.map((consent) => {
-    const term = consentTerms.find(
-      (item) =>
-        item.key === consent.key &&
-        item.version === consent.version &&
-        item.language === payload.language &&
-        item.hash === consent.hash,
-    );
-    if (!term) throw new RegistrationUnavailable('terms-mismatch');
-    const actualHash = createHash('sha256').update(term.text).digest('hex');
-    if (actualHash !== consent.hash)
-      throw new RegistrationUnavailable('terms-mismatch');
-    return term;
-  });
-  if (
-    consentTerms.some(
-      (term) =>
-        term.language === payload.language &&
-        term.required !== false &&
-        !selectedTerms.some(
-          (selected) =>
-            selected.key === term.key &&
-            selected.version === term.version &&
-            selected.hash === term.hash,
-        ),
-    )
-  )
-    throw new RegistrationUnavailable('terms-required');
+  const matched = matchAcceptedTerms(
+    event.consentTerms ?? [],
+    payload.consents,
+    payload.language,
+  );
+  if ('error' in matched) throw new RegistrationUnavailable(matched.error);
+  const selectedTerms = matched.terms;
   const [priorGroup] = await tx
     .select({ id: registrationGroups.id })
     .from(registrationGroups)

@@ -39,6 +39,7 @@ const eventClass = {
   sortOrder: 0,
   maxParticipants: null,
   closed: false,
+  passengerMode: 'optional' as const,
 };
 const validTerms = [
   {

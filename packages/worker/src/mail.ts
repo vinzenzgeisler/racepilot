@@ -25,6 +25,7 @@ export const mailTemplateContracts = {
     'driverNote',
   ],
   'message-campaign': ['subject', 'body'],
+  'passenger-link': ['recipientName', 'driverName', 'eventName', 'linkUrl'],
 } as const;
 export type MailTemplateKey = keyof typeof mailTemplateContracts;
 export type MailLocale = 'de' | 'en';
@@ -97,6 +98,18 @@ const defaultCopy: Record<MailTemplateKey, Record<MailLocale, MailTemplate>> = {
   'message-campaign': {
     de: { subject: '{{subject}}', text: '{{body}}', html: '<p>{{body}}</p>' },
     en: { subject: '{{subject}}', text: '{{body}}', html: '<p>{{body}}</p>' },
+  },
+  'passenger-link': {
+    de: {
+      subject: 'Deine Daten als Beifahrer: {{eventName}}',
+      text: 'Hallo {{recipientName}}, {{driverName}} hat dich als Beifahrer für {{eventName}} gemeldet. Bitte ergänze deine Daten und Einwilligungen über deinen persönlichen Link: {{linkUrl}} Der Link ist zeitlich begrenzt und funktioniert nur einmal.',
+      html: '<p>Hallo {{recipientName}},</p><p>{{driverName}} hat dich als Beifahrer für {{eventName}} gemeldet. Bitte ergänze deine Daten und Einwilligungen:</p><p><a href="{{linkUrl}}">Daten ergänzen</a></p><p>Der Link ist zeitlich begrenzt und funktioniert nur einmal.</p>',
+    },
+    en: {
+      subject: 'Your details as co-driver: {{eventName}}',
+      text: 'Hello {{recipientName}}, {{driverName}} named you as co-driver for {{eventName}}. Please complete your details and consents with your personal link: {{linkUrl}} The link expires and can only be used once.',
+      html: '<p>Hello {{recipientName}},</p><p>{{driverName}} named you as co-driver for {{eventName}}. Please complete your details and consents:</p><p><a href="{{linkUrl}}">Complete details</a></p><p>The link expires and can only be used once.</p>',
+    },
   },
   rejected: {
     de: {
@@ -346,12 +359,13 @@ export function createMailOutboxTask(deps: {
             attachmentReferences,
           )
         : [];
-    if (
-      row.templateKey === 'verification' ||
-      row.templateKey === 'registration-resume'
-    ) {
-      const variableName =
-        row.templateKey === 'verification' ? 'verificationUrl' : 'resumeUrl';
+    const linkVariable = {
+      verification: 'verificationUrl',
+      'registration-resume': 'resumeUrl',
+      'passenger-link': 'linkUrl',
+    }[row.templateKey as string];
+    if (linkVariable) {
+      const variableName = linkVariable;
       const origin = await resolveCanonicalOrigin(deps.canonicalOrigin, ctx);
       if (!origin) throw new Error('Canonical origin is unavailable');
       const url = new URL(variables[variableName] ?? '/', origin);
