@@ -10,9 +10,17 @@ type Consent = NonNullable<
  * Acceptances the participant actually recorded. Nothing is derived from the event's texts:
  * an entry without evidence says so.
  */
-export function EntryConsentsSection({ consents }: { consents: Consent[] }) {
+export function EntryConsentsSection({
+  consents,
+  title = 'Einwilligungen',
+  emptyText = 'Für diese Nennung ist kein Einwilligungsnachweis gespeichert.',
+}: {
+  consents: Consent[];
+  title?: string;
+  emptyText?: string;
+}) {
   return (
-    <DetailSection title="Einwilligungen">
+    <DetailSection title={title}>
       <EvidenceList
         items={consents.map((consent) => ({
           id: `${consent.key}:${consent.version}:${consent.language}:${consent.acceptedAt}`,
@@ -35,11 +43,7 @@ export function EntryConsentsSection({ consents }: { consents: Consent[] }) {
           missingTextLabel:
             'Der akzeptierte Wortlaut ist für diese Veranstaltung nicht mehr hinterlegt.',
         }))}
-        empty={
-          <DetailNote>
-            Für diese Nennung ist kein Einwilligungsnachweis gespeichert.
-          </DetailNote>
-        }
+        empty={<DetailNote>{emptyText}</DetailNote>}
       />
     </DetailSection>
   );

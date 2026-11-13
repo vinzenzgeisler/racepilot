@@ -129,6 +129,7 @@ export interface PassengerLinkView {
   eventName: string;
   className: string;
   driverName: string;
+  language: 'de' | 'en';
   passenger: Omit<
     AdminEntryPassenger,
     'source' | 'status' | 'completedAt' | 'linkExpiresAt' | 'consents'

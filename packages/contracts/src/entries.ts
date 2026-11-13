@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { EntryDocumentProjectionSchema } from './documents.js';
-import { PassengerModeSchema } from './passenger.js';
+import { PassengerModeSchema } from './passenger-mode.js';
 
 export const PriceSnapshotSchema = z
   .object({

@@ -9,6 +9,7 @@ import {
   RegistrationResume,
   RegistrationVerification,
 } from './Registration.js';
+import { PassengerLink } from './features/passenger/PassengerLink.js';
 import { ComponentGallery } from './ComponentGallery.js';
 import { AuthenticatedAdmin } from './AdminApplication.js';
 
@@ -74,6 +75,12 @@ export function App({ renderContribution }: AppProps = {}) {
     return (
       <main className="shell">
         <RegistrationVerification locale={config.locale} />
+      </main>
+    );
+  if (window.location.pathname === '/passenger')
+    return (
+      <main className="shell registration-shell">
+        <PassengerLink locale={config.locale} />
       </main>
     );
   if (window.location.pathname === '/registration/resume')

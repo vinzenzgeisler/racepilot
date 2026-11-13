@@ -98,6 +98,7 @@ export function useEventSetup(onCreated: (event: SetupEvent) => void) {
               vehicleType: item.vehicleType,
               maxParticipants: item.maxParticipants,
               closed: item.closed,
+              passengerMode: item.passengerMode,
               additionalEntryAdjustmentCents:
                 rule?.additionalEntryAdjustmentCents ?? 0,
               earlyBirdDeadline: rule?.earlyBirdDeadline ?? null,

@@ -1,9 +1,7 @@
 import { z } from 'zod';
 import { registrationContactShape } from './registration-details.js';
+export { PassengerModeSchema, type PassengerMode } from './passenger-mode.js';
 
-/** How a class treats a co-driver. It only applies where the event's form offers co-drivers at all. */
-export const PassengerModeSchema = z.enum(['none', 'optional', 'required']);
-export type PassengerMode = z.infer<typeof PassengerModeSchema>;
 
 const name = z.string().trim().min(1).max(100);
 const email = z.string().trim().email().max(254);
@@ -78,6 +76,8 @@ export const PassengerLinkViewSchema = z
     eventName: z.string(),
     className: z.string(),
     driverName: z.string(),
+    /** The language the driver registered in; the co-driver reads the terms in it. */
+    language: z.enum(['de', 'en']),
     passenger: z
       .object({
         firstName: z.string(),

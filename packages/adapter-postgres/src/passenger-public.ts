@@ -115,6 +115,7 @@ export function createPassengerPublicRepository(
       return {
         eventName: row.eventName,
         className: row.className,
+        language: passenger.language,
         // Enough for the co-driver to recognise who named them, nothing more.
         driverName: `${row.driverFirstName} ${row.driverLastName.charAt(0)}.`,
         passenger: {

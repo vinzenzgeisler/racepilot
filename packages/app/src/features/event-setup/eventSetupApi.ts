@@ -17,7 +17,9 @@ export type SetupClass = {
   sortOrder: number;
   maxParticipants: number | null;
   closed: boolean;
+  passengerMode: PassengerMode;
 };
+export type PassengerMode = 'none' | 'optional' | 'required';
 export type VehicleType = 'car' | 'motorcycle' | 'kart' | 'other';
 export type SetupPriceRule = {
   classId: string;
@@ -42,6 +44,7 @@ export type SetupClassDraft = {
   vehicleType: VehicleType;
   maxParticipants?: number | null;
   closed?: boolean;
+  passengerMode?: PassengerMode;
   additionalEntryAdjustmentCents?: number;
   earlyBirdDeadline?: string | null;
   earlyBirdDiscountCents?: number;
@@ -79,6 +82,7 @@ const SetupClassSchema = z.object({
   sortOrder: z.number(),
   maxParticipants: z.number().nullable(),
   closed: z.boolean(),
+  passengerMode: z.enum(['none', 'optional', 'required']).default('optional'),
 });
 const SetupPriceSchema = z.object({
   classId: z.string(),
@@ -194,6 +198,7 @@ export const saveClass = (
         name: item.name.trim(),
         code: item.code.trim(),
         vehicleType: item.vehicleType,
+        ...(item.passengerMode && { passengerMode: item.passengerMode }),
         sortOrder,
         ...(!item.id && {
           maxParticipants: item.maxParticipants ?? null,

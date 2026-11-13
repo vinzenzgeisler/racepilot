@@ -37,7 +37,7 @@ export function EntryDriverSection({
   onSave,
 }: {
   driver: Driver;
-  passenger: boolean;
+  passenger: { firstName: string; lastName: string } | null;
   busy: boolean;
   onSave: (patch: EntryDriverUpdateRequest) => Promise<Outcome>;
 }) {
@@ -252,7 +252,11 @@ export function EntryDriverSection({
             </Value>
           </FieldItem>
           <FieldItem label="Beifahrer">
-            <Value>{passenger ? 'gemeldet' : null}</Value>
+            <Value>
+              {passenger
+                ? `${passenger.firstName} ${passenger.lastName}`
+                : null}
+            </Value>
           </FieldItem>
           <FieldItem label="Veröffentlichung">
             <Value>

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { PassengerModeSchema } from './passenger.js';
+import { PassengerModeSchema } from './passenger-mode.js';
 
 export const EventStatusSchema = z.enum([
   'draft',

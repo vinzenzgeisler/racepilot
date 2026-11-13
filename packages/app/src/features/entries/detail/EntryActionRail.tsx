@@ -79,6 +79,7 @@ export function EntryActionRail({
   onAdminAction,
   onMessage,
   onRequestDocument,
+  onPassenger,
 }: {
   entry: Entry;
   workflow: WorkflowView | null;
@@ -93,6 +94,7 @@ export function EntryActionRail({
   /** Without a messages view the Kommunikation group stays hidden. */
   onMessage?: (() => void) | undefined;
   onRequestDocument?: ((line: UploadLine) => void) | undefined;
+  onPassenger: (kind: 'add' | 'link') => void;
 }) {
   const { primary, others } = statusSteps(entry, workflow);
   const missing = missingRequirements(entry);
@@ -105,6 +107,8 @@ export function EntryActionRail({
     invoice &&
     (invoice.status === 'open' || invoice.status === 'partially_paid');
   const canVerify = entry.verificationStatus !== 'verified';
+  const canAddPassenger = entry.availableActions?.includes('passenger:add');
+  const canLinkPassenger = entry.availableActions?.includes('passenger:link');
   return (
     <>
       <NextStep
@@ -147,6 +151,20 @@ export function EntryActionRail({
           {canPay && (
             <RailAction disabled={busy} onClick={onPayment}>
               Zahlung erfassen
+            </RailAction>
+          )}
+        </ActionGroup>
+      )}
+      {(canAddPassenger || canLinkPassenger) && (
+        <ActionGroup title="Beifahrer">
+          {canAddPassenger && (
+            <RailAction disabled={busy} onClick={() => onPassenger('add')}>
+              Beifahrer nachmelden
+            </RailAction>
+          )}
+          {canLinkPassenger && (
+            <RailAction disabled={busy} onClick={() => onPassenger('link')}>
+              Persönlichen Link erstellen
             </RailAction>
           )}
         </ActionGroup>

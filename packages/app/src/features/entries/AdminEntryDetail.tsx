@@ -15,6 +15,11 @@ import {
   type DimensionAction,
 } from './detail/EntryDocumentsSection.js';
 import { EntryConsentsSection } from './detail/EntryConsentsSection.js';
+import { EntryPassengerDialog } from './detail/EntryPassengerDialog.js';
+import {
+  EntryPassengerSection,
+  EntrySpareVehicleSection,
+} from './detail/EntryPassengerSection.js';
 import { EntryCustomAnswers } from './detail/EntryCustomAnswers.js';
 import { EntryDriverSection } from './detail/EntryDriverSection.js';
 import { EntryHistorySection } from './detail/EntryHistorySection.js';
@@ -44,7 +49,8 @@ type Pending =
   | { kind: 'verify' }
   | { kind: 'dimension'; action: DimensionAction }
   | { kind: 'payment' }
-  | { kind: 'admin'; action: AdminActionKind };
+  | { kind: 'admin'; action: AdminActionKind }
+  | { kind: 'passenger'; action: 'add' | 'link' };
 
 export function AdminEntryDetail({
   selected,
@@ -88,7 +94,6 @@ export function AdminEntryDetail({
   );
   if (!details)
     return <p role="alert">Die Details dieser Nennung sind nicht verfügbar.</p>;
-  const projection = selected.statusProjection;
   const changed = lastChangeAt(selected);
   const close = () => {
     setPending(null);
@@ -197,6 +202,7 @@ export function AdminEntryDetail({
             onPayment={() => setPending({ kind: 'payment' })}
             onDimension={(action) => setPending({ kind: 'dimension', action })}
             onAdminAction={(action) => setPending({ kind: 'admin', action })}
+            onPassenger={(action) => setPending({ kind: 'passenger', action })}
             onMessage={writeMessage}
             onRequestDocument={requestDocument}
           />
@@ -206,9 +212,7 @@ export function AdminEntryDetail({
         {documents.error && <Banner tone="error">{documents.error}</Banner>}
         <EntryDriverSection
           driver={details.driver}
-          passenger={Boolean(
-            projection?.hints.find((h) => h.key === 'passenger')?.present,
-          )}
+          passenger={details.passenger ?? null}
           busy={api.busy}
           onSave={api.saveDriver}
         />
@@ -218,6 +222,12 @@ export function AdminEntryDetail({
           busy={api.busy}
           onSave={api.saveVehicle}
         />
+        {details.spareVehicle && (
+          <EntrySpareVehicleSection vehicle={details.spareVehicle} />
+        )}
+        {details.passenger && (
+          <EntryPassengerSection passenger={details.passenger} />
+        )}
         <EntryCustomAnswers answers={details.customAnswers} />
         <EntryDocumentsSection
           entry={selected}
@@ -231,6 +241,13 @@ export function AdminEntryDetail({
           onRecordPayment={() => setPending({ kind: 'payment' })}
         />
         <EntryConsentsSection consents={details.consents ?? []} />
+        {details.passenger && (
+          <EntryConsentsSection
+            title="Einwilligungen Beifahrer"
+            emptyText="Der Beifahrer hat noch keine Einwilligungen erteilt."
+            consents={details.passenger.consents}
+          />
+        )}
         <EntryMessagesSection
           messages={messages.items}
           failed={messages.failed}
@@ -272,6 +289,22 @@ export function AdminEntryDetail({
           busy={api.busy}
           error={dialogError}
           onConfirm={(action) => void confirmAdminAction(action)}
+          onClose={close}
+        />
+      )}
+      {pending?.kind === 'passenger' && (
+        <EntryPassengerDialog
+          kind={pending.action}
+          entry={selected}
+          busy={api.busy}
+          error={dialogError}
+          onAdd={(input) =>
+            void api.addPassenger(input).then((result) => {
+              if (result.ok) close();
+              else setDialogError(result.message);
+            })
+          }
+          onLink={api.createPassengerLink}
           onClose={close}
         />
       )}

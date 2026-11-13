@@ -20,6 +20,7 @@ import { EvidenceList } from './EvidenceList.js';
 import { MediaDetail } from './MediaDetail.js';
 import { MessageTable } from './MessageTable.js';
 import { ReasonDialog } from './ReasonDialog.js';
+import { FormDialog } from './FormDialog.js';
 import { DocumentList } from '../workspace/DocumentList.js';
 import { HistoryTimeline } from '../workspace/HistoryTimeline.js';
 
@@ -303,4 +304,34 @@ it('lists recorded acceptances with their wording on request and flags a missing
   expect(
     renderToStaticMarkup(<EvidenceList items={[]} empty={<p>Keine</p>} />),
   ).toBe('<p>Keine</p>');
+});
+
+it('confirms a form dialog without asking for a reason and can only inform', () => {
+  const form = renderToStaticMarkup(
+    <FormDialog
+      open
+      title="Beifahrer nachmelden"
+      confirmLabel="Beifahrer speichern"
+      cancelLabel="Abbrechen"
+      closeLabel="Dialog schließen"
+      error="Fehler"
+      onConfirm={vi.fn()}
+      onClose={vi.fn()}
+    >
+      <input aria-label="Vorname" />
+    </FormDialog>,
+  );
+  expect(form).toContain('Beifahrer speichern');
+  expect(form).toContain('role="alert"');
+  expect(form).not.toContain('<textarea');
+  const info = renderToStaticMarkup(
+    <FormDialog
+      open
+      title="Link"
+      cancelLabel="Schließen"
+      closeLabel="Dialog schließen"
+      onClose={vi.fn()}
+    />,
+  );
+  expect(info).not.toContain('nb-confirm-primary');
 });

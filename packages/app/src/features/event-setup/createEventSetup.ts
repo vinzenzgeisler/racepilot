@@ -21,6 +21,7 @@ export async function createEventSetup(draft: SetupDraft): Promise<SetupEvent> {
       vehicleType: item.vehicleType,
       maxParticipants: item.maxParticipants ?? null,
       closed: item.closed ?? false,
+      ...(item.passengerMode && { passengerMode: item.passengerMode }),
       price: {
         baseCents: Math.round(parseSetupFee(item.fee) * 100),
         additionalEntryAdjustmentCents:

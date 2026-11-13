@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
+  AdminPassengerLinkResponse,
   EntryMessagesResponse,
   EntryResponse,
+  type AdminPassengerCreateRequest,
+  type AdminPassengerLinkRequest,
   type EntryDriverUpdateRequest,
   type EntryVehicleUpdateRequest,
 } from '@racepilot/contracts';
@@ -16,28 +19,39 @@ const failure = (status: number, action: string, code?: string) =>
       : status === 404
         ? 'Die Nennung wurde nicht gefunden.'
         : status === 409
-          ? code === 'stale'
-            ? 'Die Nennung wurde inzwischen geändert. Bitte lade die Detailansicht neu.'
-            : code === 'document_not_uploaded'
-              ? 'Dieses Dokument wurde inzwischen entschieden. Bitte lade die Detailansicht neu.'
-              : code === 'capacity'
-                ? 'Die Zielklasse ist inzwischen voll.'
-                : code === 'class'
-                  ? 'Die Zielklasse ist geschlossen oder gehört nicht zu dieser Veranstaltung.'
-                  : 'Name, Geburtsdatum und Land gehören zur Person und gelten auch für ihre Nennungen in anderen Veranstaltungen. Sie lassen sich hier nicht ändern.'
+          ? code === 'Passenger exists'
+            ? 'Für diese Nennung ist bereits ein Beifahrer eingetragen. Bitte lade die Detailansicht neu.'
+            : code === 'Passenger completed'
+              ? 'Der Beifahrer hat seine Daten bereits abgeschlossen.'
+              : code === 'stale'
+                ? 'Die Nennung wurde inzwischen geändert. Bitte lade die Detailansicht neu.'
+                : code === 'document_not_uploaded'
+                  ? 'Dieses Dokument wurde inzwischen entschieden. Bitte lade die Detailansicht neu.'
+                  : code === 'capacity'
+                    ? 'Die Zielklasse ist inzwischen voll.'
+                    : code === 'class'
+                      ? 'Die Zielklasse ist geschlossen oder gehört nicht zu dieser Veranstaltung.'
+                      : 'Name, Geburtsdatum und Land gehören zur Person und gelten auch für ihre Nennungen in anderen Veranstaltungen. Sie lassen sich hier nicht ändern.'
           : status === 422
-            ? code === 'reason'
-              ? 'Bitte gib eine Begründung ein.'
-              : code === 'amount'
-                ? 'Bitte gib einen gültigen Betrag ein.'
-                : code === 'note'
-                  ? 'Bitte gib einen Notiztext ein.'
-                  : 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
+            ? code === 'no_passenger'
+              ? 'Bitte gib Vor- und Nachname des Beifahrers an.'
+              : code === 'unavailable' || code === 'Passenger unavailable'
+                ? 'Für diese Nennung ist kein Beifahrer vorgesehen.'
+                : code === 'reason'
+                  ? 'Bitte gib eine Begründung ein.'
+                  : code === 'amount'
+                    ? 'Bitte gib einen gültigen Betrag ein.'
+                    : code === 'note'
+                      ? 'Bitte gib einen Notiztext ein.'
+                      : 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
             : status === 400
               ? 'Die Eingaben wurden vom Server abgelehnt. Bitte prüfe sie.'
               : 'Der Server konnte die Anfrage nicht ausführen.';
 
 export type { Outcome };
+
+/** An outcome that also hands back what the server answered with. */
+type BodyOutcome = Outcome & { body?: unknown };
 
 export type EntryAdminAction =
   | {
@@ -102,9 +116,9 @@ export function useEntryDetailApi(
       init: RequestInit,
       action: string,
       readEntry: boolean | 'none',
-    ): Promise<Outcome> => {
+    ): Promise<BodyOutcome> => {
       const controller = scope.current;
-      const superseded: Outcome = { ok: false, message: '' };
+      const superseded: BodyOutcome = { ok: false, message: '' };
       if (!controller || controller.signal.aborted) return superseded;
       const { signal } = controller;
       setBusy(true);
@@ -122,7 +136,7 @@ export function useEntryDetailApi(
               : undefined;
           return { ok: false, message: failure(response.status, action, code) };
         }
-        if (readEntry === 'none') return { ok: true };
+        if (readEntry === 'none') return { ok: true, body };
         const fresh = EntryResponse.safeParse(
           readEntry
             ? body
@@ -136,7 +150,7 @@ export function useEntryDetailApi(
         if (!fresh.success || fresh.data.id !== entryId)
           return { ok: false, message: 'Die Antwort war unvollständig.' };
         onUpdated(fresh.data);
-        return { ok: true };
+        return { ok: true, body };
       } catch {
         return signal.aborted
           ? superseded
@@ -170,6 +184,32 @@ export function useEntryDetailApi(
         'Fahrzeugdaten ändern',
         true,
       ),
+    addPassenger: (input: AdminPassengerCreateRequest) =>
+      run(
+        `${entryPath}/passenger`,
+        { method: 'POST', body: JSON.stringify(input) },
+        'einen Beifahrer eintragen',
+        false,
+      ),
+    /** The created link is shown once; only its hash is stored. */
+    createPassengerLink: async (
+      input: AdminPassengerLinkRequest,
+    ): Promise<
+      | { ok: true; link: AdminPassengerLinkResponse }
+      | { ok: false; message: string }
+    > => {
+      const result = await run(
+        `${entryPath}/passenger/link`,
+        { method: 'POST', body: JSON.stringify(input) },
+        'einen persönlichen Link erstellen',
+        false,
+      );
+      if (!result.ok) return result;
+      const link = AdminPassengerLinkResponse.safeParse(result.body);
+      return link.success
+        ? { ok: true, link: link.data }
+        : { ok: false, message: 'Die Antwort war unvollständig.' };
+    },
     recordPayment: (invoiceId: string, amountCents: number, reason: string) =>
       run(
         `/admin/invoices/${encodeURIComponent(invoiceId)}/payments`,

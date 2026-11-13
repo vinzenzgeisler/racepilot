@@ -252,6 +252,22 @@ function describe(
       tone: 'dark',
       ...(detail ? { detail } : {}),
     };
+  if (event.label === 'passenger_added')
+    return {
+      title: 'Beifahrer eingetragen',
+      tone: 'dark',
+      ...(detail ? { detail } : {}),
+    };
+  if (event.label === 'passenger_link_created')
+    return {
+      title: 'Persönlicher Link für den Beifahrer erstellt',
+      tone: 'dark',
+    };
+  if (event.label === 'passenger_completed')
+    return {
+      title: 'Beifahrer hat seine Daten abgeschlossen',
+      tone: 'accent',
+    };
   if (event.label === 'deleted')
     return {
       title: 'Nennung gelöscht',
