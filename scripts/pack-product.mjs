@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { statSync } from 'node:fs';
 import {
   cp,
   mkdir,
@@ -108,6 +109,12 @@ try {
         path.join(root, 'TRADEMARKS.md'),
         path.join(stage, 'TRADEMARKS.md'),
       );
+      // `components.css` imports every component stylesheet; ship them all (CSS only).
+      await cp(path.join(directory, 'src'), path.join(stage, 'src'), {
+        recursive: true,
+        filter: (source) =>
+          statSync(source).isDirectory() || source.endsWith('.css'),
+      });
     }
 
     const packOutput = execFileSync(
@@ -124,9 +131,24 @@ try {
         'TRADEMARKS.md',
         'src/brand/signet.svg',
         'src/brand/app-icon.svg',
+        'src/components.css',
       ]) {
         if (!packedFiles.includes(required)) {
           throw new Error(`@racepilot/ui artifact is missing ${required}`);
+        }
+      }
+      // Every stylesheet that components.css imports must be in the artifact.
+      const components = await readFile(
+        path.join(directory, 'src/components.css'),
+        'utf8',
+      );
+      for (const [, target] of components.matchAll(
+        /@import\s+url\(['"]?\.\/([^'")]+)['"]?\)/g,
+      )) {
+        if (!packedFiles.includes(`src/${target}`)) {
+          throw new Error(
+            `@racepilot/ui artifact is missing imported stylesheet src/${target}`,
+          );
         }
       }
     }
@@ -138,6 +160,7 @@ try {
         file.startsWith('dist/') ||
         file === 'src/tokens.css' ||
         file === 'src/base.css' ||
+        (file.startsWith('src/') && file.endsWith('.css')) ||
         file === 'src/brand/signet.svg' ||
         file === 'src/brand/app-icon.svg' ||
         file === 'TRADEMARKS.md' ||
