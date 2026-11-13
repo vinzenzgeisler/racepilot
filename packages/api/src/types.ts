@@ -1,5 +1,9 @@
 import { Hono } from 'hono';
-import { RequestContext, DeploymentMode } from '@racepilot/core';
+import type {
+  RequestContext,
+  DeploymentMode,
+  TenantRef,
+} from '@racepilot/core';
 import { type ModuleApiDeps } from './modules.js';
 import { type RegistrationRateLimiter } from './rate-limit.js';
 import {
@@ -236,7 +240,6 @@ export interface ApiDeps {
       event: { eventLimit?: number; windowSeconds?: number } | null;
     } | null>;
   };
-  canonicalBaseUrl?: string;
   eventConsents?: {
     get(
       context: import('@racepilot/core').RequestContext,
@@ -276,6 +279,11 @@ export interface ApiDeps {
     legalLinks?: { label: string; href: string }[];
     capabilities?: string[];
   };
+  /**
+   * Capabilities that depend on the organization (for example `mail.delivery`).
+   * Resolved per request for the runtime bootstrap, never once at startup.
+   */
+  organizationCapabilities?: (tenant: TenantRef) => Promise<readonly string[]>;
   /** Optional event modules (ADR 0004): registry, activation store, entitlements, routes. */
   modules?: ModuleApiDeps;
   /** Server-owned context resolvers for multi-tenant assemblies. */

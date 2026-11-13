@@ -1,3 +1,4 @@
+import { staticCanonicalOrigin } from '@racepilot/core';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { runMigrations } from 'graphile-worker';
 import {
@@ -2469,7 +2470,9 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
         html: '<a href="{{verificationUrl}}">Verify</a>',
       });
       const service = createPublicRegistrationService(db, {
-        canonicalBaseUrl: 'https://racepilot.example.test',
+        canonicalOrigin: staticCanonicalOrigin(
+          'https://racepilot.example.test',
+        ),
       });
       const [foreignOrg] = await db
         .insert(organizations)
@@ -3194,7 +3197,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       expect(await repo.getEvent(ctx, eventA!.id)).toEqual(eventConfig);
       expect(await repo.getEvent(ctx, eventB!.id)).toBeNull();
       const publicForm = await createPublicRegistrationService(db, {
-        canonicalBaseUrl: 'https://entries.example.test',
+        canonicalOrigin: staticCanonicalOrigin('https://entries.example.test'),
       }).getForm(ctx, eventA!.slug);
       expect(publicForm?.registrationFormConfig).toMatchObject({
         branding: { primaryColor: '#1F4AA8', accentColor: '#F5C518' },
@@ -3277,7 +3280,7 @@ describe.skipIf(!url)('pricing and invoice isolation', () => {
       });
     try {
       const service = createPublicRegistrationService(db, {
-        canonicalBaseUrl: 'https://entries.example.test',
+        canonicalOrigin: staticCanonicalOrigin('https://entries.example.test'),
       });
       const draft = {
         firstName: 'Alex',

@@ -12,6 +12,7 @@ import {
 } from '@racepilot/adapter-postgres';
 import {
   createModuleRegistry,
+  type CanonicalOrigin,
   type MailProvider,
   type ModuleEntitlements,
   type ObjectStorageProvider,
@@ -39,10 +40,11 @@ export interface ProductWorkerOptions {
   readonly edition: ProductWorkerEdition;
   /** Artifact (PDF, CSV) and message-attachment storage; without it those jobs are not registered. */
   readonly storage?: ObjectStorageProvider;
-  /** Outbound mail; without it the mail outbox job is not registered (transitional static origin). */
+  /** Outbound mail; without it the mail outbox job is not registered. */
   readonly mail?: {
     readonly provider: MailProvider;
-    readonly canonicalBaseUrl: string;
+    /** Verified origin per organization; verification and resume links are bound to it. */
+    readonly canonicalOrigin: CanonicalOrigin;
     readonly leaseMs: number;
   };
   readonly entitlements?: ModuleEntitlements;
@@ -108,7 +110,7 @@ export function createProductWorker(
             leaseMs: mail.leaseMs,
           }),
           mail: mail.provider,
-          canonicalBaseUrl: mail.canonicalBaseUrl,
+          canonicalOrigin: mail.canonicalOrigin,
           ...(storage ? { storage } : {}),
         }),
       }

@@ -1,4 +1,5 @@
-import { organizationId } from '@racepilot/core';
+import { organizationId, resolveCanonicalOrigin } from '@racepilot/core';
+import type { CanonicalOrigin } from '@racepilot/core';
 import type {
   JobContext,
   MailProvider,
@@ -276,7 +277,7 @@ export function createMailOutboxTask(deps: {
   getOrganization(id: string): Promise<{ status: string } | null>;
   repository: MailOutboxRepository;
   mail: MailProvider;
-  canonicalBaseUrl: string;
+  canonicalOrigin: CanonicalOrigin;
   storage?: ObjectStorageProvider;
 }) {
   return async (payload: unknown, helpers: { job: { id: string } }) => {
@@ -351,12 +352,10 @@ export function createMailOutboxTask(deps: {
     ) {
       const variableName =
         row.templateKey === 'verification' ? 'verificationUrl' : 'resumeUrl';
-      const url = new URL(
-        variables[variableName] ?? '/',
-        deps.canonicalBaseUrl,
-      );
-      const base = new URL(deps.canonicalBaseUrl);
-      if (url.origin !== base.origin)
+      const origin = await resolveCanonicalOrigin(deps.canonicalOrigin, ctx);
+      if (!origin) throw new Error('Canonical origin is unavailable');
+      const url = new URL(variables[variableName] ?? '/', origin);
+      if (url.origin !== origin)
         throw new Error(
           'Verification URL must use the configured canonical origin',
         );

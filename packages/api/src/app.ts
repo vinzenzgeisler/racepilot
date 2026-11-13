@@ -6,7 +6,7 @@ import { registerPaymentsRoutes } from './routes/payments.js';
 import { registerMessageRoutes } from './routes/messages.js';
 import { registerOrganizationRoutes } from './routes/organization.js';
 import { registerRegistrationRoutes } from './routes/registration.js';
-import type { RequestContext } from '@racepilot/core';
+import type { RequestContext, TenantRef } from '@racepilot/core';
 import type { ApiDeps } from './types.js';
 
 import { installModules } from './modules.js';
@@ -93,6 +93,13 @@ export function createApp(deps: ApiDeps) {
         'Retry-After',
         String(Math.max(1, Math.ceil(retryAfterMs / 1000))),
       );
+  };
+  const organizationCapabilities = async (tenant: TenantRef) => {
+    try {
+      return (await deps.organizationCapabilities?.(tenant)) ?? [];
+    } catch {
+      return []; // capabilities fail closed
+    }
   };
   app.get('/health', (c) => c.json({ status: 'ok' }));
   const mode = deps.config.deploymentMode;
@@ -207,6 +214,7 @@ export function createApp(deps: ApiDeps) {
       const capabilities = new Set([
         ...(deps.runtimeBootstrap?.capabilities ?? []),
         ...context.capabilities,
+        ...(await organizationCapabilities(context)),
       ]);
       if (bankTransferAvailable) capabilities.add('payment.bank_transfer');
       else capabilities.delete('payment.bank_transfer');

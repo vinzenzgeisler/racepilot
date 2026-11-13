@@ -31,9 +31,13 @@ import {
 } from '@racepilot/adapter-postgres';
 import {
   createModuleRegistry,
+  resolveCanonicalOrigin,
+  type CanonicalOrigin,
   type MembershipBootstrap,
   type ModuleEntitlements,
   type ObjectStorageProvider,
+  type OrganizationMail,
+  type TenantRef,
 } from '@racepilot/core';
 import { createApp } from './app.js';
 import type { RegistrationRateLimiter } from './rate-limit.js';
@@ -63,12 +67,16 @@ export interface ProductApiOptions {
   readonly db: Database;
   readonly edition: ProductEdition;
   readonly objectStorage?: ObjectStorageProvider;
-  /** Enables public registration and verification links (transitional static origin). */
-  readonly canonicalBaseUrl?: string;
-  /** Whether the assembly delivers mail; combined with `canonicalBaseUrl`. */
-  readonly mailEnabled: boolean;
-  /** Capabilities that hold for the whole deployment (transitional). */
-  readonly capabilities?: readonly string[];
+  /**
+   * Verified origin per organization. Public registration, verification mails and
+   * resume links need it; an organization without an origin cannot use them.
+   */
+  readonly canonicalOrigin?: CanonicalOrigin;
+  /**
+   * Per-organization mail identity. Present when the deployment delivers mail; the
+   * `mail.delivery` capability is resolved from it for each organization.
+   */
+  readonly mail?: OrganizationMail;
   readonly registrationRateLimiter?: RegistrationRateLimiter;
   readonly entitlements?: ModuleEntitlements;
   readonly oidcClient?: ApiDeps['oidcClient'];
@@ -101,18 +109,31 @@ function editionDeps(
   };
 }
 
+async function mailDeliveryAvailable(
+  tenant: TenantRef,
+  mail: OrganizationMail | undefined,
+  canonicalOrigin: CanonicalOrigin | undefined,
+): Promise<boolean> {
+  if (!mail || !canonicalOrigin) return false;
+  const [configuration, origin] = await Promise.all([
+    mail.configuration(tenant),
+    resolveCanonicalOrigin(canonicalOrigin, tenant),
+  ]);
+  return configuration !== null && origin !== null;
+}
+
 /**
  * Builds the complete product API from the database and the edition's ports.
  * Community and Cloud assemblies share this composition; they differ only in the
  * options they pass (tenant resolution, storage, entitlements, rate limiting).
  */
 export function createProductApi(options: ProductApiOptions): Hono {
-  const { db, edition, objectStorage, canonicalBaseUrl } = options;
+  const { db, edition, objectStorage, canonicalOrigin, mail } = options;
   const edit = editionDeps(edition);
   const timingRepository = createTimingRepository(db);
   const publicRegistration =
-    options.mailEnabled && canonicalBaseUrl
-      ? createPublicRegistrationService(db, { canonicalBaseUrl })
+    mail && canonicalOrigin
+      ? createPublicRegistrationService(db, { canonicalOrigin })
       : undefined;
   return createApp({
     ...edit,
@@ -141,7 +162,6 @@ export function createProductApi(options: ProductApiOptions): Hono {
             createPublicRegistrationRateLimitSettingsRepository(db),
         }
       : {}),
-    ...(canonicalBaseUrl ? { canonicalBaseUrl } : {}),
     memberships: createMembershipRepository(db),
     payments: createInvoicePaymentRepository(db),
     entryDetails: createEntryDetailRepository(db),
@@ -149,7 +169,7 @@ export function createProductApi(options: ProductApiOptions): Hono {
     paymentRecipients: createPaymentRecipientRepository(db),
     pricing: createEventClassPricingRepository(db),
     entries: createEntryRepository(db),
-    messages: createMessageRepository(db, objectStorage, canonicalBaseUrl),
+    messages: createMessageRepository(db, objectStorage, canonicalOrigin),
     entryDocuments: createEntryDocumentsRepository(db),
     // Optional event modules are registered statically here (ADR 0004). Community
     // activates everything locally; Cloud supplies its entitlement port.
@@ -167,8 +187,11 @@ export function createProductApi(options: ProductApiOptions): Hono {
     },
     runtimeBootstrap: {
       configurationVersion: '1',
-      capabilities: [...(options.capabilities ?? [])],
     },
+    organizationCapabilities: async (tenant) =>
+      (await mailDeliveryAvailable(tenant, mail, canonicalOrigin))
+        ? ['mail.delivery']
+        : [],
     ...(options.oidcClient ? { oidcClient: options.oidcClient } : {}),
   });
 }

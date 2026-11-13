@@ -5,6 +5,7 @@ import {
   getOrganizationMailConfiguration,
   migrate,
 } from '@racepilot/adapter-postgres';
+import { staticCanonicalOrigin } from '@racepilot/core';
 import { loadConfig } from './config.js';
 import {
   createCommunityIdentity,
@@ -21,9 +22,6 @@ const organization = await ensureCommunityOrganization(db, {
   timezone: config.COMMUNITY_ORGANIZATION_TIMEZONE,
   locale: config.COMMUNITY_ORGANIZATION_LOCALE,
 });
-const organizationMail = config.mailEnabled
-  ? await getOrganizationMailConfiguration(db, organization.id)
-  : null;
 const identity = await createCommunityIdentity(config);
 const objectStorage = createCommunityObjectStorage(config);
 const app = createProductApi({
@@ -42,10 +40,16 @@ const app = createProductApi({
   },
   ...(objectStorage ? { objectStorage } : {}),
   ...(config.CANONICAL_BASE_URL
-    ? { canonicalBaseUrl: config.CANONICAL_BASE_URL }
+    ? { canonicalOrigin: staticCanonicalOrigin(config.CANONICAL_BASE_URL) }
     : {}),
-  mailEnabled: config.mailEnabled,
-  capabilities: organizationMail ? ['mail.delivery'] : [],
+  ...(config.mailEnabled
+    ? {
+        mail: {
+          configuration: (tenant) =>
+            getOrganizationMailConfiguration(db, tenant.organizationId),
+        },
+      }
+    : {}),
   ...(identity ? { oidcClient: identity.oidcClient } : {}),
   rateLimits: {
     TRUSTED_PROXIES: config.TRUSTED_PROXIES,

@@ -9,6 +9,7 @@ import type {
   ObjectStorageProvider,
   RequestContext,
 } from '@racepilot/core';
+import { resolveCanonicalOrigin, type CanonicalOrigin } from '@racepilot/core';
 import {
   MESSAGE_ATTACHMENT_LIMITS,
   sendMessageCampaign,
@@ -36,7 +37,7 @@ type CampaignRecipient = typeof messageCampaignRecipients.$inferSelect;
 export function createMessageSender(
   db: Database,
   storage?: ObjectStorageProvider,
-  canonicalBaseUrl?: string,
+  canonicalOrigin?: CanonicalOrigin,
 ) {
   return async (
     ctx: RequestContext,
@@ -49,6 +50,10 @@ export function createMessageSender(
       CampaignRecipient
     > = messageCampaignDelivery<Campaign, CampaignRecipient>(),
   ): Promise<MessageCampaignSendResult<MessageCampaignData>> => {
+    // Resolved once per campaign; only verification mails build links from it.
+    const origin = canonicalOrigin
+      ? await resolveCanonicalOrigin(canonicalOrigin, ctx)
+      : null;
     const ports: MessageCampaignSendPorts<Campaign, CampaignRecipient> = {
       maxAttachments: MESSAGE_ATTACHMENT_LIMITS.maxCount,
       hashRequest: digestMessage,
@@ -137,7 +142,7 @@ export function createMessageSender(
               return organization?.locale ?? 'de';
             },
             enqueueVerificationRecipient: async (value) => {
-              if (!canonicalBaseUrl || !value.recipient.registrationGroupId)
+              if (!origin || !value.recipient.registrationGroupId)
                 throw new Error('Verification strategy precondition failed');
               const now = new Date();
               const token = createRegistrationVerificationToken(now);
@@ -151,7 +156,7 @@ export function createMessageSender(
               });
               const verificationUrl = new URL(
                 `/registration/verify?token=${encodeURIComponent(token.token)}`,
-                canonicalBaseUrl,
+                origin,
               ).href;
               const outboxId = await enqueueMailOutbox(
                 db,

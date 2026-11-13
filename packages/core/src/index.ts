@@ -1,4 +1,5 @@
 export * from './context.js';
+export * from './canonical-origin.js';
 export * from './events.js';
 export * from './event-setup.js';
 export * from './event-opening.js';

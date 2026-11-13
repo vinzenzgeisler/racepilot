@@ -31,7 +31,7 @@ export async function persistRegistrationSubmission(args: {
   token: string;
   tokenHash: string;
   tokenTtlMs?: number;
-  canonicalBase: URL;
+  canonicalOrigin: string;
   currency: string;
   groupId: string;
   personId: string;
@@ -48,7 +48,7 @@ export async function persistRegistrationSubmission(args: {
     token,
     tokenHash,
     tokenTtlMs,
-    canonicalBase,
+    canonicalOrigin,
     currency,
     groupId,
     personId,
@@ -190,7 +190,7 @@ export async function persistRegistrationSubmission(args: {
   });
   const verificationUrl = new URL(
     `/registration/verify?token=${encodeURIComponent(token)}`,
-    canonicalBase,
+    canonicalOrigin,
   ).toString();
   await enqueueMailOutbox(
     db,

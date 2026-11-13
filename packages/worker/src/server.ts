@@ -3,6 +3,7 @@ import { and, eq } from 'drizzle-orm';
 import { createDatabase, organizations } from '@racepilot/adapter-postgres';
 import { createSmtpMailProvider } from '@racepilot/adapter-smtp';
 import { validateMailConfig } from '@racepilot/contracts';
+import { staticCanonicalOrigin } from '@racepilot/core';
 import { createProductWorker, type ProductWorkerEdition } from './product.js';
 import { readStorageConfiguration } from './community-storage.js';
 
@@ -59,7 +60,13 @@ const { taskList } = createProductWorker({
   edition: await readEdition(),
   ...(storage ? { storage } : {}),
   ...(smtp && canonicalBaseUrl
-    ? { mail: { provider: smtp, canonicalBaseUrl, leaseMs } }
+    ? {
+        mail: {
+          provider: smtp,
+          canonicalOrigin: staticCanonicalOrigin(canonicalBaseUrl),
+          leaseMs,
+        },
+      }
     : {}),
   onRejected: (task, reason) => console.warn(`Rejected job ${task}: ${reason}`),
 });

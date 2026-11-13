@@ -1,3 +1,4 @@
+import { staticCanonicalOrigin } from '@racepilot/core';
 import { createHash } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { runMigrations } from 'graphile-worker';
@@ -125,7 +126,7 @@ describe.skipIf(!url)('registration contact and vehicle fields', () => {
         },
       });
       const service = createPublicRegistrationService(db, {
-        canonicalBaseUrl: 'https://entries.example.test',
+        canonicalOrigin: staticCanonicalOrigin('https://entries.example.test'),
       });
       const ctx = createRequestContext({
         deploymentMode: 'cloud',
