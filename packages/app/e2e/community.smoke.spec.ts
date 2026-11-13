@@ -433,9 +433,8 @@ test('Community registration and admin lifecycle with API setup', async ({
     .poll(() => demoRows.count(), { timeout: 90_000 })
     .toBeGreaterThan(12);
   await shots('demo-historic-list');
-  const designShotDirectory =
-    '/home/openclaw/Developer/design-handoff/verification/158-overview-ui';
-  mkdirSync(designShotDirectory, { recursive: true });
+  const designShotDirectory = process.env.OVERVIEW_SCREENSHOT_DIR;
+  if (designShotDirectory) mkdirSync(designShotDirectory, { recursive: true });
   for (const [view, title] of [
     ['Übersicht', 'Übersicht'],
     ['Exporte', 'Exporte'],
@@ -460,9 +459,10 @@ test('Community registration and admin lifecycle with API setup', async ({
       [390, 844],
     ]) {
       await page.setViewportSize({ width, height });
-      await page.screenshot({
-        path: `${designShotDirectory}/${view.toLowerCase()}-${width}x${height}.png`,
-      });
+      if (designShotDirectory)
+        await page.screenshot({
+          path: `${designShotDirectory}/${view.toLowerCase()}-${width}x${height}.png`,
+        });
     }
   }
   await page.setViewportSize({ width: 1920, height: 1080 });
