@@ -24,3 +24,13 @@
   gap: var(--space-4);
   text-align: right;
 }
+
+.nb-document-list-label {
+  display: grid;
+  min-width: 0;
+}
+.nb-document-list-label small {
+  color: var(--color-graphite);
+  font: var(--text-label);
+  overflow-wrap: anywhere;
+}

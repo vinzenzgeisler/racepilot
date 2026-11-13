@@ -5,6 +5,7 @@ import {
   type MessageAttachmentRecord,
   type MessageRecipientFilter,
 } from '@racepilot/contracts';
+import type { MessageSeed } from './messageSeed.js';
 import { MessageRecipients } from './MessageRecipients.js';
 import { MessageComposer } from './MessageComposer.js';
 import { MessageOutbox } from './MessageOutbox.js';
@@ -16,19 +17,19 @@ const emptyFilter = (): MessageRecipientFilter =>
 type Action = 'send' | 'resend-verification' | 'remind-open-payments';
 export function AdminMessages({
   eventId,
-  initialEntryId,
+  seed,
 }: {
   eventId: string;
-  initialEntryId?: string | undefined;
+  seed?: MessageSeed | undefined;
 }) {
   const [filter, setFilter] = useState<MessageRecipientFilter>(() => ({
     ...emptyFilter(),
-    entryIds: initialEntryId ? [initialEntryId] : [],
+    entryIds: seed ? [seed.entryId] : [],
   }));
   const [search, setSearch] = useState('');
   const [addresses, setAddresses] = useState('');
-  const [subject, setSubject] = useState('');
-  const [body, setBody] = useState('');
+  const [subject, setSubject] = useState(seed?.subject ?? '');
+  const [body, setBody] = useState(seed?.body ?? '');
   const [attachments, setAttachments] = useState<MessageAttachmentRecord[]>([]);
   const [revision, setRevision] = useState(0);
   const [confirm, setConfirm] = useState<Action | null>(null);

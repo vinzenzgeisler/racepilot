@@ -5,6 +5,7 @@ import {
   demoCreatedAt,
 } from './community-demo-data.js';
 import { ensureDemoEvent } from './community-demo-setup.js';
+import { seedDemoDocuments } from './community-demo-documents.js';
 import { createDemoStateHelpers } from './community-demo-states.js';
 import { and, eq, sql } from 'drizzle-orm';
 import {
@@ -281,6 +282,7 @@ try {
     }
     created++;
   }
+  await seedDemoDocuments(db, ctx, event.id, rows);
   const [{ total }] = await db
     .select({ total: sql<number>`count(*)::int` })
     .from(entries)

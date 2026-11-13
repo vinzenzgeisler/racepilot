@@ -8,6 +8,8 @@ export function DocumentList({
   items: Array<{
     id: string;
     label: string;
+    /** Quiet detail under the label, such as the rejection reason. */
+    note?: ReactNode;
     status: ReactNode;
     href?: string;
     /** Trailing action such as "Ansehen"; sits right of the status. */
@@ -24,8 +26,9 @@ export function DocumentList({
         <ul>
           {items.map((item) => (
             <li key={item.id} className={item.emphasis ? 'is-emphasis' : ''}>
-              <span>
+              <span className="nb-document-list-label">
                 {item.href ? <a href={item.href}>{item.label}</a> : item.label}
+                {item.note && <small>{item.note}</small>}
               </span>
               <span className="nb-document-list-end">
                 {item.status}

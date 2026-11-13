@@ -10,6 +10,10 @@ import {
   StatusLabel,
 } from '@racepilot/ui';
 import type { WorkflowView } from '../entries/AdminEntriesModel.js';
+import {
+  documentStatusView,
+  uploadLines,
+} from '../entries/documents/documentLines.js';
 
 const STATUS_DOCUMENT_KEYS = ['waiver', 'payment'] as const;
 type StatusDocumentKey = (typeof STATUS_DOCUMENT_KEYS)[number];
@@ -58,7 +62,7 @@ export function EntryPreview({
     nextStatus &&
     PREVIEW_PROGRESS_CATEGORIES.some((category) => category === nextCategory),
   );
-  const missing =
+  const missingDimensions =
     status
       ?.filter(
         (item) =>
@@ -74,6 +78,12 @@ export function EntryPreview({
             ? 'die technische Abnahme'
             : 'der Haftverzicht',
       ) ?? [];
+  const missing = [
+    ...missingDimensions,
+    ...uploadLines(entry)
+      .filter((line) => line.required && line.status === 'missing')
+      .map((line) => `die Unterlage „${line.label}“`),
+  ];
   const missingText =
     missing.length > 1
       ? `${missing.slice(0, -1).join(', ')} und ${missing.at(-1)}`
@@ -102,7 +112,15 @@ export function EntryPreview({
           />
         ),
       })) ?? [];
-  const allDocuments = [...documents, ...statusDocuments];
+  const typedDocuments = uploadLines(entry).map((line) => {
+    const view = documentStatusView(line.status);
+    return {
+      id: `document-${line.key}`,
+      label: line.label,
+      status: <StatusLabel status={view.status} label={view.label} />,
+    };
+  });
+  const allDocuments = [...typedDocuments, ...documents, ...statusDocuments];
   return (
     <PreviewPanel
       eyebrow="Vorschau"
@@ -110,7 +128,13 @@ export function EntryPreview({
       title={details?.driver.name ?? 'Name nicht verfügbar'}
       subtitle={
         details
-          ? `${details.vehicle.make} ${details.vehicle.model} · ${details.eventClass.name}`
+          ? [
+              `${details.vehicle.make} ${details.vehicle.model}`,
+              details.eventClass.name,
+              entry.orgaCode ? `Orga-Code ${entry.orgaCode}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')
           : 'Fahrzeug nicht verfügbar'
       }
       imageUrl={details?.vehicle.imageUrl ?? null}
@@ -169,7 +193,9 @@ export function EntryPreview({
       <DocumentList
         title="Unterlagen"
         items={allDocuments}
-        empty={<p>Keine hochgeladenen Unterlagen vorhanden.</p>}
+        empty={
+          <p>Für diese Veranstaltung sind keine Unterlagen eingerichtet.</p>
+        }
       />
     </PreviewPanel>
   );

@@ -13,6 +13,7 @@ export interface EntryDocumentType {
   readonly eventId: string;
   readonly name: string;
   readonly required: boolean;
+  readonly enabled?: boolean | undefined;
   readonly hint: string | null;
 }
 
@@ -50,6 +51,10 @@ export type EntryDocumentResult<T> =
 
 export interface EntryDocumentsRepository {
   listTypes(ctx: RequestContext, eventId: string): Promise<EntryDocumentType[]>;
+  listConfiguredTypes?(
+    ctx: RequestContext,
+    eventId: string,
+  ): Promise<EntryDocumentType[]>;
   saveTypes(
     ctx: RequestContext,
     eventId: string,
