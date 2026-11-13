@@ -84,7 +84,7 @@ export interface ProductApiOptions {
   readonly logger?: Logger;
   readonly entitlements?: ModuleEntitlements;
   readonly oidcClient?: ApiDeps['oidcClient'];
-  readonly rateLimits: Pick<
+  readonly rateLimits?: Pick<
     ApiDeps['config'],
     | 'TRUSTED_PROXIES'
     | 'PUBLIC_REGISTRATION_ORG_LIMIT'
