@@ -23,15 +23,13 @@ const consentTerm = z
   .strict();
 
 export function registerWorkflowRoutes(context: ApiRoutesContext): void {
-  const { app, deps, resolveMemberContext } = context;
+  const { app, deps, requireMember } = context;
   registerRegistrationRateLimitRoutes(context);
 
   app.get('/admin/events/:eventId/consents', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.eventConsents) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const eventId = c.req.param('eventId');
     if (!z.string().uuid().safeParse(eventId).success)
       return c.json({ error: 'Not found' }, 404);
@@ -39,11 +37,9 @@ export function registerWorkflowRoutes(context: ApiRoutesContext): void {
     return terms ? c.json({ terms }) : c.json({ error: 'Not found' }, 404);
   });
   app.put('/admin/events/:eventId/consents', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:write'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.eventConsents) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:write');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const eventId = c.req.param('eventId');
     if (!z.string().uuid().safeParse(eventId).success)
       return c.json({ error: 'Not found' }, 404);
@@ -76,20 +72,16 @@ export function registerWorkflowRoutes(context: ApiRoutesContext): void {
     return terms ? c.json({ terms }) : c.json({ error: 'Not found' }, 404);
   });
   app.get('/admin/organization/registration-workflow', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('organization:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entryWorkflows) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'organization:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const revision = await deps.entryWorkflows.getOrganization(context);
     return revision ? c.json(revision) : c.json({ error: 'Not found' }, 404);
   });
   app.put('/admin/organization/registration-workflow', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('organization:update'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entryWorkflows) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'organization:update');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const body = (await c.req.json().catch(() => null)) as {
       workflow?: unknown;
       reason?: unknown;
@@ -138,11 +130,9 @@ export function registerWorkflowRoutes(context: ApiRoutesContext): void {
     );
   });
   app.get('/admin/events/:eventId/registration-workflow', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entryWorkflows) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const revision = await deps.entryWorkflows.getEffective(
       context,
       c.req.param('eventId'),
@@ -150,11 +140,9 @@ export function registerWorkflowRoutes(context: ApiRoutesContext): void {
     return revision ? c.json(revision) : c.json({ error: 'Not found' }, 404);
   });
   app.put('/admin/events/:eventId/registration-workflow', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:write'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entryWorkflows) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:write');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const body = (await c.req.json().catch(() => null)) as {
       workflow?: unknown;
       reason?: unknown;
@@ -203,11 +191,9 @@ export function registerWorkflowRoutes(context: ApiRoutesContext): void {
     return revision ? c.json(revision) : c.json({ error: 'Not found' }, 404);
   });
   app.get('/admin/events/:eventId/status-dimensions', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entryStatusDimensions) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const config = await deps.entryStatusDimensions.getEvent(
       context,
       c.req.param('eventId'),
@@ -217,11 +203,9 @@ export function registerWorkflowRoutes(context: ApiRoutesContext): void {
       : c.json({ error: 'Not found' }, 404);
   });
   app.put('/admin/events/:eventId/status-dimensions', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:write'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entryStatusDimensions) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:write');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = z
       .object({
         config: EntryStatusDimensionConfigSchema,

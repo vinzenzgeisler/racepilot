@@ -8,25 +8,19 @@ import {
 export function registerRegistrationRateLimitRoutes(
   context: ApiRoutesContext,
 ): void {
-  const { app, deps, resolveMemberContext } = context;
+  const { app, deps, requireMember } = context;
   app.get('/admin/organization/public-registration-rate-limits', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('organization:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.publicRegistrationRateLimits)
-      return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'organization:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const settings =
       await deps.publicRegistrationRateLimits.getOrganization(context);
     return c.json(settings ?? {});
   });
   app.put('/admin/organization/public-registration-rate-limits', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('organization:update'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.publicRegistrationRateLimits)
-      return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'organization:update');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed =
       OrganizationPublicRegistrationRateLimitOverridesSchema.safeParse(
         await c.req.json().catch(() => null),
@@ -46,12 +40,9 @@ export function registerRegistrationRateLimitRoutes(
   app.get(
     '/admin/events/:eventId/public-registration-rate-limits',
     async (c) => {
-      const context = await resolveMemberContext(c.req.raw);
-      if (!context) return c.json({ error: 'Unauthorized' }, 401);
-      if (!context.permissions.has('event:read'))
-        return c.json({ error: 'Forbidden' }, 403);
-      if (!deps.publicRegistrationRateLimits)
-        return c.json({ error: 'Not found' }, 404);
+      const guard = await requireMember(c.req.raw, 'event:read');
+      if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+      const context = guard.context;
       const eventId = c.req.param('eventId');
       if (!z.string().uuid().safeParse(eventId).success)
         return c.json({ error: 'Not found' }, 404);
@@ -66,12 +57,9 @@ export function registerRegistrationRateLimitRoutes(
   app.put(
     '/admin/events/:eventId/public-registration-rate-limits',
     async (c) => {
-      const context = await resolveMemberContext(c.req.raw);
-      if (!context) return c.json({ error: 'Unauthorized' }, 401);
-      if (!context.permissions.has('event:write'))
-        return c.json({ error: 'Forbidden' }, 403);
-      if (!deps.publicRegistrationRateLimits)
-        return c.json({ error: 'Not found' }, 404);
+      const guard = await requireMember(c.req.raw, 'event:write');
+      if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+      const context = guard.context;
       const eventId = c.req.param('eventId');
       if (!z.string().uuid().safeParse(eventId).success)
         return c.json({ error: 'Not found' }, 404);

@@ -1,5 +1,7 @@
-import type { ApiRoutesContext } from './context.js';
-import { registerRegistrationAssetRoutes } from './registration-assets.js';
+import type {
+  ApiRoutesContext,
+  PublicRegistrationRouteDeps,
+} from './context.js';
 
 import { z } from 'zod';
 
@@ -15,17 +17,15 @@ import {
 } from '@racepilot/contracts';
 
 export function registerPublicRegistrationRoutes(
-  context: ApiRoutesContext,
+  { app, deps, resolvePublicContext }: ApiRoutesContext,
+  registration: PublicRegistrationRouteDeps,
 ): void {
   const {
-    app,
-    deps,
-    resolvePublicContext,
+    service,
     consumeRegistrationBudget,
     setRetryAfter,
     rateLimitDefaults,
-  } = context;
-  registerRegistrationAssetRoutes(context);
+  } = registration;
 
   app.post(
     '/public/organizations/:organizationId/events/:slug/registration/submissions',
@@ -39,8 +39,6 @@ export function registerPublicRegistrationRoutes(
       )
         return c.json({ error: 'Registration unavailable' }, 404);
       const eventSlug = c.req.param('slug');
-      if (!deps.publicRegistrationRateLimits)
-        return c.json({ error: 'Registration unavailable' }, 503);
       let configuredRateLimits;
       try {
         configuredRateLimits =
@@ -79,15 +77,13 @@ export function registerPublicRegistrationRoutes(
       );
       if (!payload.success || payload.data.eventSlug !== eventSlug)
         return c.json({ error: 'Invalid registration' }, 400);
-      if (!deps.publicRegistration)
-        return c.json({ error: 'Registration unavailable' }, 503);
       const submissionContext = createRequestContext({
         ...context,
         correlationId: payload.data.submissionId,
       });
       try {
         return c.json(
-          await deps.publicRegistration.submit(
+          await service.submit(
             submissionContext,
             c.req.param('slug'),
             payload.data,
@@ -98,12 +94,12 @@ export function registerPublicRegistrationRoutes(
         if (error instanceof ProviderError && error.code === 'conflict')
           return c.json({ error: 'Submission ID conflict' }, 409);
         if (error instanceof RegistrationUnavailable) {
-          console.warn('Public registration unavailable', {
+          deps.logger.warn('Public registration unavailable', {
             reason: error.reason,
           });
           return c.json({ error: 'Registration unavailable' }, 400);
         }
-        console.warn('Public registration submission failed', {
+        deps.logger.warn('Public registration submission failed', {
           errorName: error instanceof Error ? error.name : 'unknown',
         });
         return c.json({ error: 'Registration unavailable' }, 400);
@@ -114,11 +110,7 @@ export function registerPublicRegistrationRoutes(
     '/public/organizations/:organizationId/events/:slug/registration/start-number',
     async (c) => {
       const context = await resolvePublicContext(c.req.raw);
-      if (
-        !context ||
-        c.req.param('organizationId') !== context.organizationId ||
-        !deps.publicRegistration?.checkRequestedStartNumber
-      )
+      if (!context || c.req.param('organizationId') !== context.organizationId)
         return c.json({ error: 'Not found' }, 404);
       const number = z
         .string()
@@ -128,7 +120,7 @@ export function registerPublicRegistrationRoutes(
         .safeParse(c.req.query('number'));
       if (!number.success) return c.json({ error: 'Invalid number' }, 400);
       try {
-        const result = await deps.publicRegistration.checkRequestedStartNumber(
+        const result = await service.checkRequestedStartNumber(
           context,
           c.req.param('slug'),
           number.data,
@@ -145,12 +137,7 @@ export function registerPublicRegistrationRoutes(
       const context = await resolvePublicContext(c.req.raw);
       const organizationParam = c.req.param('organizationId');
       const eventSlug = c.req.param('slug');
-      if (
-        !context ||
-        organizationParam !== context.organizationId ||
-        !deps.publicRegistration?.saveDraft ||
-        !deps.publicRegistrationRateLimits
-      )
+      if (!context || organizationParam !== context.organizationId)
         return c.json({ error: 'Registration unavailable' }, 404);
       const parsed = SaveRegistrationDraftRequestSchema.safeParse(
         await c.req.json().catch(() => null),
@@ -189,7 +176,7 @@ export function registerPublicRegistrationRoutes(
         return c.json({ error: 'Registration unavailable' }, 429);
       }
       try {
-        await deps.publicRegistration.saveDraft(
+        await service.saveDraft(
           context,
           eventSlug,
           parsed.data.draft.email,

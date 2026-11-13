@@ -30,6 +30,15 @@ export async function allocateOrgaCode(
   return formatOrgaCode(prefix, BigInt(nextNumber.last_number));
 }
 
+function isTransactionDatabase(value: unknown): value is TransactionDatabase {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'execute' in value &&
+    typeof value.execute === 'function'
+  );
+}
+
 export function withAllocatedOrgaCode<T>(
   db: Database,
   executor: unknown,
@@ -37,10 +46,13 @@ export function withAllocatedOrgaCode<T>(
   eventId: string,
   write: (tx: TransactionDatabase, orgaCode: string) => Promise<T>,
 ): Promise<T> {
-  if (executor)
-    return allocateOrgaCode(executor as TransactionDatabase, ctx, eventId).then(
-      (code) => write(executor as TransactionDatabase, code),
+  if (executor !== undefined && executor !== null) {
+    if (!isTransactionDatabase(executor))
+      throw new Error('Unsupported database executor');
+    return allocateOrgaCode(executor, ctx, eventId).then((code) =>
+      write(executor, code),
     );
+  }
   return db.transaction(async (tx) => {
     const code = await allocateOrgaCode(tx, ctx, eventId);
     return write(tx, code);

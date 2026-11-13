@@ -30,9 +30,11 @@ import {
   type Database,
 } from '@racepilot/adapter-postgres';
 import {
+  consoleLogger,
   createModuleRegistry,
   resolveCanonicalOrigin,
   type CanonicalOrigin,
+  type Logger,
   type MembershipBootstrap,
   type ModuleEntitlements,
   type ObjectStorageProvider,
@@ -77,7 +79,9 @@ export interface ProductApiOptions {
    * `mail.delivery` capability is resolved from it for each organization.
    */
   readonly mail?: OrganizationMail;
+  /** Shared limiter for public registration; Community defaults to the Postgres one. */
   readonly registrationRateLimiter?: RegistrationRateLimiter;
+  readonly logger?: Logger;
   readonly entitlements?: ModuleEntitlements;
   readonly oidcClient?: ApiDeps['oidcClient'];
   readonly rateLimits: Pick<
@@ -133,11 +137,17 @@ export function createProductApi(options: ProductApiOptions): Hono {
   const timingRepository = createTimingRepository(db);
   const publicRegistration =
     mail && canonicalOrigin
-      ? createPublicRegistrationService(db, { canonicalOrigin })
+      ? {
+          service: createPublicRegistrationService(db, { canonicalOrigin }),
+          rateLimiter:
+            options.registrationRateLimiter ??
+            createPostgresRegistrationRateLimiter(db),
+        }
       : undefined;
   return createApp({
     ...edit,
     config: { ...edit.config, ...options.rateLimits },
+    logger: options.logger ?? consoleLogger,
     organizations: createOrganizationRepository(db),
     events: createEventRepository(db),
     eventSetup: createEventSetupRepository(db),
@@ -152,16 +162,9 @@ export function createProductApi(options: ProductApiOptions): Hono {
     entryWorkflows: createEntryWorkflowRepository(db),
     entryStatusDimensions: createEntryStatusDimensionRepository(db),
     eventConsents: createEventConsentRepository(db),
-    ...(publicRegistration
-      ? {
-          publicRegistration,
-          registrationRateLimiter:
-            options.registrationRateLimiter ??
-            createPostgresRegistrationRateLimiter(db),
-          publicRegistrationRateLimits:
-            createPublicRegistrationRateLimitSettingsRepository(db),
-        }
-      : {}),
+    publicRegistrationRateLimits:
+      createPublicRegistrationRateLimitSettingsRepository(db),
+    ...(publicRegistration ? { publicRegistration } : {}),
     memberships: createMembershipRepository(db),
     payments: createInvoicePaymentRepository(db),
     entryDetails: createEntryDetailRepository(db),

@@ -22,11 +22,12 @@ import {
 } from '@racepilot/contracts';
 
 export function registerEventsRoutes(context: ApiRoutesContext): void {
-  const { app, deps, resolvePublicContext, resolveMemberContext } = context;
+  const { app, deps, resolvePublicContext, requireMember } = context;
   registerEventSetupRoute(context);
   app.get('/admin/events/:eventId', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const eventId = c.req.param('eventId');
     if (!z.string().uuid().safeParse(eventId).success)
       return c.json({ error: 'Invalid event ID' }, 400);
@@ -38,15 +39,15 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
     }
   });
   app.get('/admin/events', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:read'))
-      return c.json({ error: 'Forbidden' }, 403);
+    const guard = await requireMember(c.req.raw, 'event:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     return c.json(await deps.events.listByOrganization(context));
   });
   app.post('/admin/events', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = CreateEventRequest.safeParse(
       await c.req.json().catch(() => null),
     );
@@ -67,8 +68,9 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
     }
   });
   app.patch('/admin/events/:eventId', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     try {
       const result = await updateEvent(
         context,
@@ -84,16 +86,15 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
     }
   });
   app.post('/admin/events/:eventId/transitions', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const body = await c.req.json().catch(() => null);
     const status = z
       .enum(['open', 'closed', 'archived'])
       .safeParse(body?.status);
     if (!status.success) return c.json({ error: 'Invalid request' }, 400);
     if (status.data === 'open') {
-      if (!deps.classes || !deps.pricing || !deps.eventConsents)
-        throw new Error('Event opening dependencies are not configured');
       const result = await openEvent(context, c.req.param('eventId'), {
         events: deps.events,
         classes: deps.classes,
@@ -136,21 +137,17 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
     }
   });
   app.get('/admin/events/:eventId/pricing', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.pricing) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     return c.json(
       await deps.pricing.listByEvent(context, c.req.param('eventId')),
     );
   });
   app.put('/admin/events/:eventId/pricing/:classId', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:write'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.pricing) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:write');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = z
       .object({
         baseCents: z.number().int().nonnegative().optional(),
@@ -200,9 +197,9 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
     return event ? c.json(event) : c.json({ error: 'Not found' }, 404);
   });
   app.post('/admin/events/:eventId/classes', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!deps.classes) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = CreateEventClassRequest.safeParse(
       await c.req.json().catch(() => null),
     );
@@ -220,19 +217,17 @@ export function registerEventsRoutes(context: ApiRoutesContext): void {
     }
   });
   app.get('/admin/events/:eventId/classes', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('event:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.classes) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'event:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     return c.json(
       await deps.classes.listByEvent(context, c.req.param('eventId')),
     );
   });
   app.patch('/admin/events/:eventId/classes/:classId', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!deps.classes) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = UpdateEventClassRequest.safeParse(
       await c.req.json().catch(() => null),
     );

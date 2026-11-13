@@ -7,22 +7,18 @@ import {
 } from '@racepilot/core';
 
 export function registerPaymentsRoutes(context: ApiRoutesContext): void {
-  const { app, deps, resolveMemberContext } = context;
+  const { app, deps, requireMember } = context;
   app.get('/admin/organization/payment-recipient', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('organization:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.paymentRecipients) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'organization:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const recipient = await deps.paymentRecipients.get(context);
     return c.json({ recipient });
   });
   app.put('/admin/organization/payment-recipient', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('organization:update'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.paymentRecipients) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'organization:update');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = z
       .object({
         accountName: z.string().trim().min(1).max(70),
@@ -49,11 +45,9 @@ export function registerPaymentsRoutes(context: ApiRoutesContext): void {
     }
   });
   app.post('/admin/invoices/:invoiceId/payments', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('payment:write'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.payments) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'payment:write');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = z
       .object({
         amountCents: z.number().int().positive(),
@@ -79,11 +73,9 @@ export function registerPaymentsRoutes(context: ApiRoutesContext): void {
     }
   });
   app.post('/admin/payments/:paymentId/corrections', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('payment:write'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.payments) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'payment:write');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = z
       .object({ reason: z.string().trim().min(1).max(1000) })
       .strict()

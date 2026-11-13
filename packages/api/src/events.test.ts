@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { createApp, type ApiDeps } from './index.js';
+import { createApp } from './index.js';
 import { organizationId } from '@racepilot/core';
+import { testDeps } from './testing.js';
 
 const eventId = '20000000-0000-4000-8000-000000000001';
 const org = {
@@ -63,7 +64,7 @@ function readinessApp(
   } = {},
 ) {
   let transitions = 0;
-  const deps: ApiDeps = {
+  const deps = testDeps({
     config: { deploymentMode: 'community', organizationId: org.id },
     organizations: {
       getById: async () => org,
@@ -106,7 +107,7 @@ function readinessApp(
       resolvePermissions: async () =>
         new Set(['event:write', 'event:read', 'class:write']),
     },
-  };
+  });
   return { app: createApp(deps), transitions: () => transitions };
 }
 

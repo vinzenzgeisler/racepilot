@@ -1,24 +1,23 @@
 import type { ApiRoutesContext } from './context.js';
 import { z } from 'zod';
-import { queueArtifactJob } from '@racepilot/core';
+import { queueArtifactJob, type ObjectStorageProvider } from '@racepilot/core';
+import type { PublicRegistrationService } from '../services.js';
 
-export function registerArtifactRoutes(context: ApiRoutesContext): void {
-  const { app, deps, resolveMemberContext } = context;
+/** Queues confirmation PDFs; registered only with storage, where the worker writes them. */
+export function registerConfirmationRoutes(context: ApiRoutesContext): void {
+  const { app, deps, requireMember } = context;
   app.post(
     '/admin/events/:eventId/registration-groups/:groupId/confirmation',
     async (c) => {
-      const context = await resolveMemberContext(c.req.raw);
-      if (!context) return c.json({ error: 'Unauthorized' }, 401);
-      if (!context.permissions.has('entry:read'))
-        return c.json({ error: 'Forbidden' }, 403);
+      const guard = await requireMember(c.req.raw, 'entry:read');
+      if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+      const context = guard.context;
       const eventId = c.req.param('eventId');
       const groupId = c.req.param('groupId');
       if (
         !z.string().uuid().safeParse(eventId).success ||
         !z.string().uuid().safeParse(groupId).success
       )
-        return c.json({ error: 'Not found' }, 404);
-      if (!deps.entryConfirmations || !deps.artifactJobs || !deps.objectStorage)
         return c.json({ error: 'Not found' }, 404);
       const data = await deps.entryConfirmations.getByGroup(
         context,
@@ -51,35 +50,38 @@ export function registerArtifactRoutes(context: ApiRoutesContext): void {
       return c.json({ jobId: result.job.id, status: result.job.status }, 202);
     },
   );
+}
+
+/** Downloads of files that participants uploaded into custom registration fields. */
+export function registerFormUploadRoutes(
+  context: ApiRoutesContext,
+  storage: ObjectStorageProvider,
+  publicRegistration: PublicRegistrationService,
+): void {
+  const { app, requireMember } = context;
   app.get(
     '/admin/events/:eventId/registration-form-uploads/:objectId',
     async (c) => {
-      const context = await resolveMemberContext(c.req.raw);
-      if (!context) return c.json({ error: 'Unauthorized' }, 401);
-      if (!context.permissions.has('entry:read'))
-        return c.json({ error: 'Forbidden' }, 403);
+      const guard = await requireMember(c.req.raw, 'entry:read');
+      if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+      const context = guard.context;
       const eventId = c.req.param('eventId');
       const objectId = c.req.param('objectId');
       if (
         !z.string().uuid().safeParse(eventId).success ||
-        !z.string().uuid().safeParse(objectId).success ||
-        !deps.objectStorage ||
-        !deps.publicRegistration?.canDownloadCustomFieldUpload
+        !z.string().uuid().safeParse(objectId).success
       )
         return c.json({ error: 'Not found' }, 404);
       try {
         if (
-          !(await deps.publicRegistration.canDownloadCustomFieldUpload(
+          !(await publicRegistration.canDownloadCustomFieldUpload(
             context,
             eventId,
             objectId,
           ))
         )
           return c.json({ error: 'Not found' }, 404);
-        const stored = await deps.objectStorage.get(
-          context.organizationId,
-          objectId,
-        );
+        const stored = await storage.get(context.organizationId, objectId);
         if (!stored || stored.ref.organizationId !== context.organizationId)
           return c.json({ error: 'Not found' }, 404);
         c.header('Cache-Control', 'private, no-store');

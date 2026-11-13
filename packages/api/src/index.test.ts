@@ -12,6 +12,7 @@ import {
   defaultEntryStatusDimensionConfig,
   EntryStatusInUseError,
 } from '@racepilot/core';
+import { testDeps } from './testing.js';
 
 describe('api entry', () => {
   it('returns a contract-validated health response', () =>
@@ -126,16 +127,21 @@ describe('api entry', () => {
     ).toThrow(/OIDC_ISSUER_URL/);
   });
   it('exposes only the public OIDC web-client settings', async () => {
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: 'org' },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      oidcClient: {
-        issuerUrl: 'https://id.example',
-        clientId: 'racepilot-web',
-        redirectUri: 'https://app.example/callback',
-      },
-    });
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: 'org' },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
+        },
+        oidcClient: {
+          issuerUrl: 'https://id.example',
+          clientId: 'racepilot-web',
+          redirectUri: 'https://app.example/callback',
+        },
+      }),
+    );
     expect(await (await app.request('/auth/config')).json()).toEqual({
       oidc: {
         issuerUrl: 'https://id.example',
@@ -155,38 +161,43 @@ describe('api entry', () => {
       capabilities: new Set(['private-example']),
       correlationId: 'cloud-test',
     });
-    const app = createApp({
-      config: { deploymentMode: 'cloud' },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      contextResolvers: {
-        public: async () =>
-          createRequestContext({
-            deploymentMode: 'cloud',
-            organizationId: organization,
-            permissions: new Set(),
-            capabilities: new Set(['private-example']),
-            correlationId: 'cloud-public-test',
-          }),
-        member: async (request) =>
-          request.headers.get('authorization') === 'Bearer operator-a'
-            ? memberContext
-            : null,
-      },
-      mountAdditionalRoutes: (routes, contexts) => {
-        routes.post('/composition/action', async (context) => {
-          const resolved = await contexts.member(context.req.raw);
-          if (!resolved) return context.json({ error: 'Unauthorized' }, 401);
-          if (
-            !resolved.permissions.has('private-example:run') ||
-            !resolved.capabilities.has('private-example')
-          )
-            return context.json({ error: 'Forbidden' }, 403);
-          sideEffects += 1;
-          return context.json({ organizationId: resolved.organizationId });
-        });
-      },
-    });
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'cloud' },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
+        },
+        contextResolvers: {
+          public: async () =>
+            createRequestContext({
+              deploymentMode: 'cloud',
+              organizationId: organization,
+              permissions: new Set(),
+              capabilities: new Set(['private-example']),
+              correlationId: 'cloud-public-test',
+            }),
+          member: async (request) =>
+            request.headers.get('authorization') === 'Bearer operator-a'
+              ? memberContext
+              : null,
+        },
+        mountAdditionalRoutes: (routes, contexts) => {
+          routes.post('/composition/action', async (context) => {
+            const resolved = await contexts.member(context.req.raw);
+            if (!resolved) return context.json({ error: 'Unauthorized' }, 401);
+            if (
+              !resolved.permissions.has('private-example:run') ||
+              !resolved.capabilities.has('private-example')
+            )
+              return context.json({ error: 'Forbidden' }, 403);
+            sideEffects += 1;
+            return context.json({ organizationId: resolved.organizationId });
+          });
+        },
+      }),
+    );
 
     const denied = await app.request('/composition/action', { method: 'POST' });
     expect(denied.status).toBe(401);
@@ -203,18 +214,20 @@ describe('api entry', () => {
     const configuredOrg = '11111111-1111-4111-8111-111111111111';
     const foreignOrg = '22222222-2222-4222-8222-222222222222';
     const seen: string[] = [];
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: configuredOrg },
-      organizations: { getById: async () => null, update: async () => null },
-      events: {
-        listByOrganization: async () => [],
-        getById: async () => null,
-        getPublicBySlug: async (ctx) => {
-          seen.push(ctx.organizationId);
-          return null;
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: configuredOrg },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
+          getPublicBySlug: async (ctx) => {
+            seen.push(ctx.organizationId);
+            return null;
+          },
         },
-      },
-    });
+      }),
+    );
     expect(
       (await app.request(`/public/events/${foreignOrg}/anything`)).status,
     ).toBe(404);
@@ -227,28 +240,34 @@ describe('api entry', () => {
   it('returns 404 for a foreign entry ID', async () => {
     const org = '11111111-1111-4111-8111-111111111111';
     let transitions = 0;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'admin',
-        }),
-      },
-      memberships: {
-        resolvePermissions: async () => new Set(['entry:read', 'entry:write']),
-      },
-      entries: {
-        getById: async () => null,
-        transition: async () => {
-          transitions += 1;
-          return null;
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-        softDelete: async () => null,
-      },
-    });
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'admin',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () =>
+            new Set(['entry:read', 'entry:write']),
+        },
+        entries: {
+          getById: async () => null,
+          transition: async () => {
+            transitions += 1;
+            return null;
+          },
+          softDelete: async () => null,
+        },
+      }),
+    );
     expect(
       (await app.request('/admin/entries/22222222-2222-4222-8222-222222222222'))
         .status,
@@ -287,23 +306,31 @@ describe('api entry', () => {
         }),
       },
     };
-    const denied = createApp({
-      ...base,
-      memberships: { resolvePermissions: async () => new Set(['event:read']) },
-    });
+    const denied = createApp(
+      testDeps({
+        ...base,
+        memberships: {
+          resolvePermissions: async () => new Set(['event:read']),
+        },
+      }),
+    );
     expect(
       (await denied.request(`/admin/events/${eventId}/overview`)).status,
     ).toBe(403);
-    const unavailable = createApp({
-      ...base,
-      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
-      overview: {
-        getEventOverview: async () => {
-          lookups++;
-          return { ok: false, error: 'event-not-found' };
+    const unavailable = createApp(
+      testDeps({
+        ...base,
+        memberships: {
+          resolvePermissions: async () => new Set(['entry:read']),
         },
-      },
-    });
+        overview: {
+          getEventOverview: async () => {
+            lookups++;
+            return { ok: false, error: 'event-not-found' };
+          },
+        },
+      }),
+    );
     expect(
       (await unavailable.request(`/admin/events/${eventId}/overview`)).status,
     ).toBe(404);
@@ -311,67 +338,71 @@ describe('api entry', () => {
       (await unavailable.request('/admin/events/not-a-uuid/overview')).status,
     ).toBe(404);
     expect(lookups).toBe(1);
-    const missingDependency = createApp({
-      ...base,
-      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
-    });
-    expect(
-      (await missingDependency.request(`/admin/events/${eventId}/overview`))
-        .status,
-    ).toBe(404);
   });
   it('requires entry:read for the paginated admin list', async () => {
     const org = '11111111-1111-4111-8111-111111111111';
     let called = false;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'member',
-        }),
-      },
-      memberships: {
-        resolvePermissions: async () => new Set(['payment:read']),
-      },
-      entries: {
-        getById: async () => null,
-        listAdmin: async () => {
-          called = true;
-          return { items: [], total: 0 };
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-        transition: async () => null,
-        softDelete: async () => null,
-      },
-    });
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'member',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () => new Set(['payment:read']),
+        },
+        entries: {
+          getById: async () => null,
+          listAdmin: async () => {
+            called = true;
+            return { items: [], total: 0 };
+          },
+          transition: async () => null,
+          softDelete: async () => null,
+        },
+      }),
+    );
     expect((await app.request('/admin/entries?page=1')).status).toBe(403);
     expect(called).toBe(false);
   });
   it('requires entry:read before looking up an admin entry detail', async () => {
     const org = '11111111-1111-4111-8111-111111111111';
     let lookedUp = false;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'member',
-        }),
-      },
-      memberships: { resolvePermissions: async () => new Set(['event:read']) },
-      entries: {
-        getById: async () => {
-          lookedUp = true;
-          return null;
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-        transition: async () => null,
-        softDelete: async () => null,
-      },
-    });
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'member',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () => new Set(['event:read']),
+        },
+        entries: {
+          getById: async () => {
+            lookedUp = true;
+            return null;
+          },
+          transition: async () => null,
+          softDelete: async () => null,
+        },
+      }),
+    );
     expect(
       (await app.request('/admin/entries/22222222-2222-4222-8222-222222222222'))
         .status,
@@ -381,27 +412,34 @@ describe('api entry', () => {
   it('passes only validated list filters with the server-resolved tenant context', async () => {
     const org = '11111111-1111-4111-8111-111111111111';
     let seen: { organizationId: string; query?: unknown } | undefined;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'admin',
-        }),
-      },
-      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
-      entries: {
-        getById: async () => null,
-        listAdmin: async (ctx, query) => {
-          seen = { organizationId: ctx.organizationId, query };
-          return { items: [], total: 0 };
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-        transition: async () => null,
-        softDelete: async () => null,
-      },
-    });
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'admin',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () => new Set(['entry:read']),
+        },
+        entries: {
+          getById: async () => null,
+          listAdmin: async (ctx, query) => {
+            seen = { organizationId: ctx.organizationId, query };
+            return { items: [], total: 0 };
+          },
+          transition: async () => null,
+          softDelete: async () => null,
+        },
+      }),
+    );
     const response = await app.request(
       '/admin/entries?page=2&pageSize=10&acceptanceStatus=pending&paymentStatus=paid&sort=createdAt&direction=asc',
     );
@@ -429,30 +467,36 @@ describe('api entry', () => {
   it('returns the unchanged entry transition response without a registration form', async () => {
     const org = '11111111-1111-4111-8111-111111111111';
     const transitioned = { id: 'entry-1', verificationStatus: 'verified' };
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'admin',
-        }),
-      },
-      memberships: {
-        resolvePermissions: async () => new Set(['entry:read', 'entry:write']),
-      },
-      entries: {
-        getById: async () =>
-          ({
-            id: 'entry-1',
-            verificationStatus: 'unverified',
-            acceptanceStatus: 'pending',
-          }) as never,
-        transition: async () => transitioned as never,
-        softDelete: async () => null,
-      },
-    });
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
+        },
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'admin',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () =>
+            new Set(['entry:read', 'entry:write']),
+        },
+        entries: {
+          getById: async () =>
+            ({
+              id: 'entry-1',
+              verificationStatus: 'unverified',
+              acceptanceStatus: 'pending',
+            }) as never,
+          transition: async () => transitioned as never,
+          softDelete: async () => null,
+        },
+      }),
+    );
     const response = await app.request('/admin/entries/entry-1/transitions', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -492,44 +536,50 @@ describe('api entry', () => {
       workflow,
     };
     let received: unknown;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'admin',
-        }),
-      },
-      memberships: {
-        resolvePermissions: async () => new Set(['entry:read', 'entry:write']),
-      },
-      entries: {
-        getById: async () =>
-          ({
-            id: 'entry-1',
-            verificationStatus: 'unverified',
-            acceptanceStatus: 'pending',
-          }) as never,
-        transition: async (...args: unknown[]) => {
-          received = args;
-          return {
-            id: 'entry-1',
-            acceptanceStatus: 'documents_missing',
-          } as never;
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-        softDelete: async () => null,
-      },
-      entryWorkflows: {
-        getOrganization: async () => null,
-        getEffective: async () => revision,
-        getPinnedForEntry: async (_ctx, entryId) =>
-          entryId === 'entry-1' ? revision : null,
-        setOrganization: async () => revision,
-        setEvent: async () => revision,
-      },
-    });
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'admin',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () =>
+            new Set(['entry:read', 'entry:write']),
+        },
+        entries: {
+          getById: async () =>
+            ({
+              id: 'entry-1',
+              verificationStatus: 'unverified',
+              acceptanceStatus: 'pending',
+            }) as never,
+          transition: async (...args: unknown[]) => {
+            received = args;
+            return {
+              id: 'entry-1',
+              acceptanceStatus: 'documents_missing',
+            } as never;
+          },
+          softDelete: async () => null,
+        },
+        entryWorkflows: {
+          getOrganization: async () => null,
+          getEffective: async () => revision,
+          getPinnedForEntry: async (_ctx, entryId) =>
+            entryId === 'entry-1' ? revision : null,
+          setOrganization: async () => revision,
+          setEvent: async () => revision,
+        },
+      }),
+    );
     const request = (reason?: string, status = 'documents_missing') =>
       app.request('/admin/entries/entry-1/transitions', {
         method: 'POST',
@@ -569,27 +619,32 @@ describe('api entry', () => {
   it('requires payment:write for admin payment intake', async () => {
     const org = '11111111-1111-4111-8111-111111111111';
     let called = false;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'member',
-        }),
-      },
-      memberships: {
-        resolvePermissions: async () => new Set(['payment:read']),
-      },
-      payments: {
-        record: async () => {
-          called = true;
-          return { id: 'p' };
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-        correct: async () => null,
-      },
-    });
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'member',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () => new Set(['payment:read']),
+        },
+        payments: {
+          record: async () => {
+            called = true;
+            return { id: 'p' };
+          },
+          correct: async () => null,
+        },
+      }),
+    );
     const response = await app.request(
       '/admin/invoices/22222222-2222-4222-8222-222222222222/payments',
       {
@@ -605,25 +660,32 @@ describe('api entry', () => {
   it('requires event:write for price-rule administration', async () => {
     const org = '11111111-1111-4111-8111-111111111111';
     let called = false;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'member',
-        }),
-      },
-      memberships: { resolvePermissions: async () => new Set(['event:read']) },
-      pricing: {
-        listByEvent: async () => [],
-        upsert: async (_ctx, _event, rule) => {
-          called = true;
-          return rule;
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-      },
-    });
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'member',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () => new Set(['event:read']),
+        },
+        pricing: {
+          listByEvent: async () => [],
+          upsert: async (_ctx, _event, rule) => {
+            called = true;
+            return rule;
+          },
+        },
+      }),
+    );
     const response = await app.request(
       '/admin/events/22222222-2222-4222-8222-222222222222/pricing/33333333-3333-4333-8333-333333333333',
       {
@@ -645,55 +707,67 @@ describe('api entry', () => {
     const org = organizationId('11111111-1111-4111-8111-111111111111');
     let stored: unknown;
     let repositoryError: Error | null = null;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: org },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'admin',
-        }),
-      },
-      memberships: {
-        resolvePermissions: async () =>
-          new Set(['event:read', 'event:write', 'entry:write']),
-      },
-      entryStatusDimensions: {
-        getEvent: async (ctx, eventId) => {
-          expect(ctx.organizationId).toBe(org);
-          return eventId === 'event-1'
-            ? defaultEntryStatusDimensionConfig
-            : null;
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: org },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-        setEvent: async (ctx, eventId, config, actor, reason) => {
-          if (repositoryError) throw repositoryError;
-          expect(ctx.organizationId).toBe(org);
-          expect(eventId).toBe('event-1');
-          expect(actor).toBe('https://id.example|admin');
-          expect(reason).toBe('event setup');
-          stored = config;
-          return config;
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'admin',
+          }),
         },
-        transition: async (ctx, entryId, dimension, status, actor, reason) => {
-          expect(ctx.organizationId).toBe(org);
-          expect(entryId).toBe('entry-1');
-          expect(dimension).toBe('technical_inspection');
-          expect(status).toBe('reinspection');
-          expect(actor).toBe('https://id.example|admin');
-          expect(reason).toBe('checked');
-          return true;
+        memberships: {
+          resolvePermissions: async () =>
+            new Set(['event:read', 'event:write', 'entry:write']),
         },
-        updateHints: async (ctx, entryId, hints, actor, reason) => {
-          expect(ctx.organizationId).toBe(org);
-          expect(entryId).toBe('entry-1');
-          expect(hints).toEqual({ passenger: true });
-          expect(actor).toBe('https://id.example|admin');
-          expect(reason).toBe('verified passenger');
-          return true;
+        entryStatusDimensions: {
+          getEvent: async (ctx, eventId) => {
+            expect(ctx.organizationId).toBe(org);
+            return eventId === 'event-1'
+              ? defaultEntryStatusDimensionConfig
+              : null;
+          },
+          setEvent: async (ctx, eventId, config, actor, reason) => {
+            if (repositoryError) throw repositoryError;
+            expect(ctx.organizationId).toBe(org);
+            expect(eventId).toBe('event-1');
+            expect(actor).toBe('https://id.example|admin');
+            expect(reason).toBe('event setup');
+            stored = config;
+            return config;
+          },
+          transition: async (
+            ctx,
+            entryId,
+            dimension,
+            status,
+            actor,
+            reason,
+          ) => {
+            expect(ctx.organizationId).toBe(org);
+            expect(entryId).toBe('entry-1');
+            expect(dimension).toBe('technical_inspection');
+            expect(status).toBe('reinspection');
+            expect(actor).toBe('https://id.example|admin');
+            expect(reason).toBe('checked');
+            return true;
+          },
+          updateHints: async (ctx, entryId, hints, actor, reason) => {
+            expect(ctx.organizationId).toBe(org);
+            expect(entryId).toBe('entry-1');
+            expect(hints).toEqual({ passenger: true });
+            expect(actor).toBe('https://id.example|admin');
+            expect(reason).toBe('verified passenger');
+            return true;
+          },
         },
-      },
-    });
+      }),
+    );
     expect(
       (await app.request('/admin/events/event-1/status-dimensions')).status,
     ).toBe(200);
@@ -810,22 +884,37 @@ describe('api entry', () => {
 
 describe('event CSV export', () => {
   it('requires entry:read for CSV export', async () => {
-    const app = createApp({
-      config: {
-        deploymentMode: 'community',
-        organizationId: '11111111-1111-4111-8111-111111111111',
-      },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'viewer',
-        }),
-      },
-      memberships: { resolvePermissions: async () => new Set(['event:read']) },
-      entryExports: { listByEvent: async () => [] },
-    });
+    const app = createApp(
+      testDeps({
+        config: {
+          deploymentMode: 'community',
+          organizationId: '11111111-1111-4111-8111-111111111111',
+        },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
+        },
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'viewer',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () => new Set(['event:read']),
+        },
+        entryExports: { listByEvent: async () => [] },
+        // Export routes exist only on installations with object storage.
+        objectStorage: {
+          put: async () => {
+            throw new Error('unused');
+          },
+          get: async () => null,
+          delete: async () => {},
+        },
+      }),
+    );
     expect(
       (
         await app.request(
@@ -841,85 +930,89 @@ describe('event CSV export', () => {
     let queuedFilters: unknown;
     let queuedDelimiter: unknown;
     let forceConflict = false;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: orgId },
-      organizations: { getById: async () => null, update: async () => null },
-      events: {
-        listByOrganization: async () => [],
-        getById: async () => ({
-          id: eventId,
-          organizationId: orgId as never,
-          slug: 'race',
-          name: 'Race',
-          startsOn: '2026-05-01',
-          endsOn: '2026-05-01',
-          status: 'open',
-          registrationOpensAt: null,
-          registrationClosesAt: null,
-          openedAt: null,
-          closedAt: null,
-          archivedAt: null,
-        }),
-      },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'viewer',
-        }),
-      },
-      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
-      entryExports: {
-        listByEvent: async () => {
-          throw new Error('CSV must be generated in the worker');
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: orgId },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => ({
+            id: eventId,
+            organizationId: orgId as never,
+            slug: 'race',
+            name: 'Race',
+            startsOn: '2026-05-01',
+            endsOn: '2026-05-01',
+            status: 'open',
+            registrationOpensAt: null,
+            registrationClosesAt: null,
+            openedAt: null,
+            closedAt: null,
+            archivedAt: null,
+          }),
         },
-      },
-      artifactJobs: {
-        enqueue: async (_ctx, input) => {
-          enqueued++;
-          queuedFilters = input.filters;
-          queuedDelimiter = input.delimiter;
-          if (forceConflict)
-            return { ok: false, error: 'idempotency-conflict' };
-          return {
-            ok: true,
-            job: {
-              id: '33333333-3333-4333-8333-333333333333',
-              organizationId: orgId as never,
-              eventId,
-              kind: input.kind,
-              registrationGroupId: null,
-              fields: input.fields ?? [],
-              filters: input.filters ?? {},
-              delimiter: input.delimiter ?? ';',
-              expiresAt: null,
-              idempotencyKey: input.idempotencyKey,
-              status: 'queued',
-              objectId: null,
-              sha256: null,
-              contentType: null,
-              attempts: 0,
-              error: null,
-              createdAt: '2026-01-01T00:00:00.000Z',
-              updatedAt: '2026-01-01T00:00:00.000Z',
-            },
-          };
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'viewer',
+          }),
         },
-        getById: async () => null,
-        listByEvent: async () => [],
-        claim: async () => null,
-        release: async () => {},
-        complete: async () => {},
-        fail: async () => {},
-      },
-      objectStorage: {
-        put: async () => {
-          throw new Error('Must not store in request');
+        memberships: {
+          resolvePermissions: async () => new Set(['entry:read']),
         },
-        head: async () => null,
-        get: async () => null,
-        delete: async () => {},
-      },
-    });
+        entryExports: {
+          listByEvent: async () => {
+            throw new Error('CSV must be generated in the worker');
+          },
+        },
+        artifactJobs: {
+          enqueue: async (_ctx, input) => {
+            enqueued++;
+            queuedFilters = input.filters;
+            queuedDelimiter = input.delimiter;
+            if (forceConflict)
+              return { ok: false, error: 'idempotency-conflict' };
+            return {
+              ok: true,
+              job: {
+                id: '33333333-3333-4333-8333-333333333333',
+                organizationId: orgId as never,
+                eventId,
+                kind: input.kind,
+                registrationGroupId: null,
+                fields: input.fields ?? [],
+                filters: input.filters ?? {},
+                delimiter: input.delimiter ?? ';',
+                expiresAt: null,
+                idempotencyKey: input.idempotencyKey,
+                status: 'queued',
+                objectId: null,
+                sha256: null,
+                contentType: null,
+                attempts: 0,
+                error: null,
+                createdAt: '2026-01-01T00:00:00.000Z',
+                updatedAt: '2026-01-01T00:00:00.000Z',
+              },
+            };
+          },
+          getById: async () => null,
+          listByEvent: async () => [],
+          claim: async () => null,
+          release: async () => {},
+          complete: async () => {},
+          fail: async () => {},
+        },
+        objectStorage: {
+          put: async () => {
+            throw new Error('Must not store in request');
+          },
+          head: async () => null,
+          get: async () => null,
+          delete: async () => {},
+        },
+      }),
+    );
     const url = `/admin/events/${eventId}/entries.csv?fields=driver,status&classId=33333333-3333-4333-8333-333333333333&acceptanceStatus=accepted&verificationStatus=unverified&paymentStatus=open&search=Ada&delimiter=%3B`;
     expect((await app.request(url)).status).toBe(400);
     expect(
@@ -960,59 +1053,66 @@ describe('export expiry route', () => {
     const orgId = '11111111-1111-4111-8111-111111111111';
     const jobId = '33333333-3333-4333-8333-333333333333';
     let storageReads = 0;
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: orgId },
-      organizations: { getById: async () => null, update: async () => null },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://id.example',
-          subject: 'viewer',
-        }),
-      },
-      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
-      artifactJobs: {
-        enqueue: async () => {
-          throw new Error('unused');
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: orgId },
+        organizations: { getById: async () => null, update: async () => null },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
         },
-        getById: async () => ({
-          id: jobId,
-          organizationId: orgId as never,
-          eventId: '22222222-2222-4222-8222-222222222222',
-          kind: 'entries_csv',
-          registrationGroupId: null,
-          fields: ['driver'],
-          filters: {},
-          delimiter: ';',
-          idempotencyKey: 'old-export',
-          status: 'ready',
-          objectId: '44444444-4444-4444-8444-444444444444',
-          sha256: 'a'.repeat(64),
-          contentType: 'text/csv; charset=utf-8',
-          attempts: 1,
-          error: null,
-          createdAt: '2020-01-01T00:00:00.000Z',
-          updatedAt: '2020-01-01T00:00:00.000Z',
-          expiresAt: '2020-01-02T00:00:00.000Z',
-        }),
-        listByEvent: async () => [],
-        claim: async () => null,
-        release: async () => {},
-        complete: async () => {},
-        fail: async () => {},
-      },
-      objectStorage: {
-        put: async () => {
-          throw new Error('unused');
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://id.example',
+            subject: 'viewer',
+          }),
         },
-        get: async () => {
-          storageReads++;
-          return null;
+        memberships: {
+          resolvePermissions: async () => new Set(['entry:read']),
         },
-        head: async () => null,
-        delete: async () => {},
-      },
-    });
+        artifactJobs: {
+          enqueue: async () => {
+            throw new Error('unused');
+          },
+          getById: async () => ({
+            id: jobId,
+            organizationId: orgId as never,
+            eventId: '22222222-2222-4222-8222-222222222222',
+            kind: 'entries_csv',
+            registrationGroupId: null,
+            fields: ['driver'],
+            filters: {},
+            delimiter: ';',
+            idempotencyKey: 'old-export',
+            status: 'ready',
+            objectId: '44444444-4444-4444-8444-444444444444',
+            sha256: 'a'.repeat(64),
+            contentType: 'text/csv; charset=utf-8',
+            attempts: 1,
+            error: null,
+            createdAt: '2020-01-01T00:00:00.000Z',
+            updatedAt: '2020-01-01T00:00:00.000Z',
+            expiresAt: '2020-01-02T00:00:00.000Z',
+          }),
+          listByEvent: async () => [],
+          claim: async () => null,
+          release: async () => {},
+          complete: async () => {},
+          fail: async () => {},
+        },
+        objectStorage: {
+          put: async () => {
+            throw new Error('unused');
+          },
+          get: async () => {
+            storageReads++;
+            return null;
+          },
+          head: async () => null,
+          delete: async () => {},
+        },
+      }),
+    );
     expect(
       (await app.request(`/admin/artifact-jobs/${jobId}/status`)).status,
     ).toBe(200);
@@ -1038,151 +1138,155 @@ describe('entry confirmation artifact routes', () => {
     const objectId = '55555555-5555-4555-8555-555555555555';
     let groupLookups = 0;
     const pdf = new TextEncoder().encode('%PDF synthetic');
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: orgId },
-      organizations: {
-        getById: async () => ({
-          id: orgId as never,
-          slug: 'fixture',
-          name: 'Tenant A Club',
-          status: 'active',
-          contactEmail: null,
-          websiteUrl: null,
-          timezone: 'UTC',
-          locale: 'en',
-          currency: 'EUR',
-        }),
-        update: async () => null,
-      },
-      events: {
-        listByOrganization: async () => [],
-        getById: async (_ctx, id) =>
-          id === eventId
-            ? {
-                id,
-                organizationId: orgId as never,
-                slug: 'race',
-                name: 'Tenant A Event',
-                startsOn: '2026-05-01',
-                endsOn: '2026-05-01',
-                status: 'open',
-                registrationOpensAt: null,
-                registrationClosesAt: null,
-                openedAt: null,
-                closedAt: null,
-                archivedAt: null,
-              }
-            : null,
-      },
-      authenticator: {
-        authenticate: async () => ({
-          issuer: 'https://issuer.example',
-          subject: 'admin-a',
-        }),
-      },
-      memberships: { resolvePermissions: async () => new Set(['entry:read']) },
-      entryConfirmations: {
-        getByGroup: async (_ctx, event, group) => {
-          groupLookups++;
-          return event === eventId && group === groupId
-            ? {
-                eventId,
-                eventName: 'Tenant A Event',
-                eventStartsOn: '2026-05-01',
-                registrationGroupId: groupId,
-                driverName: 'Driver A',
-                vehicles: ['A Car'],
-                classes: ['A Class'],
-                priceSnapshot: {
-                  version: '1',
-                  currency: 'EUR',
-                  calculatedAt: '2026-01-01T00:00:00.000Z',
-                  totalCents: 1000,
-                  lines: [],
-                },
-                paymentReference: 'RP-1',
-                orgaCodes: ['RACE-00001'],
-              }
-            : null;
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: orgId },
+        organizations: {
+          getById: async () => ({
+            id: orgId as never,
+            slug: 'fixture',
+            name: 'Tenant A Club',
+            status: 'active',
+            contactEmail: null,
+            websiteUrl: null,
+            timezone: 'UTC',
+            locale: 'en',
+            currency: 'EUR',
+          }),
+          update: async () => null,
         },
-      },
-      artifactJobs: {
-        enqueue: async (_ctx, input) => ({
-          ok: true,
-          job: {
-            id: docId,
-            organizationId: orgId as never,
-            eventId,
-            kind: input.kind,
-            registrationGroupId: groupId,
-            fields: [],
-            filters: {},
-            delimiter: ';',
-            expiresAt: null,
-            idempotencyKey: input.idempotencyKey,
-            status: 'queued',
-            objectId: null,
-            sha256: null,
-            contentType: null,
-            attempts: 0,
-            error: null,
-            createdAt: '2026-01-01T00:00:00.000Z',
-            updatedAt: '2026-01-01T00:00:00.000Z',
-          },
-        }),
-        getById: async (_ctx, id) =>
-          id === docId
-            ? {
-                id: docId,
-                organizationId: orgId as never,
-                eventId,
-                kind: 'confirmation_pdf',
-                registrationGroupId: groupId,
-                fields: [],
-                filters: {},
-                delimiter: ';',
-                expiresAt: null,
-                idempotencyKey: 'key',
-                status: 'ready',
-                objectId,
-                sha256: 'a'.repeat(64),
-                contentType: 'application/pdf',
-                attempts: 1,
-                error: null,
-                createdAt: '2026-01-01T00:00:00.000Z',
-                updatedAt: '2026-01-01T00:00:00.000Z',
-              }
-            : null,
-        listByEvent: async () => [],
-        claim: async () => null,
-        release: async () => {},
-        complete: async () => {},
-        fail: async () => {},
-      },
-      objectStorage: {
-        put: async () => ({
-          organizationId: orgId as never,
-          objectId,
-          contentType: 'application/pdf',
-          size: pdf.length,
-          sha256: 'a'.repeat(64),
-        }),
-        get: async (owner, id) =>
-          owner === orgId && id === objectId
-            ? {
-                ref: {
+        events: {
+          listByOrganization: async () => [],
+          getById: async (_ctx, id) =>
+            id === eventId
+              ? {
+                  id,
                   organizationId: orgId as never,
+                  slug: 'race',
+                  name: 'Tenant A Event',
+                  startsOn: '2026-05-01',
+                  endsOn: '2026-05-01',
+                  status: 'open',
+                  registrationOpensAt: null,
+                  registrationClosesAt: null,
+                  openedAt: null,
+                  closedAt: null,
+                  archivedAt: null,
+                }
+              : null,
+        },
+        authenticator: {
+          authenticate: async () => ({
+            issuer: 'https://issuer.example',
+            subject: 'admin-a',
+          }),
+        },
+        memberships: {
+          resolvePermissions: async () => new Set(['entry:read']),
+        },
+        entryConfirmations: {
+          getByGroup: async (_ctx, event, group) => {
+            groupLookups++;
+            return event === eventId && group === groupId
+              ? {
+                  eventId,
+                  eventName: 'Tenant A Event',
+                  eventStartsOn: '2026-05-01',
+                  registrationGroupId: groupId,
+                  driverName: 'Driver A',
+                  vehicles: ['A Car'],
+                  classes: ['A Class'],
+                  priceSnapshot: {
+                    version: '1',
+                    currency: 'EUR',
+                    calculatedAt: '2026-01-01T00:00:00.000Z',
+                    totalCents: 1000,
+                    lines: [],
+                  },
+                  paymentReference: 'RP-1',
+                  orgaCodes: ['RACE-00001'],
+                }
+              : null;
+          },
+        },
+        artifactJobs: {
+          enqueue: async (_ctx, input) => ({
+            ok: true,
+            job: {
+              id: docId,
+              organizationId: orgId as never,
+              eventId,
+              kind: input.kind,
+              registrationGroupId: groupId,
+              fields: [],
+              filters: {},
+              delimiter: ';',
+              expiresAt: null,
+              idempotencyKey: input.idempotencyKey,
+              status: 'queued',
+              objectId: null,
+              sha256: null,
+              contentType: null,
+              attempts: 0,
+              error: null,
+              createdAt: '2026-01-01T00:00:00.000Z',
+              updatedAt: '2026-01-01T00:00:00.000Z',
+            },
+          }),
+          getById: async (_ctx, id) =>
+            id === docId
+              ? {
+                  id: docId,
+                  organizationId: orgId as never,
+                  eventId,
+                  kind: 'confirmation_pdf',
+                  registrationGroupId: groupId,
+                  fields: [],
+                  filters: {},
+                  delimiter: ';',
+                  expiresAt: null,
+                  idempotencyKey: 'key',
+                  status: 'ready',
                   objectId,
-                  contentType: 'application/pdf',
-                  size: pdf.length,
                   sha256: 'a'.repeat(64),
-                },
-                body: pdf,
-              }
-            : null,
-        delete: async () => {},
-      },
-    });
+                  contentType: 'application/pdf',
+                  attempts: 1,
+                  error: null,
+                  createdAt: '2026-01-01T00:00:00.000Z',
+                  updatedAt: '2026-01-01T00:00:00.000Z',
+                }
+              : null,
+          listByEvent: async () => [],
+          claim: async () => null,
+          release: async () => {},
+          complete: async () => {},
+          fail: async () => {},
+        },
+        objectStorage: {
+          put: async () => ({
+            organizationId: orgId as never,
+            objectId,
+            contentType: 'application/pdf',
+            size: pdf.length,
+            sha256: 'a'.repeat(64),
+          }),
+          get: async (owner, id) =>
+            owner === orgId && id === objectId
+              ? {
+                  ref: {
+                    organizationId: orgId as never,
+                    objectId,
+                    contentType: 'application/pdf',
+                    size: pdf.length,
+                    sha256: 'a'.repeat(64),
+                  },
+                  body: pdf,
+                }
+              : null,
+          delete: async () => {},
+        },
+      }),
+    );
     const created = await app.request(
       `/admin/events/${eventId}/registration-groups/${groupId}/confirmation`,
       { method: 'POST', headers: { 'Idempotency-Key': 'pdf-key' } },

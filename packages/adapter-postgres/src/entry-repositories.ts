@@ -2,7 +2,8 @@ import type { Database } from './database.js';
 
 import { people, vehicles, entries } from './schema/entries.js';
 import { eventClasses } from './schema/organization.js';
-import { eq, and, ilike, or } from 'drizzle-orm';
+import { eq, and, ilike } from 'drizzle-orm';
+import { anyOf } from './sql-helpers.js';
 
 import { sql } from 'drizzle-orm';
 
@@ -41,7 +42,7 @@ export function createEntryExportRepository(
         for (const token of search.split(/\s+/)) {
           const pattern = `%${token.replace(/[\\%_]/g, '\\$&')}%`;
           predicates.push(
-            or(
+            anyOf(
               ilike(entries.requestedStartNumber, pattern),
               sql`${entries.id}::text ilike ${pattern}`,
               ilike(people.firstName, pattern),
@@ -50,7 +51,7 @@ export function createEntryExportRepository(
               ilike(vehicles.model, pattern),
               ilike(vehicles.registration, pattern),
               ilike(eventClasses.name, pattern),
-            )!,
+            ),
           );
         }
       const rows = await db

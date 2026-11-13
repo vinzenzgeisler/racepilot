@@ -1,11 +1,9 @@
 import type { ApiRoutesContext } from './context.js';
-import { registerArtifactRoutes } from './artifact.js';
 import { registerEntryExportRoutes } from './entry-exports.js';
 import { registerOverviewRoutes } from './overview.js';
 import { z } from 'zod';
 import { registerEntryDocumentRoutes } from './documents.js';
 import { registerEntryAdminActionRoutes } from './entry-admin-actions.js';
-import { requireEntryWriter } from './entry-write-guard.js';
 import {
   EntryDriverUpdateRequest,
   EntryVehicleUpdateRequest,
@@ -17,19 +15,16 @@ import {
 } from '@racepilot/core';
 
 export function registerEntriesRoutes(context: ApiRoutesContext): void {
-  const { app, deps, resolveMemberContext } = context;
-  registerArtifactRoutes(context);
+  const { app, deps, requireMember } = context;
   registerEntryDocumentRoutes(context);
   registerEntryExportRoutes(context);
   registerOverviewRoutes(context);
   registerEntryAdminActionRoutes(context);
 
   app.get('/admin/entries', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('entry:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entries?.listAdmin) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'entry:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = z
       .object({
         page: z.coerce.number().int().min(1).default(1),
@@ -94,12 +89,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
     });
   });
   app.get('/admin/events/:eventId/entry-counts', async (c) => {
-    const member = await resolveMemberContext(c.req.raw);
-    if (!member) return c.json({ error: 'Unauthorized' }, 401);
-    if (!member.permissions.has('entry:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entries?.countByStatus)
-      return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'entry:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const member = guard.context;
     const eventId = z.string().uuid().safeParse(c.req.param('eventId'));
     if (!eventId.success) return c.json({ error: 'Invalid event' }, 400);
     const counts = await deps.entries.countByStatus(member, eventId.data);
@@ -109,10 +101,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
     });
   });
   app.post('/admin/entries/:entryId/transitions', async (c) => {
-    const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+    const guard = await requireMember(c.req.raw, 'entry:write');
     if (!guard.ok) return c.json({ error: guard.error }, guard.status);
     const context = guard.context;
-    if (!deps.entries) return c.json({ error: 'Not found' }, 404);
     const body = await c.req.json().catch(() => null);
     const parsed = z
       .object({
@@ -137,7 +128,7 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
         parsed.data.reason,
         {
           entries: deps.entries,
-          ...(deps.entryWorkflows ? { workflows: deps.entryWorkflows } : {}),
+          workflows: deps.entryWorkflows,
         },
       );
       return result ? c.json(result) : c.json({ error: 'Not found' }, 404);
@@ -148,11 +139,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
   app.post(
     '/admin/entries/:entryId/status-dimensions/:dimension/transitions',
     async (c) => {
-      const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+      const guard = await requireMember(c.req.raw, 'entry:write');
       if (!guard.ok) return c.json({ error: guard.error }, guard.status);
       const context = guard.context;
-      if (!deps.entryStatusDimensions)
-        return c.json({ error: 'Not found' }, 404);
       const dimension = z
         .enum(['technical_inspection', 'waiver'])
         .safeParse(c.req.param('dimension'));
@@ -186,10 +175,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
     },
   );
   app.put('/admin/entries/:entryId/status-hints', async (c) => {
-    const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+    const guard = await requireMember(c.req.raw, 'entry:write');
     if (!guard.ok) return c.json({ error: guard.error }, guard.status);
     const context = guard.context;
-    if (!deps.entryStatusDimensions) return c.json({ error: 'Not found' }, 404);
     const parsed = z
       .object({
         hints: z
@@ -220,11 +208,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
       : c.json({ error: 'Not found' }, 404);
   });
   app.get('/admin/entries/:entryId/messages', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('entry:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entryDetails) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'entry:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const entryId = z.string().uuid().safeParse(c.req.param('entryId'));
     if (!entryId.success) return c.json({ error: 'Invalid entry' }, 400);
     const items = await deps.entryDetails.listMessages(context, entryId.data);
@@ -232,11 +218,9 @@ export function registerEntriesRoutes(context: ApiRoutesContext): void {
   });
   for (const subject of ['driver', 'vehicle'] as const) {
     app.patch(`/admin/entries/:entryId/${subject}`, async (c) => {
-      const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+      const guard = await requireMember(c.req.raw, 'entry:write');
       if (!guard.ok) return c.json({ error: guard.error }, guard.status);
       const context = guard.context;
-      if (!deps.entryDetails || !deps.entries)
-        return c.json({ error: 'Not found' }, 404);
       const entryId = z.string().uuid().safeParse(c.req.param('entryId'));
       const body = await c.req.json().catch(() => null);
       const parsed = (

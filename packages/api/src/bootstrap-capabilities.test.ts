@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createRequestContext, organizationId } from '@racepilot/core';
 import { createApp } from './index.js';
+import { testDeps } from './testing.js';
 
 const tenants = {
   a: '10000000-0000-4000-8000-00000000000a',
@@ -31,17 +32,19 @@ const resolve = async (request: Request) => {
 };
 
 describe('organization capabilities in the runtime bootstrap', () => {
-  const app = createApp({
-    config: { deploymentMode: 'cloud' },
-    contextResolvers: { public: resolve, member: resolve },
-    organizations: {
-      getById: async (ctx) => organization(ctx.organizationId),
-      update: async () => null,
-    },
-    events: { listByOrganization: async () => [], getById: async () => null },
-    organizationCapabilities: async (tenant) =>
-      tenant.organizationId === tenants.a ? ['mail.delivery'] : [],
-  });
+  const app = createApp(
+    testDeps({
+      config: { deploymentMode: 'cloud' },
+      contextResolvers: { public: resolve, member: resolve },
+      organizations: {
+        getById: async (ctx) => organization(ctx.organizationId),
+        update: async () => null,
+      },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      organizationCapabilities: async (tenant) =>
+        tenant.organizationId === tenants.a ? ['mail.delivery'] : [],
+    }),
+  );
   const capabilities = async (tenant: string) =>
     (
       await (

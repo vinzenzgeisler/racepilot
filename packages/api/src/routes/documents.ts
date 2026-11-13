@@ -4,7 +4,10 @@ import {
   EntryDocumentTypeSchema,
   ENTRY_DOCUMENT_MAX_BYTES,
 } from '@racepilot/contracts';
-import type { EntryDocumentErrorCode } from '@racepilot/core';
+import type {
+  EntryDocumentErrorCode,
+  ObjectStorageProvider,
+} from '@racepilot/core';
 import {
   decideEntryDocument,
   getEntryDocumentProjection,
@@ -12,7 +15,6 @@ import {
   setEntryDocumentTypes,
 } from '@racepilot/core';
 import type { ApiRoutesContext } from './context.js';
-import { requireMemberPermission } from './guard.js';
 
 const uuid = z.string().uuid();
 const actorFor = (context: {
@@ -54,16 +56,11 @@ const responseFor = (error: EntryDocumentErrorCode) => {
 export function registerEntryDocumentRoutes({
   app,
   deps,
-  resolveMemberContext,
+  requireMember,
 }: ApiRoutesContext): void {
   app.get('/admin/events/:eventId/entry-document-types', async (c) => {
-    const guard = await requireMemberPermission(
-      c.req.raw,
-      resolveMemberContext,
-      'entry:read',
-    );
+    const guard = await requireMember(c.req.raw, 'entry:read');
     if (!guard.ok) return c.json({ error: guard.error }, guard.status);
-    if (!deps.entryDocuments) return c.json({ error: 'Not found' }, 404);
     const eventId = uuid.safeParse(c.req.param('eventId'));
     if (!eventId.success) return c.json({ error: 'Invalid event' }, 400);
     const types = await deps.entryDocuments.listTypes(
@@ -74,13 +71,8 @@ export function registerEntryDocumentRoutes({
   });
 
   app.put('/admin/events/:eventId/entry-document-types', async (c) => {
-    const guard = await requireMemberPermission(
-      c.req.raw,
-      resolveMemberContext,
-      'entry:write',
-    );
+    const guard = await requireMember(c.req.raw, 'entry:write');
     if (!guard.ok) return c.json({ error: guard.error }, guard.status);
-    if (!deps.entryDocuments) return c.json({ error: 'Not found' }, 404);
     const eventId = uuid.safeParse(c.req.param('eventId'));
     const parsed = z
       .object({ types: z.array(EntryDocumentTypeSchema).max(30) })
@@ -108,13 +100,8 @@ export function registerEntryDocumentRoutes({
   });
 
   app.get('/admin/entries/:entryId/documents', async (c) => {
-    const guard = await requireMemberPermission(
-      c.req.raw,
-      resolveMemberContext,
-      'entry:read',
-    );
+    const guard = await requireMember(c.req.raw, 'entry:read');
     if (!guard.ok) return c.json({ error: guard.error }, guard.status);
-    if (!deps.entryDocuments) return c.json({ error: 'Not found' }, 404);
     const entryId = uuid.safeParse(c.req.param('entryId'));
     if (!entryId.success) return c.json({ error: 'Invalid entry' }, 400);
     const projection = await getEntryDocumentProjection(
@@ -126,9 +113,7 @@ export function registerEntryDocumentRoutes({
       const mapped = responseFor(projection.reason);
       return c.json({ error: mapped.message }, mapped.status);
     }
-    const entryView = deps.entries
-      ? await deps.entries.getById(guard.context, entryId.data)
-      : null;
+    const entryView = await deps.entries.getById(guard.context, entryId.data);
     const dimensions = entryView?.statusProjection?.dimensions ?? [];
     const waiver = dimensions.find((item) => item.key === 'waiver');
     const payment = dimensions.find((item) => item.key === 'payment');
@@ -161,94 +146,12 @@ export function registerEntryDocumentRoutes({
     });
   });
 
-  app.get('/admin/entries/:entryId/documents/:documentId/file', async (c) => {
-    const guard = await requireMemberPermission(
-      c.req.raw,
-      resolveMemberContext,
-      'entry:read',
-    );
-    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
-    if (!deps.entryDocuments || !deps.objectStorage)
-      return c.json({ error: 'Storage unavailable' }, 503);
-    const entryId = uuid.safeParse(c.req.param('entryId'));
-    const documentId = uuid.safeParse(c.req.param('documentId'));
-    if (!entryId.success || !documentId.success)
-      return c.json({ error: 'Invalid document' }, 400);
-    const documents = await deps.entryDocuments.listByEntry(
-      guard.context,
-      entryId.data,
-    );
-    if (!documents.ok) return c.json({ error: 'Not found' }, 404);
-    const document = documents.value.find(
-      (item) => item.id === documentId.data,
-    );
-    if (!document) return c.json({ error: 'Not found' }, 404);
-    const stored = await deps.objectStorage.get(
-      guard.context.organizationId,
-      document.objectId,
-    );
-    if (!stored || stored.ref.sha256 !== document.sha256)
-      return c.json({ error: 'Not found' }, 404);
-    return new Response(Uint8Array.from(stored.body), {
-      status: 200,
-      headers: {
-        'Content-Type': document.contentType,
-        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
-        'Cache-Control': 'private, no-store',
-      },
-    });
-  });
-
-  app.post('/admin/entries/:entryId/documents', async (c) => {
-    const guard = await requireMemberPermission(
-      c.req.raw,
-      resolveMemberContext,
-      'entry:write',
-    );
-    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
-    if (!deps.entryDocuments || !deps.objectStorage)
-      return c.json({ error: 'Storage unavailable' }, 503);
-    const entryId = uuid.safeParse(c.req.param('entryId'));
-    if (!entryId.success) return c.json({ error: 'Invalid entry' }, 400);
-    const form = await c.req.formData().catch(() => null);
-    const file = form?.get('file');
-    const typeKey = form?.get('typeKey');
-    if (
-      !(file instanceof File) ||
-      typeof typeKey !== 'string' ||
-      file.size > ENTRY_DOCUMENT_MAX_BYTES
-    )
-      return c.json({ error: 'Invalid upload' }, 422);
-    const result = await uploadEntryDocument(
-      guard.context,
-      {
-        entryId: entryId.data,
-        typeKey,
-        fileName: file.name,
-        contentType: file.type,
-        body: new Uint8Array(await file.arrayBuffer()),
-        actor: actorFor(guard.context),
-      },
-      { documents: deps.entryDocuments, storage: deps.objectStorage },
-    );
-    if (!result.ok) {
-      const mapped = responseFor(result.reason);
-      return c.json({ error: mapped.message }, mapped.status);
-    }
-    return c.json(result.value, 201);
-  });
-
   for (const status of ['reviewed', 'rejected'] as const)
     app.post(
       `/admin/entries/:entryId/documents/:documentId/${status}`,
       async (c) => {
-        const guard = await requireMemberPermission(
-          c.req.raw,
-          resolveMemberContext,
-          'entry:write',
-        );
+        const guard = await requireMember(c.req.raw, 'entry:write');
         if (!guard.ok) return c.json({ error: guard.error }, guard.status);
-        if (!deps.entryDocuments) return c.json({ error: 'Not found' }, 404);
         const entryId = uuid.safeParse(c.req.param('entryId'));
         const documentId = uuid.safeParse(c.req.param('documentId'));
         const parsed = EntryDocumentDecisionRequest.safeParse(
@@ -279,4 +182,75 @@ export function registerEntryDocumentRoutes({
         return c.json(result.value);
       },
     );
+}
+
+/** Document file download and upload; registered only with object storage. */
+export function registerEntryDocumentFileRoutes(
+  { app, deps, requireMember }: ApiRoutesContext,
+  storage: ObjectStorageProvider,
+): void {
+  app.get('/admin/entries/:entryId/documents/:documentId/file', async (c) => {
+    const guard = await requireMember(c.req.raw, 'entry:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const entryId = uuid.safeParse(c.req.param('entryId'));
+    const documentId = uuid.safeParse(c.req.param('documentId'));
+    if (!entryId.success || !documentId.success)
+      return c.json({ error: 'Invalid document' }, 400);
+    const documents = await deps.entryDocuments.listByEntry(
+      guard.context,
+      entryId.data,
+    );
+    if (!documents.ok) return c.json({ error: 'Not found' }, 404);
+    const document = documents.value.find(
+      (item) => item.id === documentId.data,
+    );
+    if (!document) return c.json({ error: 'Not found' }, 404);
+    const stored = await storage.get(
+      guard.context.organizationId,
+      document.objectId,
+    );
+    if (!stored || stored.ref.sha256 !== document.sha256)
+      return c.json({ error: 'Not found' }, 404);
+    return new Response(Uint8Array.from(stored.body), {
+      status: 200,
+      headers: {
+        'Content-Type': document.contentType,
+        'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(document.fileName)}`,
+        'Cache-Control': 'private, no-store',
+      },
+    });
+  });
+
+  app.post('/admin/entries/:entryId/documents', async (c) => {
+    const guard = await requireMember(c.req.raw, 'entry:write');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const entryId = uuid.safeParse(c.req.param('entryId'));
+    if (!entryId.success) return c.json({ error: 'Invalid entry' }, 400);
+    const form = await c.req.formData().catch(() => null);
+    const file = form?.get('file');
+    const typeKey = form?.get('typeKey');
+    if (
+      !(file instanceof File) ||
+      typeof typeKey !== 'string' ||
+      file.size > ENTRY_DOCUMENT_MAX_BYTES
+    )
+      return c.json({ error: 'Invalid upload' }, 422);
+    const result = await uploadEntryDocument(
+      guard.context,
+      {
+        entryId: entryId.data,
+        typeKey,
+        fileName: file.name,
+        contentType: file.type,
+        body: new Uint8Array(await file.arrayBuffer()),
+        actor: actorFor(guard.context),
+      },
+      { documents: deps.entryDocuments, storage },
+    );
+    if (!result.ok) {
+      const mapped = responseFor(result.reason);
+      return c.json({ error: mapped.message }, mapped.status);
+    }
+    return c.json(result.value, 201);
+  });
 }

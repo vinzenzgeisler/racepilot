@@ -5,10 +5,9 @@ import type { ApiRoutesContext } from './context.js';
 
 export function registerEventSetupRoute(apiContext: ApiRoutesContext): void {
   apiContext.app.post('/admin/events/setup', async (c) => {
-    const context = await apiContext.resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!apiContext.deps.eventSetup)
-      return c.json({ error: 'Event setup is not configured' }, 503);
+    const guard = await apiContext.requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const parsed = z
       .object({
         event: CreateEventRequest,

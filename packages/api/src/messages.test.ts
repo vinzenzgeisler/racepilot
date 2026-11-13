@@ -3,6 +3,7 @@ import { createRequestContext, organizationId } from '@racepilot/core';
 import type { ObjectStorageProvider } from '@racepilot/core';
 import type { ApiDeps } from './types.js';
 import { createApp } from './index.js';
+import { testDeps } from './testing.js';
 
 const orgId = '00000000-0000-4000-8000-000000000001';
 const eventId = '00000000-0000-4000-8000-000000000002';
@@ -81,30 +82,35 @@ function appFor(permissions = context.permissions) {
     get: async () => null,
     delete: async () => {},
   };
-  const app = createApp({
-    config: { deploymentMode: 'community', organizationId: orgId },
-    organizations: { getById: async () => null, update: async () => null },
-    events: {
-      listByOrganization: async () => [],
-      getById: async () => ({
-        id: eventId,
-        organizationId: context.organizationId,
-        slug: 'event',
-        name: 'Event',
-        startsOn: '2030-01-01',
-        endsOn: '2030-01-01',
-        status: 'open',
-        registrationOpensAt: null,
-        registrationClosesAt: null,
-        openedAt: null,
-        closedAt: null,
-        archivedAt: null,
-      }),
-    },
-    messages,
-    objectStorage,
-    contextResolvers: { public: async () => null, member: async () => member },
-  });
+  const app = createApp(
+    testDeps({
+      config: { deploymentMode: 'community', organizationId: orgId },
+      organizations: { getById: async () => null, update: async () => null },
+      events: {
+        listByOrganization: async () => [],
+        getById: async () => ({
+          id: eventId,
+          organizationId: context.organizationId,
+          slug: 'event',
+          name: 'Event',
+          startsOn: '2030-01-01',
+          endsOn: '2030-01-01',
+          status: 'open',
+          registrationOpensAt: null,
+          registrationClosesAt: null,
+          openedAt: null,
+          closedAt: null,
+          archivedAt: null,
+        }),
+      },
+      messages,
+      objectStorage,
+      contextResolvers: {
+        public: async () => null,
+        member: async () => member,
+      },
+    }),
+  );
   return { app, send, calls };
 }
 

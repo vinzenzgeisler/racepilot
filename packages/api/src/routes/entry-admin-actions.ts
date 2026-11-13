@@ -1,29 +1,26 @@
 import type { ApiRoutesContext } from './context.js';
 import { z } from 'zod';
 import { performEntryAdminAction } from '@racepilot/core';
-import { requireEntryWriter } from './entry-write-guard.js';
 
 export function registerEntryAdminActionRoutes(
   context: ApiRoutesContext,
 ): void {
-  const { app, deps, resolveMemberContext } = context;
+  const { app, deps, requireMember } = context;
   app.get('/admin/entries/:entryId', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
-    if (!context.permissions.has('entry:read'))
-      return c.json({ error: 'Forbidden' }, 403);
-    if (!deps.entries) return c.json({ error: 'Not found' }, 404);
+    const guard = await requireMember(c.req.raw, 'entry:read');
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const entry = await deps.entries.getById(context, c.req.param('entryId'));
     if (!entry) return c.json({ error: 'Not found' }, 404);
     const availableActions = context.permissions.has('entry:write')
       ? [
-          ...((await deps.entryAdminActions?.availableActions(
+          ...((await deps.entryAdminActions.availableActions(
             context,
             entry.id,
           )) ?? []),
         ]
       : [];
-    if (context.permissions.has('entry:write') && deps.entryWorkflows) {
+    if (context.permissions.has('entry:write')) {
       const pinned = await deps.entryWorkflows.getPinnedForEntry(
         context,
         entry.id,
@@ -44,10 +41,9 @@ export function registerEntryAdminActionRoutes(
     return c.json({ ...entry, availableActions });
   });
   app.post('/admin/entries/:entryId/actions', async (c) => {
-    const guard = await requireEntryWriter(c.req.raw, resolveMemberContext);
+    const guard = await requireMember(c.req.raw, 'entry:write');
     if (!guard.ok) return c.json({ error: guard.error }, guard.status);
     const context = guard.context;
-    if (!deps.entryAdminActions) return c.json({ error: 'Not found' }, 404);
     const entryId = z.string().uuid().safeParse(c.req.param('entryId'));
     const body = await c.req.json().catch(() => null);
     const parsed = z

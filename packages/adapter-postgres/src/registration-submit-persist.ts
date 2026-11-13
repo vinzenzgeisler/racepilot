@@ -207,7 +207,7 @@ export async function persistRegistrationSubmission(args: {
       variables: {
         verificationUrl,
         recipientName: `${payload.person.firstName.trim()} ${payload.person.lastName.trim()}`,
-        orgaCode: orgaCodes.length === 1 ? orgaCodes[0]! : orgaCodes.join(', '),
+        orgaCode: orgaCodes.join(', '),
         orgaCodes: orgaCodes.join(', '),
       },
       correlationId: payload.submissionId,

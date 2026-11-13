@@ -19,6 +19,7 @@ import {
   TimingConfigSchema,
 } from './timing-module.js';
 import { installTimingRoutes, safeCSVCell } from './timing.js';
+import { testDeps } from './testing.js';
 
 const org = '10000000-0000-4000-8000-000000000001';
 const orgB = '10000000-0000-4000-8000-000000000002';
@@ -171,16 +172,18 @@ function build() {
     capabilities: new Set(),
     correlationId: 'public',
   });
-  const app = createApp({
-    config: { deploymentMode: 'cloud' },
-    organizations: { getById: async () => null, update: async () => null },
-    events: { listByOrganization: async () => [], getById: async () => null },
-    contextResolvers: {
-      public: async () => publicContext,
-      member: async (r) => context(r),
-    },
-    modules,
-  });
+  const app = createApp(
+    testDeps({
+      config: { deploymentMode: 'cloud' },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      contextResolvers: {
+        public: async () => publicContext,
+        member: async (r) => context(r),
+      },
+      modules,
+    }),
+  );
   return { app, activation, repo, measurements, versions, entryCategories };
 }
 const perms =
