@@ -1,0 +1,47 @@
+.exports-view {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+  max-width: var(--workspace-list-max-width);
+}
+
+.export-form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.export-form p {
+  margin: 0;
+}
+
+.export-filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(var(--metric-min-width), 1fr));
+  gap: var(--space-4);
+}
+
+.export-delimiter {
+  max-width: calc(var(--metric-min-width) * 2 + var(--space-4));
+}
+
+.export-form > button {
+  justify-self: start;
+}
+
+.export-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  border: var(--line-group) solid var(--color-line);
+  padding: var(--space-4);
+}
+
+.export-fields legend {
+  font: var(--text-label);
+}
+
+.export-fields label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}

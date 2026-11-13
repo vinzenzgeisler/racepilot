@@ -4,9 +4,14 @@ import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from '../entries/AdminEntriesModel.js';
 import { AdminEntries } from '../entries/AdminEntries.js';
 import { AppShell } from './AppShell.js';
+import { AdminOverview } from '../overview/AdminOverview.js';
+import { AdminExports } from '../exports/AdminExports.js';
+import type { EntryFilters } from '../overview/overviewModel.js';
 import { AdminMessages } from '../messages/AdminMessages.js';
+import type { MessageSeed } from '../messages/messageSeed.js';
 import { EntryPreview } from './EntryPreview.js';
 import { RegistrationFormSettings } from '../registration/RegistrationFormSettings.js';
+import { EventDocumentSettings } from '../event-documents/EventDocumentSettings.js';
 import { AdminWorkflow } from '../workflow/AdminWorkflow.js';
 import { EventSetup } from '../event-setup/EventSetup.js';
 import { adminFetch, getAdminIdentity } from '../../auth.js';
@@ -24,10 +29,14 @@ export function AdminApplication() {
     }>
   >([]);
   const [entryCount, setEntryCount] = useState(0);
+  const [entriesTarget, setEntriesTarget] = useState<{
+    revision: number;
+    filters: EntryFilters;
+  }>({ revision: 0, filters: {} });
   const [selectedEvent, setSelectedEvent] = useState('');
 
   const [selectedEntry, setSelectedEntry] = useState<Entry | null>(null);
-  const [messageEntryId, setMessageEntryId] = useState<string | null>(null);
+  const [messageSeed, setMessageSeed] = useState<MessageSeed | null>(null);
   const [previewWorkflow, setPreviewWorkflow] = useState<WorkflowView | null>(
     null,
   );
@@ -40,8 +49,9 @@ export function AdminApplication() {
   const changeEvent = useCallback((id: string) => {
     activeEvent.current = id;
     setSelectedEvent(id);
+    setEntriesTarget((current) => ({ ...current, filters: {} }));
     setSelectedEntry(null);
-    setMessageEntryId(null);
+    setMessageSeed(null);
     setDetailOpen(false);
     setPreviewOpen(true);
     setPreviewBusy(false);
@@ -136,17 +146,18 @@ export function AdminApplication() {
     () => setEntriesRevision((value) => value + 1),
     [],
   );
+  const openMessages = useCallback((seed: MessageSeed) => {
+    setMessageSeed(seed);
+    setDetailOpen(false);
+    setPreviewOpen(false);
+  }, []);
   const entryPreview = selectedEntry ? (
     <EntryPreview
       entry={selectedEntry}
       workflow={previewWorkflow}
       busy={previewBusy}
       onClose={closePreview}
-      onMessage={() => {
-        setMessageEntryId(selectedEntry.id);
-        setDetailOpen(false);
-        setPreviewOpen(false);
-      }}
+      onMessage={() => openMessages({ entryId: selectedEntry.id })}
       onOpenDetail={() => {
         setDetailOpen(true);
         setPreviewOpen(false);
@@ -193,10 +204,11 @@ export function AdminApplication() {
   return (
     <AppShell
       events={events}
-      messageEntryId={messageEntryId}
-      onClearMessageSelection={() => setMessageEntryId(null)}
+      messageEntryId={messageSeed?.entryId ?? null}
+      onClearMessageSelection={() => setMessageSeed(null)}
       activeEvent={selectedEvent}
       entryCount={entryCount}
+      entriesNavigationRevision={entriesTarget.revision}
       onEventChange={changeEvent}
       previewOpen={previewOpen && !detailOpen}
       detailOpen={detailOpen}
@@ -204,8 +216,25 @@ export function AdminApplication() {
       onClosePreview={closePreview}
     >
       {(view) =>
-        view === 'entries' ? (
+        view === 'overview' ? (
+          <AdminOverview
+            eventId={selectedEvent}
+            onTotalChange={setEntryCount}
+            onOpenEntries={(filters) => {
+              setSelectedEntry(null);
+              setDetailOpen(false);
+              setEntriesTarget((current) => ({
+                revision: current.revision + 1,
+                filters,
+              }));
+            }}
+          />
+        ) : view === 'exports' ? (
+          <AdminExports eventId={selectedEvent} />
+        ) : view === 'entries' ? (
           <AdminEntries
+            filterRevision={entriesTarget.revision}
+            initialFilters={entriesTarget.filters}
             preview={previewOpen && !detailOpen ? entryPreview : undefined}
             mobilePreviewOpen={
               previewOpen && !detailOpen && Boolean(selectedEntry)
@@ -223,6 +252,7 @@ export function AdminApplication() {
               setDetailOpen(false);
               setPreviewOpen(true);
             }}
+            onMessage={openMessages}
             onSelectionChange={handleSelectionChange}
             onWorkflowChange={setPreviewWorkflow}
             entriesRevision={entriesRevision}
@@ -233,7 +263,7 @@ export function AdminApplication() {
         ) : view === 'messages' ? (
           <AdminMessages
             eventId={selectedEvent}
-            initialEntryId={messageEntryId ?? undefined}
+            seed={messageSeed ?? undefined}
           />
         ) : view === 'workflow' ? (
           <AdminWorkflow eventId={selectedEvent} events={events} />
@@ -248,7 +278,10 @@ export function AdminApplication() {
             }}
           />
         ) : view === 'account' ? (
-          <RegistrationFormSettings eventId={selectedEvent} />
+          <>
+            <EventDocumentSettings eventId={selectedEvent} />
+            <RegistrationFormSettings eventId={selectedEvent} />
+          </>
         ) : null
       }
     </AppShell>

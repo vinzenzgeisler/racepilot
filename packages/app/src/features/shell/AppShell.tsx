@@ -20,15 +20,30 @@ type EventOption = {
   slug?: string;
   registrationClosesAt?: string | null;
 };
-type View = 'entries' | 'workflow' | 'setup' | 'account' | 'messages';
+type View =
+  | 'overview'
+  | 'entries'
+  | 'workflow'
+  | 'setup'
+  | 'account'
+  | 'exports'
+  | 'messages';
 const VIEW_TITLES: Record<View, string> = {
+  overview: 'Übersicht',
+  exports: 'Exporte',
   entries: 'Nennungen',
   workflow: 'Nennungsablauf',
   setup: 'Veranstaltung einrichten',
   account: 'Einstellungen',
   messages: 'Nachrichten',
 };
-type NavItem = { id: View; label: string; icon: IconName; mobile?: boolean };
+type NavItem = {
+  id: View;
+  label: string;
+  icon: IconName;
+  mobile?: boolean;
+  mobileLabel?: string;
+};
 export const APP_NAVIGATION_REGISTRY: Array<{
   label: string;
   items: NavItem[];
@@ -36,18 +51,42 @@ export const APP_NAVIGATION_REGISTRY: Array<{
   {
     label: 'Veranstaltung',
     items: [
+      {
+        id: 'overview',
+        label: 'Übersicht',
+        mobileLabel: 'Start',
+        icon: 'overview',
+      },
       { id: 'entries', label: 'Nennungen', icon: 'list' },
-      { id: 'setup', label: 'Einrichten', icon: 'calendar' },
+      {
+        id: 'setup',
+        label: 'Einrichten',
+        mobileLabel: 'Event',
+        icon: 'calendar',
+      },
     ],
   },
   {
     label: 'Kommunikation',
-    items: [{ id: 'messages', label: 'Nachrichten', icon: 'mail' }],
+    items: [
+      {
+        id: 'messages',
+        label: 'Nachrichten',
+        mobileLabel: 'Post',
+        icon: 'mail',
+      },
+    ],
   },
   {
     label: 'Konto',
     items: [
-      { id: 'account', label: 'Einstellungen', icon: 'more' },
+      { id: 'exports', label: 'Exporte', icon: 'export' },
+      {
+        id: 'account',
+        label: 'Einstellungen',
+        mobileLabel: 'Konto',
+        icon: 'more',
+      },
       {
         id: 'workflow',
         label: 'Nennungsablauf',
@@ -69,6 +108,7 @@ export function AppShell({
   onEventChange,
   messageEntryId,
   onClearMessageSelection,
+  entriesNavigationRevision,
 }: {
   children: ReactNode | ((view: View) => ReactNode);
   previewOpen?: boolean;
@@ -81,8 +121,16 @@ export function AppShell({
   onEventChange?: (id: string) => void;
   messageEntryId?: string | null;
   onClearMessageSelection?: () => void;
+  entriesNavigationRevision?: number;
 }) {
-  const [view, setView] = useState<View>('entries');
+  const [selection, setSelection] = useState<{ view: View; revision: number }>({
+    view: 'entries',
+    revision: 0,
+  });
+  const view =
+    (entriesNavigationRevision ?? 0) > selection.revision
+      ? 'entries'
+      : selection.view;
   const currentView = messageEntryId && view === 'entries' ? 'messages' : view;
   const selectedEvent = events.find((event) => event.id === activeEvent);
   useEffect(() => {
@@ -131,7 +179,11 @@ export function AppShell({
             const item = APP_NAVIGATION_REGISTRY.flatMap(
               (group) => group.items,
             ).find((entry) => entry.id === id);
-            if (item) setView(item.id);
+            if (item)
+              setSelection({
+                view: item.id,
+                revision: entriesNavigationRevision ?? 0,
+              });
           }}
           user={
             identity ? (

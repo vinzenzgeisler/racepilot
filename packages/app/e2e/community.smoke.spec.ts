@@ -281,6 +281,55 @@ test('Community registration and admin lifecycle with API setup', async ({
   const link = text.match(/https?:\/\/[^\s"<>]+/)?.[0];
   expect(link, 'verification link from Mailpit').toBeTruthy();
   if (!link) throw new Error('verification link from Mailpit is missing');
+
+  // An admin follows the server-supplied warning filter and downloads the same
+  // unverified entry as a semicolon-separated Excel CSV.
+  await page.goto('/app');
+  await page
+    .getByRole('combobox', { name: 'Veranstaltung' })
+    .selectOption(event.id);
+  const navigation = page.locator('.nb-admin-nav');
+  await navigation.getByRole('button', { name: 'Übersicht' }).click();
+  await expect(page.getByRole('region', { name: 'Warnungen' })).toContainText(
+    'ohne bestätigte E-Mail-Adresse',
+  );
+  const filteredRequest = page.waitForRequest(
+    (request) =>
+      request.url().includes('/admin/entries?') &&
+      new URL(request.url()).searchParams.get('verificationStatus') ===
+        'unverified' &&
+      new URL(request.url()).searchParams.get('eventId') === event.id,
+  );
+  await page.getByRole('button', { name: 'Nennungen anzeigen' }).click();
+  await filteredRequest;
+  await expect(
+    page.getByRole('row').filter({ hasText: participantName }),
+  ).toBeVisible();
+  await navigation.getByRole('button', { name: 'Exporte' }).click();
+  await page
+    .getByRole('combobox', { name: 'E-Mail-Prüfung' })
+    .selectOption('unverified');
+  await expect(
+    page.getByRole('combobox', { name: 'Trennzeichen' }),
+  ).toHaveValue(';');
+  await page.getByRole('button', { name: 'CSV-Export erstellen' }).click();
+  const downloadButton = page
+    .getByRole('button', { name: 'CSV herunterladen' })
+    .first();
+  await expect(downloadButton).toBeVisible({ timeout: 30_000 });
+  const [csvDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    downloadButton.click(),
+  ]);
+  const csvPath = await csvDownload.path();
+  expect(csvPath).toBeTruthy();
+  if (!csvPath) throw new Error('CSV download path is missing');
+  const csvBytes = readFileSync(csvPath);
+  expect([...csvBytes.subarray(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  const csvText = csvBytes.toString('utf8');
+  expect(csvText).toContain(participantName);
+  expect(csvText.split('\r\n')[0]).toContain('";"');
+
   await page.goto(link);
   await expect(page.getByRole('status')).toContainText(
     /E-Mail bestätigt|Email verified/i,
@@ -342,6 +391,19 @@ test('Community registration and admin lifecycle with API setup', async ({
   expect(downloadPath, 'downloaded registration file path').toBeTruthy();
   if (!downloadPath) throw new Error('download path is missing');
   expect(readFileSync(downloadPath)).toEqual(uploadedPng);
+  await entryDetail.getByRole('button', { name: 'PDF erstellen' }).click();
+  const confirmationDownload = entryDetail.getByRole('button', {
+    name: 'PDF herunterladen',
+  });
+  await expect(confirmationDownload).toBeVisible({ timeout: 30_000 });
+  const [pdfDownload] = await Promise.all([
+    page.waitForEvent('download'),
+    confirmationDownload.click(),
+  ]);
+  const pdfPath = await pdfDownload.path();
+  expect(pdfPath).toBeTruthy();
+  if (!pdfPath) throw new Error('PDF download path is missing');
+  expect(readFileSync(pdfPath).subarray(0, 4).toString()).toBe('%PDF');
   await shots('admin-entry-detail');
   await expect(page.getByRole('region', { name: 'Verlauf' })).toContainText(
     /zugelassen|angenommen/i,
@@ -371,6 +433,43 @@ test('Community registration and admin lifecycle with API setup', async ({
     .poll(() => demoRows.count(), { timeout: 90_000 })
     .toBeGreaterThan(12);
   await shots('demo-historic-list');
+  const designShotDirectory = process.env.OVERVIEW_SCREENSHOT_DIR;
+  if (designShotDirectory) mkdirSync(designShotDirectory, { recursive: true });
+  for (const [view, title] of [
+    ['Übersicht', 'Übersicht'],
+    ['Exporte', 'Exporte'],
+  ]) {
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page
+      .locator('.nb-admin-nav')
+      .getByRole('button', { name: view })
+      .click();
+    await expect(
+      page.getByRole('heading', { level: 1, name: title }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole('heading', {
+        name:
+          view === 'Übersicht' ? 'Nennungen je Status' : 'Nennliste als CSV',
+      }),
+    ).toBeVisible();
+    for (const [width, height] of [
+      [1920, 1080],
+      [1440, 900],
+      [390, 844],
+    ]) {
+      await page.setViewportSize({ width, height });
+      if (designShotDirectory)
+        await page.screenshot({
+          path: `${designShotDirectory}/${view.toLowerCase()}-${width}x${height}.png`,
+        });
+    }
+  }
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await page
+    .locator('.nb-admin-nav')
+    .getByRole('button', { name: 'Nennungen' })
+    .click();
   await demoRows.nth(1).locator('button[data-entry-action]').click();
   const demoPreview = page.getByRole('complementary', {
     name: 'Nennungsvorschau',

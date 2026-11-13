@@ -12,6 +12,7 @@ export const EntryDocumentTypeSchema = z.object({
   key: z.string().regex(/^[a-z][a-z0-9_-]{0,63}$/),
   name: z.string().trim().min(1).max(120),
   required: z.boolean(),
+  enabled: z.boolean().optional(),
   hint: z.string().trim().max(500).nullable(),
 });
 export const UpdateEntryDocumentTypesRequest = z
@@ -90,3 +91,10 @@ export const EntryDocumentProjectionSchema = z
     lines: z.array(EntryDocumentLineSchema),
   })
   .strict();
+
+export type EntryDocumentType = z.infer<typeof EntryDocumentTypeSchema>;
+export type EntryDocumentRecord = z.infer<typeof EntryDocumentRecordSchema>;
+export type EntryDocumentLine = z.infer<typeof EntryDocumentLineSchema>;
+export type EntryDocumentProjection = z.infer<
+  typeof EntryDocumentProjectionSchema
+>;
