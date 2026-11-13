@@ -132,3 +132,43 @@ describe('Community OIDC browser session', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('edition auth client', () => {
+  it('uses a supplied client without starting the Community OIDC flow', async () => {
+    vi.resetModules();
+    vi.clearAllMocks();
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const auth = await import('./auth.js');
+    const response = new Response(null, { status: 204 });
+    const client = {
+      restoreAdminSession: vi.fn().mockResolvedValue('ready' as const),
+      signIn: vi.fn().mockResolvedValue(undefined),
+      signOut: vi.fn().mockResolvedValue(undefined),
+      getAdminIdentity: vi
+        .fn()
+        .mockReturnValue({ name: 'Cloud Admin', role: 'admin' }),
+      adminFetch: vi.fn().mockResolvedValue(response),
+    };
+    auth.configureAuthClient(client);
+    try {
+      expect(await auth.restoreAdminSession()).toBe('ready');
+      expect(auth.getAdminIdentity()).toEqual({
+        name: 'Cloud Admin',
+        role: 'admin',
+      });
+      expect(await auth.adminFetch('/admin/events')).toBe(response);
+      await auth.signIn();
+      await auth.signOut();
+      expect(client.adminFetch).toHaveBeenCalledWith(
+        '/admin/events',
+        undefined,
+      );
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(oidc.getUser).not.toHaveBeenCalled();
+    } finally {
+      auth.configureAuthClient(null);
+      vi.unstubAllGlobals();
+    }
+  });
+});
