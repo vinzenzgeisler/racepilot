@@ -8,6 +8,7 @@ export function EntryListRow({
   imageAlt = '',
   className,
   number,
+  orgaCode,
   selected = false,
   checked = false,
   onSelect,
@@ -28,6 +29,8 @@ export function EntryListRow({
   imageAlt?: string;
   className: string;
   number?: string | null;
+  /** Organisation code; the widest list stage shows it as its own column (A6 priority 4). */
+  orgaCode?: string | null;
   selected?: boolean;
   checked?: boolean;
   onSelect?: (selected: boolean) => void;
@@ -101,6 +104,9 @@ export function EntryListRow({
       </td>
       <td data-priority="3" className="nb-entry-list-waiver">
         {waiver}
+      </td>
+      <td data-priority="4" className="nb-entry-list-orga">
+        {orgaCode ?? '—'}
       </td>
       <td
         data-priority="1"

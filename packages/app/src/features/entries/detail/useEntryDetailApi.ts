@@ -18,11 +18,13 @@ const failure = (status: number, action: string, code?: string) =>
         : status === 409
           ? code === 'stale'
             ? 'Die Nennung wurde inzwischen geändert. Bitte lade die Detailansicht neu.'
-            : code === 'capacity'
-              ? 'Die Zielklasse ist inzwischen voll.'
-              : code === 'class'
-                ? 'Die Zielklasse ist geschlossen oder gehört nicht zu dieser Veranstaltung.'
-                : 'Name, Geburtsdatum und Land gehören zur Person und gelten auch für ihre Nennungen in anderen Veranstaltungen. Sie lassen sich hier nicht ändern.'
+            : code === 'document_not_uploaded'
+              ? 'Dieses Dokument wurde inzwischen entschieden. Bitte lade die Detailansicht neu.'
+              : code === 'capacity'
+                ? 'Die Zielklasse ist inzwischen voll.'
+                : code === 'class'
+                  ? 'Die Zielklasse ist geschlossen oder gehört nicht zu dieser Veranstaltung.'
+                  : 'Name, Geburtsdatum und Land gehören zur Person und gelten auch für ihre Nennungen in anderen Veranstaltungen. Sie lassen sich hier nicht ändern.'
           : status === 422
             ? code === 'reason'
               ? 'Bitte gib eine Begründung ein.'
@@ -173,6 +175,20 @@ export function useEntryDetailApi(
         `/admin/invoices/${encodeURIComponent(invoiceId)}/payments`,
         { method: 'POST', body: JSON.stringify({ amountCents, reason }) },
         'Zahlungen erfassen',
+        false,
+      ),
+    reviewDocument: (documentId: string) =>
+      run(
+        `${entryPath}/documents/${encodeURIComponent(documentId)}/reviewed`,
+        { method: 'POST', body: JSON.stringify({ reason: '' }) },
+        'Dokumente prüfen',
+        false,
+      ),
+    rejectDocument: (documentId: string, reason: string) =>
+      run(
+        `${entryPath}/documents/${encodeURIComponent(documentId)}/rejected`,
+        { method: 'POST', body: JSON.stringify({ reason }) },
+        'Dokumente prüfen',
         false,
       ),
     transitionDimension: (

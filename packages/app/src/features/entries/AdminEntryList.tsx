@@ -79,9 +79,20 @@ export function AdminEntryList(props: Props) {
           'Zahlung',
           'Abnahme',
           'Haftverzicht',
+          'Orga-Code',
           '',
         ]}
-        headerCellPriorities={[undefined, 2, 1, undefined, undefined, 3, 3, 1]}
+        headerCellPriorities={[
+          undefined,
+          2,
+          1,
+          undefined,
+          undefined,
+          3,
+          3,
+          4,
+          1,
+        ]}
         headerCellClassNames={[
           undefined,
           undefined,
@@ -90,6 +101,7 @@ export function AdminEntryList(props: Props) {
           undefined,
           'nb-entry-list-inspection',
           'nb-entry-list-waiver',
+          'nb-entry-list-orga',
           undefined,
         ]}
       >
@@ -109,7 +121,7 @@ export function AdminEntryList(props: Props) {
           ))}
         {apiState === 'ready' && !items.length && (
           <tr>
-            <td colSpan={8}>Keine Nennungen für diese Filter.</td>
+            <td colSpan={9}>Keine Nennungen für diese Filter.</td>
           </tr>
         )}
       </DataTable>

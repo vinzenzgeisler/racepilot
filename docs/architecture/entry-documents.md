@@ -2,7 +2,7 @@
 
 ## Abgeleitete Fachregeln
 
-- Unterlagen sind Event-Vorlagen mit Name, Pflichtkennzeichen und Hinweis. Uploads sind eigene, tenant- und nennungsgebundene Datensätze. Pro Vorlage und Nennung gibt es höchstens einen aktiven Upload; ein erneuter Upload ersetzt die vorherige Datei nicht still, sondern erhält eine nachvollziehbare Revision.
+- Unterlagen sind Event-Vorlagen mit Name, Pflichtkennzeichen, Hinweis und Aktiv-Status. Deaktivierte Vorlagen bleiben in der Konfiguration gespeichert und können erneut aktiviert werden; die Nennungsprojektion berücksichtigt nur aktive Vorlagen. Uploads sind eigene, tenant- und nennungsgebundene Datensätze. Pro Vorlage und Nennung gibt es höchstens einen aktiven Upload; ein erneuter Upload ersetzt die vorherige Datei nicht still, sondern erhält eine nachvollziehbare Revision.
 - Der Uploadstatus folgt `missing -> uploaded -> reviewed | rejected`. Ablehnung benötigt einen Grund; erneuter Upload startet wieder bei `uploaded`. Prüfung und Ablehnung werden mit Akteur und UTC-Zeitpunkt protokolliert.
 - Vollständigkeit wird aus konfigurierten Pflichttypen und deren aktuellen Upload-Datensätzen berechnet. Optionale Typen zählen nicht. Zahlung und Haftverzicht bleiben eigenständige, typisierte Statuszeilen und sind niemals Dokument-Uploads.
 - Dateiinhalte liegen ausschließlich im bestehenden tenant-scoped ObjectStorage-Port. Dokumentmetadaten/Audit sind relational. Soft-Delete einer Nennung löscht die Datei nicht: die Datei wird wie die Nennungsdaten bis zum Ende der für Nennungen geltenden Aufbewahrungsfrist behalten. #119 löscht ausschließlich abgelaufene, noch nicht gebundene Uploads; gebundene Unterlagen werden durch diesen Cleanup nicht erfasst. Eine endgültige Nennungsbereinigung muss Metadaten und Storage-Objekte gemeinsam, tenant-scoped und retryfähig löschen; diese Issue liefert keinen automatischen Hard-Delete und vermeidet dadurch vorzeitigen Datenverlust.
@@ -13,4 +13,4 @@ Die MSC-Referenz berechnet Codes aus Event und Fahrer via MD5/Base36; das erzeug
 
 ## API
 
-Admin-Listenprojektion enthält Code und Dokumentenzähler; Vorschau/Detail enthalten zusätzlich typisierte Unterlagen- und Statuszeilen. Uploads, Prüfung und Ablehnung sind serverseitige Use Cases mit Tenant-/Entry-Ownership-Prüfung und `entry:write`; lesende Projektionen erfordern `entry:read`.
+Die Admin-Konfigurationsroute liefert auch deaktivierte Vorlagen mit `enabled`; die Nennungsprojektion und Upload-Freigabe berücksichtigen nur aktive Vorlagen. Admin-Listenprojektion enthält Code und Dokumentenzähler; Vorschau/Detail enthalten zusätzlich typisierte Unterlagen- und Statuszeilen. Uploads, Prüfung und Ablehnung sind serverseitige Use Cases mit Tenant-/Entry-Ownership-Prüfung und `entry:write`; lesende Projektionen erfordern `entry:read`.

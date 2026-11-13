@@ -122,7 +122,6 @@ export {
   EntryDocumentLineSchema,
   EntryDocumentProjectionSchema,
 } from './documents.js';
-
 export {
   EntryFilterKeySchema,
   OverviewWarningSchema,
@@ -150,3 +149,9 @@ export type {
   ExportJobStatus,
   ExportQueued,
 } from './overview.js';
+export type {
+  EntryDocumentType,
+  EntryDocumentRecord,
+  EntryDocumentLine,
+  EntryDocumentProjection,
+} from './documents.js';

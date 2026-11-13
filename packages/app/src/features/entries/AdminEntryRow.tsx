@@ -9,6 +9,7 @@ import {
 } from '@racepilot/ui';
 import type { WorkflowView } from './AdminEntriesModel.js';
 import { EntryStatusBadge } from './EntryStatusBadge.js';
+import { documentStatusView, uploadLines } from './documents/documentLines.js';
 type Selection = { eventId: string; ids: Set<string> };
 function Dimension({
   entry,
@@ -61,23 +62,41 @@ export function AdminEntryRow({
       vehicle={vehicle}
       imageUrl={details?.vehicle.imageUrl ?? null}
       imageAlt="Fahrzeugbild"
-      hints={entry.statusProjection?.hints
-        .filter((hint) => hint.present)
-        .map((hint) => (
-          <HintLabel key={hint.key}>
-            {hint.key === 'double_starter'
-              ? 'Doppelstarter'
-              : hint.key === 'passenger'
-                ? 'Beifahrer'
-                : 'Nachnennung'}
-          </HintLabel>
-        ))}
+      hints={
+        <>
+          {entry.statusProjection?.hints
+            .filter((hint) => hint.present)
+            .map((hint) => (
+              <HintLabel key={hint.key}>
+                {hint.key === 'double_starter'
+                  ? 'Doppelstarter'
+                  : hint.key === 'passenger'
+                    ? 'Beifahrer'
+                    : 'Nachnennung'}
+              </HintLabel>
+            ))}
+          {entry.documentProjection &&
+            entry.documentProjection.requiredCount > 0 && (
+              <span
+                title={uploadLines(entry)
+                  .map(
+                    (line) =>
+                      `${line.label}: ${documentStatusView(line.status).label}`,
+                  )
+                  .join(' · ')}
+              >
+                <HintLabel>{`Unterlagen ${entry.documentProjection.uploadedRequiredCount}/${entry.documentProjection.requiredCount}`}</HintLabel>
+              </span>
+            )}
+        </>
+      }
       className={
         details?.eventClass.name ??
         classes.find((item) => item.id === entry.classId)?.name ??
         '—'
       }
       number={entry.requestedStartNumber ?? details?.startNumber ?? null}
+      orgaCode={entry.orgaCode ?? null}
       selected={selected?.id === entry.id}
       checked={selectedIds.has(entry.id)}
       selectLabel={`${name} auswählen`}

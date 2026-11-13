@@ -17,6 +17,7 @@ import { useOpenEntryDetail } from './useOpenEntryDetail.js';
 import { useEntryChangesRefresh } from './useEntryChangesRefresh.js';
 import { useSharedSelection } from './useSharedSelection.js';
 import type { AdminEntriesProps } from './AdminEntriesProps.js';
+import { useEntrySearch } from './useEntrySearch.js';
 
 /** Event changes reset view state and cancel requests scoped to the previous event. */
 
@@ -35,6 +36,7 @@ function AdminEntriesView({
   mobilePreviewOpen,
   autoPreview = false,
   onOpenDetail,
+  onMessage,
   onCloseDetail,
   onSelectionChange,
   onWorkflowChange,
@@ -179,17 +181,7 @@ function AdminEntriesView({
     closeDetail,
     setSelected,
   });
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      () => {
-        setPage(1);
-        clearSelection();
-        setApplied(draft);
-      },
-      draft.search ? 180 : 0,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [draft, clearSelection]);
+  useEntrySearch(draft, setApplied, setPage, clearSelection);
 
   function changeEvent(nextEventId: string) {
     resetData();
@@ -282,6 +274,7 @@ function AdminEntriesView({
           error={actionError}
           transition={transition}
           onBack={closeDetail}
+          onMessage={onMessage}
           onUpdated={(entry, refresh = true) => {
             setSelected(entry);
             if (refresh) setRefreshRevision((value) => value + 1);

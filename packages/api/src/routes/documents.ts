@@ -66,10 +66,9 @@ export function registerEntryDocumentRoutes({
     if (!deps.entryDocuments) return c.json({ error: 'Not found' }, 404);
     const eventId = uuid.safeParse(c.req.param('eventId'));
     if (!eventId.success) return c.json({ error: 'Invalid event' }, 400);
-    const types = await deps.entryDocuments.listTypes(
-      guard.context,
-      eventId.data,
-    );
+    const types = await (
+      deps.entryDocuments.listConfiguredTypes ?? deps.entryDocuments.listTypes
+    )(guard.context, eventId.data);
     return c.json({ items: types });
   });
 

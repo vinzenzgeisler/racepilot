@@ -18,6 +18,7 @@ export * from './textarea/Textarea.js';
 export * from './date-input/DateInput.js';
 export * from './file-upload/FileUpload.js';
 export * from './form-section/FormSection.js';
+export * from './form-section/FormItem.js';
 export * from './page-header/PageHeader.js';
 export * from './filter-bar/FilterBar.js';
 export * from './tabs/Tabs.js';

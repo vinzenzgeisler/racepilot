@@ -3,15 +3,12 @@ import {
   Banner,
   DetailHeader,
   DetailLayout,
-  HintLabel,
   ReasonDialog,
-  StatusLabel,
 } from '@racepilot/ui';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { Outcome, WorkflowView } from './AdminEntriesModel.js';
 import type { AdminActionKind } from './detail/EntryAdminActionDialog.js';
 import { EntryAdminActionDialog } from './detail/EntryAdminActionDialog.js';
-import { statusMeaning } from './EntryStatusBadge.js';
 import { EntryActionRail, type StatusStep } from './detail/EntryActionRail.js';
 import {
   EntryDocumentsSection,
@@ -22,11 +19,16 @@ import { EntryCustomAnswers } from './detail/EntryCustomAnswers.js';
 import { EntryDriverSection } from './detail/EntryDriverSection.js';
 import { EntryHistorySection } from './detail/EntryHistorySection.js';
 import { EntryConfirmation } from './detail/EntryConfirmation.js';
+import { EntryDetailLabels } from './detail/EntryDetailLabels.js';
+import { EntryDocumentRejectDialog } from './documents/EntryDocumentRejectDialog.js';
+import type { UploadLine } from './documents/documentLines.js';
+import { requestMessageSeed } from './documents/requestMessage.js';
+import { useEntryDocumentActions } from './documents/useEntryDocumentActions.js';
+import type { MessageSeed } from '../messages/messageSeed.js';
 import { EntryMessagesSection } from './detail/EntryMessagesSection.js';
 import { EntryPaymentDialog } from './detail/EntryPaymentDialog.js';
 import { EntryVehicleSection } from './detail/EntryVehicleSection.js';
 import {
-  dimensionLabel,
   formatDateTime,
   lastChangeAt,
   timelineFor,
@@ -44,12 +46,6 @@ type Pending =
   | { kind: 'payment' }
   | { kind: 'admin'; action: AdminActionKind };
 
-const HINT_NAMES = {
-  double_starter: 'Doppelstarter',
-  passenger: 'Beifahrer',
-  late_entry: 'Nachnennung',
-} as const;
-
 export function AdminEntryDetail({
   selected,
   classes,
@@ -59,6 +55,7 @@ export function AdminEntryDetail({
   transition,
   onBack,
   onUpdated,
+  onMessage,
 }: {
   selected: Entry;
   classes: Array<{ id: string; name: string; closed?: boolean }>;
@@ -72,8 +69,14 @@ export function AdminEntryDetail({
   ) => Promise<Outcome>;
   onBack: () => void;
   onUpdated: (entry: Entry | null, refresh?: boolean) => void;
+  onMessage?: ((seed: MessageSeed) => void) | undefined;
 }) {
   const api = useEntryDetailApi(selected, onUpdated);
+  const documents = useEntryDocumentActions(api);
+  const writeMessage = onMessage && (() => onMessage({ entryId: selected.id }));
+  const requestDocument =
+    onMessage &&
+    ((line: UploadLine) => onMessage(requestMessageSeed(selected.id, line)));
   const messages = useEntryMessages(selected);
   const dimensionLabels = useDimensionLabels(selected.eventId);
   const [pending, setPending] = useState<Pending | null>(null);
@@ -87,36 +90,6 @@ export function AdminEntryDetail({
     return <p role="alert">Die Details dieser Nennung sind nicht verfügbar.</p>;
   const projection = selected.statusProjection;
   const changed = lastChangeAt(selected);
-  const order = [
-    'email_verification',
-    'entry',
-    'payment',
-    'technical_inspection',
-    'waiver',
-  ];
-  const labels = [...(projection?.dimensions ?? [])]
-    .sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key))
-    .map((item) => (
-      <StatusLabel
-        key={item.key}
-        status={
-          item.key === 'entry'
-            ? statusMeaning(
-                workflow?.statuses.find((status) => status.key === item.value)
-                  ?.category ?? '',
-              )
-            : item.key === 'payment' && item.meaning === 'not_relevant'
-              ? 'empty'
-              : item.meaning
-        }
-        label={dimensionLabel(item)}
-      />
-    ));
-  const hints = (projection?.hints ?? [])
-    .filter((hint) => hint.present)
-    .map((hint) => (
-      <HintLabel key={hint.key}>{HINT_NAMES[hint.key]}</HintLabel>
-    ));
   const close = () => {
     setPending(null);
     setDialogError('');
@@ -124,9 +97,13 @@ export function AdminEntryDetail({
   async function confirm(reason: string, amountCents?: number) {
     if (!pending) return;
     setDialogError('');
-    if (pending.kind === 'payment' && amountCents !== undefined) {
+    if (
+      pending.kind === 'payment' &&
+      amountCents !== undefined &&
+      details?.invoice
+    ) {
       const result = await api.recordPayment(
-        details!.invoice!.id,
+        details.invoice.id,
         amountCents,
         reason,
       );
@@ -195,14 +172,19 @@ export function AdminEntryDetail({
             onBack={onBack}
             number={selected.requestedStartNumber ?? details.startNumber}
             title={`${details.driver.name} · ${details.vehicle.make} ${details.vehicle.model}`}
-            subtitle={`Klasse ${details.eventClass.name}`}
+            subtitle={[
+              `Klasse ${details.eventClass.name}`,
+              selected.orgaCode ? `Orga-Code ${selected.orgaCode}` : null,
+            ]
+              .filter(Boolean)
+              .join(' · ')}
             meta={
               <>
                 Eingang {formatDateTime(selected.createdAt)}
                 {changed && <> · Geändert {formatDateTime(changed)}</>}
               </>
             }
-            labels={[...labels, ...hints]}
+            labels={<EntryDetailLabels entry={selected} workflow={workflow} />}
           />
         }
         rail={
@@ -215,10 +197,13 @@ export function AdminEntryDetail({
             onPayment={() => setPending({ kind: 'payment' })}
             onDimension={(action) => setPending({ kind: 'dimension', action })}
             onAdminAction={(action) => setPending({ kind: 'admin', action })}
+            onMessage={writeMessage}
+            onRequestDocument={requestDocument}
           />
         }
       >
         {error && !pending && <Banner tone="error">{error}</Banner>}
+        {documents.error && <Banner tone="error">{documents.error}</Banner>}
         <EntryDriverSection
           driver={details.driver}
           passenger={Boolean(
@@ -236,6 +221,10 @@ export function AdminEntryDetail({
         <EntryCustomAnswers answers={details.customAnswers} />
         <EntryDocumentsSection
           entry={selected}
+          busy={busy || api.busy}
+          onReviewDocument={(line) => void documents.review(line)}
+          onRejectDocument={documents.startReject}
+          onRequestDocument={requestDocument}
           onDimensionAction={(action) =>
             setPending({ kind: 'dimension', action })
           }
@@ -268,6 +257,13 @@ export function AdminEntryDetail({
           onClose={close}
         />
       )}
+      <EntryDocumentRejectDialog
+        line={documents.rejecting}
+        busy={api.busy}
+        error={documents.dialogError}
+        onConfirm={(reason) => void documents.confirmReject(reason)}
+        onClose={documents.cancelReject}
+      />
       {pending?.kind === 'admin' && (
         <EntryAdminActionDialog
           kind={pending.action}

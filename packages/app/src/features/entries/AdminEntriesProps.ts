@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import type { WorkflowView } from './AdminEntriesModel.js';
 import type { EntryFilters } from '../overview/overviewModel.js';
+import type { MessageSeed } from '../messages/messageSeed.js';
 
 export type AdminEntriesProps = {
   detailOpen?: boolean;
@@ -9,6 +10,7 @@ export type AdminEntriesProps = {
   mobilePreviewOpen?: boolean | undefined;
   autoPreview?: boolean;
   onOpenDetail?: () => void;
+  onMessage?: (seed: MessageSeed) => void;
   onCloseDetail?: () => void;
   onSelectionChange?: (entry: Entry | null) => void;
   onWorkflowChange?: (workflow: WorkflowView | null) => void;

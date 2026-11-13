@@ -195,7 +195,7 @@ jobs:
           cat /tmp/community-up.log
           exit 1
       - name: Seed Community demo data
-        run: COMMUNITY_DEMO_SEED=I_UNDERSTAND DEPLOYMENT_MODE=community DATABASE_URL='postgres://racepilot:racepilot-local@127.0.0.1:5433/racepilot' COMMUNITY_ORGANIZATION_SLUG=community npm run community:demo-seed
+        run: COMMUNITY_DEMO_SEED=I_UNDERSTAND DEPLOYMENT_MODE=community DATABASE_URL='postgres://racepilot:racepilot-local@127.0.0.1:5433/racepilot' COMMUNITY_ORGANIZATION_SLUG=community STORAGE_LOCAL_ROOT="$GITHUB_WORKSPACE/.community-local/uploads" npm run community:demo-seed
       - name: Browser login smoke test
         run: COMMUNITY_ADMIN_PASSWORD="$(node scripts/community-config.mjs --password)" npx playwright test --config packages/app/playwright.config.ts
       - name: Upload alpha-flow browser screenshots

@@ -3,6 +3,7 @@ import type {
   EntryDocumentsRepository,
   EntryDocumentResult,
   EntryDocument,
+  EntryDocumentType,
   EntryDocumentStatus,
 } from '@racepilot/core';
 import type { Database } from './database.js';
@@ -41,6 +42,18 @@ const mapDocument = (
   rejectionReason: row.rejectionReason,
 });
 
+const mapType = (
+  row: typeof eventEntryDocumentTypes.$inferSelect,
+  configured: boolean,
+): EntryDocumentType => ({
+  key: row.key,
+  eventId: row.eventId,
+  name: row.name,
+  required: row.required,
+  hint: row.hint,
+  ...(configured ? { enabled: row.enabled } : {}),
+});
+
 export function createEntryDocumentsRepository(
   db: Database,
 ): EntryDocumentsRepository {
@@ -57,13 +70,19 @@ export function createEntryDocumentsRepository(
               eq(eventEntryDocumentTypes.enabled, true),
             ),
           )
-      ).map((row) => ({
-        key: row.key,
-        eventId: row.eventId,
-        name: row.name,
-        required: row.required,
-        hint: row.hint,
-      })),
+      ).map((row) => mapType(row, false)),
+    listConfiguredTypes: async (ctx, eventId) =>
+      (
+        await db
+          .select()
+          .from(eventEntryDocumentTypes)
+          .where(
+            and(
+              eq(eventEntryDocumentTypes.organizationId, ctx.organizationId),
+              eq(eventEntryDocumentTypes.eventId, eventId),
+            ),
+          )
+      ).map((row) => mapType(row, true)),
     saveTypes: async (ctx, eventId, types, actor) => {
       if (!actor.trim())
         return { ok: false, error: 'invalid', reason: 'actor_required' };
@@ -93,7 +112,7 @@ export function createEntryDocumentsRepository(
               name: type.name,
               required: type.required,
               hint: type.hint,
-              enabled: true,
+              enabled: type.enabled ?? true,
               updatedAt: new Date(),
             })
             .onConflictDoUpdate({
@@ -106,7 +125,7 @@ export function createEntryDocumentsRepository(
                 name: type.name,
                 required: type.required,
                 hint: type.hint,
-                enabled: true,
+                enabled: type.enabled ?? true,
                 updatedAt: new Date(),
               },
             });
