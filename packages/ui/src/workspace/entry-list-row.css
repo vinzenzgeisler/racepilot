@@ -85,12 +85,28 @@
   vertical-align: middle;
 }
 .nb-entry-list-inspection,
-.nb-entry-list-waiver {
+.nb-entry-list-waiver,
+.nb-entry-list-orga {
   display: none;
+}
+.nb-entry-list-orga {
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
 }
 .nb-workspace-split.is-wide .nb-entry-list-inspection,
 .nb-workspace-split.is-wide .nb-entry-list-waiver {
   display: table-cell;
+}
+/* A6 priority 4: with the wide stage (2200 and up) or once the preview is closed. */
+@media (width >= 2200px) {
+  .nb-entry-list-orga {
+    display: table-cell;
+  }
+}
+@media (width >= 768px) {
+  .nb-workspace-split:not(.has-preview) .nb-entry-list-orga {
+    display: table-cell;
+  }
 }
 @media (width < 768px) {
   .nb-entry-list-row {
@@ -111,7 +127,8 @@
     border: 0;
   }
   .nb-entry-list-row td[data-priority='2'],
-  .nb-entry-list-row td[data-priority='3'] {
+  .nb-entry-list-row td[data-priority='3'],
+  .nb-entry-list-row td[data-priority='4'] {
     display: none;
   }
   .nb-entry-list-row td:first-child {

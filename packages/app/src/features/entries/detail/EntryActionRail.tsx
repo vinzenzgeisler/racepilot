@@ -11,6 +11,10 @@ import {
   dimensionAction,
   type DimensionAction,
 } from './EntryDocumentsSection.js';
+import {
+  requestableUploads,
+  type UploadLine,
+} from '../documents/documentLines.js';
 import { missingRequirements } from './entryDetailModel.js';
 
 export type StatusStep = { to: string; label: string; danger: boolean };
@@ -73,6 +77,8 @@ export function EntryActionRail({
   onPayment,
   onDimension,
   onAdminAction,
+  onMessage,
+  onRequestDocument,
 }: {
   entry: Entry;
   workflow: WorkflowView | null;
@@ -84,6 +90,9 @@ export function EntryActionRail({
   onAdminAction: (
     kind: 'change_class' | 'adjust_amount' | 'note' | 'delete',
   ) => void;
+  /** Without a messages view the Kommunikation group stays hidden. */
+  onMessage?: (() => void) | undefined;
+  onRequestDocument?: ((line: UploadLine) => void) | undefined;
 }) {
   const { primary, others } = statusSteps(entry, workflow);
   const missing = missingRequirements(entry);
@@ -140,6 +149,23 @@ export function EntryActionRail({
               Zahlung erfassen
             </RailAction>
           )}
+        </ActionGroup>
+      )}
+      {onMessage && (
+        <ActionGroup title="Kommunikation">
+          {onRequestDocument &&
+            requestableUploads(entry).map((line) => (
+              <RailAction
+                key={line.key}
+                disabled={busy}
+                onClick={() => onRequestDocument(line)}
+              >
+                {line.label} nachfordern
+              </RailAction>
+            ))}
+          <RailAction disabled={busy} onClick={onMessage}>
+            Nachricht schreiben
+          </RailAction>
         </ActionGroup>
       )}
       {others.length > 0 && (

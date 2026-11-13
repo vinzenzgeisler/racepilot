@@ -122,3 +122,9 @@ export {
   EntryDocumentLineSchema,
   EntryDocumentProjectionSchema,
 } from './documents.js';
+export type {
+  EntryDocumentType,
+  EntryDocumentRecord,
+  EntryDocumentLine,
+  EntryDocumentProjection,
+} from './documents.js';

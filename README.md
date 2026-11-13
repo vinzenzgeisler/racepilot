@@ -142,8 +142,7 @@ Das gespeicherte lokale Passwort kannst du bei Bedarf mit
 abgesichertes öffentliches Hosting. Nennung, E-Mail-Bestätigung, Bild-Upload und
 Admin-Bearbeitung sind vorhanden. Veranstaltungen, Klassen, Startgeld, Teilnahmebedingungen und das Öffnen der Nennung
 werden über die Admin-Oberfläche eingerichtet. Zahlungserfassung und CSV-Export
-benötigen teilweise noch die API. PDF-Belege und
-Einzelprüfung hochgeladener Dokumente fehlen noch. Details und ausdrücklich noch
+benötigen teilweise noch die API. Nennungsunterlagen und ihre Prüfung sind in der Admin-Oberfläche verfügbar. Details und ausdrücklich noch
 nicht verfügbare UI-Aktionen stehen im [lokalen Leitfaden](docs/getting-started/community-local.md)
 und im [Community-Alpha-Issue](https://github.com/vinzenzgeisler/racepilot/issues/120).
 

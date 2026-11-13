@@ -14,6 +14,7 @@ import {
   type EntryQuery,
   type WorkflowView,
 } from './AdminEntriesModel.js';
+import type { MessageSeed } from '../messages/messageSeed.js';
 import { AdminEntriesState } from './AdminEntriesState.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
@@ -24,12 +25,14 @@ import { usePreviewAdvance } from './usePreviewAdvance.js';
 import { useOpenEntryDetail } from './useOpenEntryDetail.js';
 import { useEntryChangesRefresh } from './useEntryChangesRefresh.js';
 import { useSharedSelection } from './useSharedSelection.js';
+import { useEntrySearch } from './useEntrySearch.js';
 type AdminEntriesProps = {
   detailOpen?: boolean;
   preview?: ReactNode;
   mobilePreviewOpen?: boolean | undefined;
   autoPreview?: boolean;
   onOpenDetail?: () => void;
+  onMessage?: (seed: MessageSeed) => void;
   onCloseDetail?: () => void;
   onSelectionChange?: (entry: Entry | null) => void;
   onWorkflowChange?: (workflow: WorkflowView | null) => void;
@@ -54,6 +57,7 @@ function AdminEntriesView({
   mobilePreviewOpen,
   autoPreview = false,
   onOpenDetail,
+  onMessage,
   onCloseDetail,
   onSelectionChange,
   onWorkflowChange,
@@ -191,17 +195,7 @@ function AdminEntriesView({
     closeDetail,
     setSelected,
   });
-  useEffect(() => {
-    const timeout = window.setTimeout(
-      () => {
-        setPage(1);
-        clearSelection();
-        setApplied(draft);
-      },
-      draft.search ? 180 : 0,
-    );
-    return () => window.clearTimeout(timeout);
-  }, [draft, clearSelection]);
+  useEntrySearch(draft, setApplied, setPage, clearSelection);
 
   function changeEvent(nextEventId: string) {
     resetData();
@@ -294,6 +288,7 @@ function AdminEntriesView({
           error={actionError}
           transition={transition}
           onBack={closeDetail}
+          onMessage={onMessage}
           onUpdated={(entry, refresh = true) => {
             setSelected(entry);
             if (refresh) setRefreshRevision((value) => value + 1);

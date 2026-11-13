@@ -7,6 +7,8 @@ import {
 } from '@racepilot/ui';
 import type { EntryResponse as Entry } from '@racepilot/contracts';
 import { AdminFileDownload } from '../AdminFileDownload.js';
+import { uploadLines, type UploadLine } from '../documents/documentLines.js';
+import { uploadRows } from '../documents/uploadRows.js';
 import { formatMoney } from './entryDetailModel.js';
 
 type Dimension = NonNullable<Entry['statusProjection']>['dimensions'][number];
@@ -27,12 +29,20 @@ export function dimensionAction(item: Dimension): DimensionAction | null {
 
 export function EntryDocumentsSection({
   entry,
+  busy,
   onDimensionAction,
   onRecordPayment,
+  onReviewDocument,
+  onRejectDocument,
+  onRequestDocument,
 }: {
   entry: Entry;
+  busy: boolean;
   onDimensionAction: (action: DimensionAction) => void;
   onRecordPayment: () => void;
+  onReviewDocument: (line: UploadLine) => void;
+  onRejectDocument: (line: UploadLine) => void;
+  onRequestDocument?: ((line: UploadLine) => void) | undefined;
 }) {
   const projection = entry.statusProjection?.dimensions ?? [];
   const uploads = (entry.adminDetails?.customAnswers ?? []).filter(
@@ -41,6 +51,12 @@ export function EntryDocumentsSection({
   const invoice = entry.adminDetails?.invoice;
   const payment = projection.find((item) => item.key === 'payment');
   const rows = [
+    ...uploadRows(entry.id, uploadLines(entry), {
+      busy,
+      onReview: onReviewDocument,
+      onReject: onRejectDocument,
+      onRequest: onRequestDocument,
+    }),
     ...uploads.map((answer) => ({
       id: `upload-${answer.key}`,
       label: answer.label,
@@ -113,10 +129,6 @@ export function EntryDocumentsSection({
           {invoice.paymentReference}
         </DetailNote>
       )}
-      <DetailNote>
-        Eine Prüfung jedes hochgeladenen Dokuments (Freigabe, Nachfordern) ist
-        noch nicht verfügbar.
-      </DetailNote>
     </DetailSection>
   );
 }
