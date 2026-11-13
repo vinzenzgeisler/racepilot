@@ -7,6 +7,7 @@ import type {
   EntryResponse as Entry,
 } from '@racepilot/contracts';
 import { formatDateTime } from './entryDetailModel.js';
+import type { useEntryDetailApi } from './useEntryDetailApi.js';
 
 type LinkResult =
   | { ok: true; link: AdminPassengerLinkResponse }
@@ -16,7 +17,7 @@ type LinkResult =
  * Registers a co-driver afterwards ("add") or creates the co-driver's personal link ("link").
  * The link is shown once after it is created; only its hash is stored.
  */
-export function EntryPassengerDialog({
+function PassengerDialog({
   kind,
   entry,
   busy,
@@ -154,5 +155,39 @@ export function EntryPassengerDialog({
         />
       )}
     </FormDialog>
+  );
+}
+
+/** Runs the add or link action against the entry; closes after a successful add, shows errors in the dialog. */
+export function EntryPassengerFlow({
+  kind,
+  entry,
+  api,
+  onClose,
+}: {
+  kind: 'add' | 'link';
+  entry: Entry;
+  api: Pick<
+    ReturnType<typeof useEntryDetailApi>,
+    'busy' | 'addPassenger' | 'createPassengerLink'
+  >;
+  onClose: () => void;
+}) {
+  const [error, setError] = useState('');
+  return (
+    <PassengerDialog
+      kind={kind}
+      entry={entry}
+      busy={api.busy}
+      error={error}
+      onAdd={(input) =>
+        void api.addPassenger(input).then((result) => {
+          if (result.ok) onClose();
+          else setError(result.message);
+        })
+      }
+      onLink={api.createPassengerLink}
+      onClose={onClose}
+    />
   );
 }

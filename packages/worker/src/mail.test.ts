@@ -20,7 +20,7 @@ const ctx: JobContext = {
   jobId: 'job',
   correlationId: 'corr',
 };
-function setup(tenantId = 'org-a') {
+function setup(tenantId = 'org-a', overrides: Partial<MailOutboxRecord> = {}) {
   const row: MailOutboxRecord = {
     id: 'mail-1',
     organizationId: tenantId,
@@ -36,6 +36,7 @@ function setup(tenantId = 'org-a') {
     },
     status: 'pending',
     attempts: 0,
+    ...overrides,
   };
   let status: MailOutboxRecord['status'] = 'pending';
   let attempts = 0;
@@ -92,6 +93,60 @@ describe('mail outbox worker', () => {
       expect(rendered.html).toContain('&lt;Sam&gt;');
       expect(rendered.html).toContain('registration/resume#token=opaque');
     }
+  });
+  it('provides a co-driver link template in both locales and escapes the names', () => {
+    for (const locale of ['de', 'en'] satisfies ReadonlyArray<'de' | 'en'>) {
+      const rendered = renderMailTemplate(
+        defaultMailTemplate('passenger-link', locale),
+        'passenger-link',
+        {
+          recipientName: '<Max>',
+          driverName: 'Tom P.',
+          eventName: 'Bergpreis',
+          linkUrl: 'https://example.test/passenger?token=opaque',
+        },
+      );
+      expect(rendered.subject).toContain('Bergpreis');
+      expect(rendered.html).toContain('&lt;Max&gt;');
+      expect(rendered.html).toContain('passenger?token=opaque');
+      expect(rendered.text).toContain('Tom P.');
+    }
+  });
+  it('binds co-driver links to the origin of the job organization', async () => {
+    const tenantId = '11111111-1111-4111-8111-111111111111';
+    const run = async (linkUrl: string) => {
+      const h = setup(tenantId, {
+        templateKey: 'passenger-link',
+        variables: {
+          recipientName: 'Max',
+          driverName: 'Tom P.',
+          eventName: 'Bergpreis',
+          linkUrl,
+        },
+      });
+      await createMailOutboxTask({
+        deploymentMode: 'cloud',
+        getOrganization: async () => ({ status: 'active' }),
+        repository: h.repo,
+        mail: h.mail,
+        canonicalOrigin: async () => 'https://example.test',
+      })(
+        {
+          type: 'mail.outbox',
+          schemaVersion: 1,
+          organizationId: tenantId,
+          correlationId: 'c',
+          payload: { outboxId: 'mail-1' },
+        },
+        { job: { id: 'j' } },
+      );
+      return h;
+    };
+    const sent = await run('https://example.test/passenger?token=abc');
+    expect(sent.mail.send).toHaveBeenCalledOnce();
+    await expect(
+      run('https://evil.example.test/passenger?token=abc'),
+    ).rejects.toThrow(/canonical origin/);
   });
   it('renders the latest driver note placeholder in status-change mail', () => {
     const rendered = renderMailTemplate(

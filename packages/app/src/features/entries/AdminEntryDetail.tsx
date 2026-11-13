@@ -15,11 +15,8 @@ import {
   type DimensionAction,
 } from './detail/EntryDocumentsSection.js';
 import { EntryConsentsSection } from './detail/EntryConsentsSection.js';
-import { EntryPassengerDialog } from './detail/EntryPassengerDialog.js';
-import {
-  EntryPassengerSection,
-  EntrySpareVehicleSection,
-} from './detail/EntryPassengerSection.js';
+import { EntryPassengerFlow } from './detail/EntryPassengerDialog.js';
+import { EntryPassengerBlocks } from './detail/EntryPassengerSection.js';
 import { EntryCustomAnswers } from './detail/EntryCustomAnswers.js';
 import { EntryDriverSection } from './detail/EntryDriverSection.js';
 import { EntryHistorySection } from './detail/EntryHistorySection.js';
@@ -222,12 +219,7 @@ export function AdminEntryDetail({
           busy={api.busy}
           onSave={api.saveVehicle}
         />
-        {details.spareVehicle && (
-          <EntrySpareVehicleSection vehicle={details.spareVehicle} />
-        )}
-        {details.passenger && (
-          <EntryPassengerSection passenger={details.passenger} />
-        )}
+        <EntryPassengerBlocks details={details} />
         <EntryCustomAnswers answers={details.customAnswers} />
         <EntryDocumentsSection
           entry={selected}
@@ -240,14 +232,10 @@ export function AdminEntryDetail({
           }
           onRecordPayment={() => setPending({ kind: 'payment' })}
         />
-        <EntryConsentsSection consents={details.consents ?? []} />
-        {details.passenger && (
-          <EntryConsentsSection
-            title="Einwilligungen Beifahrer"
-            emptyText="Der Beifahrer hat noch keine Einwilligungen erteilt."
-            consents={details.passenger.consents}
-          />
-        )}
+        <EntryConsentsSection
+          consents={details.consents ?? []}
+          passengerConsents={details.passenger?.consents}
+        />
         <EntryMessagesSection
           messages={messages.items}
           failed={messages.failed}
@@ -293,18 +281,10 @@ export function AdminEntryDetail({
         />
       )}
       {pending?.kind === 'passenger' && (
-        <EntryPassengerDialog
+        <EntryPassengerFlow
           kind={pending.action}
           entry={selected}
-          busy={api.busy}
-          error={dialogError}
-          onAdd={(input) =>
-            void api.addPassenger(input).then((result) => {
-              if (result.ok) close();
-              else setDialogError(result.message);
-            })
-          }
-          onLink={api.createPassengerLink}
+          api={api}
           onClose={close}
         />
       )}

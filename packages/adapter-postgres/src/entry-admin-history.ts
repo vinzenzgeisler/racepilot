@@ -1,9 +1,8 @@
+import { registrationGroups, entries } from './schema/entries.js';
 import {
-  registrationGroups,
-  entries,
   entryAuditEvents,
   entryDataAuditEvents,
-} from './schema/entries.js';
+} from './schema/entry-audit.js';
 import {
   entryAdminActionAuditEvents,
   entryNotes,
@@ -20,7 +19,7 @@ import {
   invoicePaymentAuditEvents,
 } from './schema/billing.js';
 import { emailOutbox } from './mail-schema.js';
-import { entryPassengerLinks, entryPassengers } from './schema/passengers.js';
+import { loadPassengerHistory } from './passenger-history.js';
 import type { Database } from './database.js';
 import type { RequestContext } from '@racepilot/core';
 
@@ -37,8 +36,7 @@ export async function loadEntryAdminHistory(
     dataAudits,
     actionAudits,
     notes,
-    passengerRows,
-    passengerLinkRows,
+    passengerHistory,
   ] = await Promise.all([
     db
       .select()
@@ -162,61 +160,22 @@ export async function loadEntryAdminHistory(
           inArray(entryNotes.entryId, ids),
         ),
       ),
-    db
-      .select()
-      .from(entryPassengers)
-      .where(
-        and(
-          eq(entryPassengers.organizationId, ctx.organizationId),
-          inArray(entryPassengers.entryId, ids),
-        ),
-      ),
-    db
-      .select({
-        entryId: entryPassengers.entryId,
-        id: entryPassengerLinks.id,
-        actor: entryPassengerLinks.createdBy,
-        createdAt: entryPassengerLinks.createdAt,
-      })
-      .from(entryPassengerLinks)
-      .innerJoin(
-        entryPassengers,
-        and(
-          eq(
-            entryPassengers.organizationId,
-            entryPassengerLinks.organizationId,
-          ),
-          eq(entryPassengers.id, entryPassengerLinks.passengerId),
-        ),
-      )
-      .where(
-        and(
-          eq(entryPassengerLinks.organizationId, ctx.organizationId),
-          inArray(entryPassengers.entryId, ids),
-        ),
-      ),
+    loadPassengerHistory(db, ctx, ids),
   ]);
+  type Item = {
+    id: string;
+    kind: 'entry' | 'status' | 'payment' | 'email';
+    label: string;
+    actor: string;
+    detail: string;
+  };
   const historyByEntry = new Map<
     string,
-    Array<{
-      id: string;
-      kind: 'entry' | 'status' | 'payment' | 'email';
-      label: string;
-      actor: string;
-      occurredAt: string;
-      detail: string;
-    }>
+    Array<Item & { occurredAt: string }>
   >();
   const appendHistory = (
     entryId: string,
-    item: {
-      id: string;
-      kind: 'entry' | 'status' | 'payment' | 'email';
-      label: string;
-      actor: string;
-      occurredAt: Date | string;
-      detail: string;
-    },
+    item: Item & { occurredAt: Date | string },
   ) => {
     const list = historyByEntry.get(entryId) ?? [];
     list.push({ ...item, occurredAt: new Date(item.occurredAt).toISOString() });
@@ -285,34 +244,8 @@ export async function loadEntryAdminHistory(
       occurredAt: row.sentAt ?? row.createdAt,
       detail: row.recipient,
     });
-  for (const row of passengerRows) {
-    appendHistory(row.entryId, {
-      id: `${row.id}:added`,
-      kind: 'entry',
-      label: 'passenger_added',
-      actor: row.createdBy,
-      occurredAt: row.createdAt,
-      detail: `${row.firstName} ${row.lastName}`,
-    });
-    if (row.completedAt)
-      appendHistory(row.entryId, {
-        id: `${row.id}:completed`,
-        kind: 'entry',
-        label: 'passenger_completed',
-        actor: `${row.firstName} ${row.lastName}`,
-        occurredAt: row.completedAt,
-        detail: '',
-      });
-  }
-  for (const row of passengerLinkRows)
-    appendHistory(row.entryId, {
-      id: row.id,
-      kind: 'entry',
-      label: 'passenger_link_created',
-      actor: row.actor,
-      occurredAt: row.createdAt,
-      detail: '',
-    });
+  for (const { entryId, ...item } of passengerHistory)
+    appendHistory(entryId, { ...item, kind: 'entry' });
   await resolveActorNames(db, ctx, historyByEntry);
   for (const items of historyByEntry.values())
     items.sort((left, right) =>

@@ -1,9 +1,5 @@
-import {
-  people,
-  registrationGroups,
-  entries,
-  entryAuditEvents,
-} from './schema/entries.js';
+import { people, registrationGroups, entries } from './schema/entries.js';
+import { entryAuditEvents } from './schema/entry-audit.js';
 import { eq, and, desc } from 'drizzle-orm';
 import { entryNotes } from './schema/entry-admin.js';
 import { sql } from 'drizzle-orm';

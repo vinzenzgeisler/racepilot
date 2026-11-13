@@ -3,11 +3,11 @@ import type { EntryDetailRepository, RequestContext } from '@racepilot/core';
 import type { Database } from './database.js';
 import {
   entries,
-  entryDataAuditEvents,
   people,
   registrationGroups,
   vehicles,
 } from './schema/entries.js';
+import { entryDataAuditEvents } from './schema/entry-audit.js';
 import { listEntryMessages } from './entry-messages.js';
 
 type Scalar = string | number | null;

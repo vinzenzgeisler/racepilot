@@ -12,12 +12,38 @@ type Consent = NonNullable<
  */
 export function EntryConsentsSection({
   consents,
-  title = 'Einwilligungen',
-  emptyText = 'Für diese Nennung ist kein Einwilligungsnachweis gespeichert.',
+  passengerConsents,
 }: {
   consents: Consent[];
-  title?: string;
-  emptyText?: string;
+  /** Set when the entry has a co-driver: their acceptances are listed on their own. */
+  passengerConsents?: Consent[] | undefined;
+}) {
+  return (
+    <>
+      <ConsentList
+        title="Einwilligungen"
+        emptyText="Für diese Nennung ist kein Einwilligungsnachweis gespeichert."
+        consents={consents}
+      />
+      {passengerConsents && (
+        <ConsentList
+          title="Einwilligungen Beifahrer"
+          emptyText="Der Beifahrer hat noch keine Einwilligungen erteilt."
+          consents={passengerConsents}
+        />
+      )}
+    </>
+  );
+}
+
+function ConsentList({
+  consents,
+  title,
+  emptyText,
+}: {
+  consents: Consent[];
+  title: string;
+  emptyText: string;
 }) {
   return (
     <DetailSection title={title}>

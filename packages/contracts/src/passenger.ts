@@ -2,7 +2,6 @@ import { z } from 'zod';
 import { registrationContactShape } from './registration-details.js';
 export { PassengerModeSchema, type PassengerMode } from './passenger-mode.js';
 
-
 const name = z.string().trim().min(1).max(100);
 const email = z.string().trim().email().max(254);
 

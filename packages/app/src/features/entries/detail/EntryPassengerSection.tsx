@@ -119,3 +119,21 @@ export function EntrySpareVehicleSection({
     </DetailSection>
   );
 }
+
+/** Spare vehicle and co-driver of an entry, when it has them. */
+export function EntryPassengerBlocks({
+  details,
+}: {
+  details: NonNullable<Entry['adminDetails']>;
+}) {
+  return (
+    <>
+      {details.spareVehicle && (
+        <EntrySpareVehicleSection vehicle={details.spareVehicle} />
+      )}
+      {details.passenger && (
+        <EntryPassengerSection passenger={details.passenger} />
+      )}
+    </>
+  );
+}

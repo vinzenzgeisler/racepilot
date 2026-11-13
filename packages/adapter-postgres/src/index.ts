@@ -42,6 +42,7 @@ export type { TimingResultVersion } from './timing-types.js';
 export { createTimingRepository } from './timing-repository.js';
 export * from './schema/organization.js';
 export * from './schema/entries.js';
+export * from './schema/entry-audit.js';
 export * from './schema/status.js';
 export * from './schema/billing.js';
 export * from './schema/public-registration.js';

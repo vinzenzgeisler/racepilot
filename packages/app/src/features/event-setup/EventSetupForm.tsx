@@ -20,12 +20,6 @@ const vehicleTypes: Array<{ value: VehicleType; label: string }> = [
   { value: 'other', label: 'Andere' },
 ];
 
-const passengerModes: Array<{ value: PassengerMode; label: string }> = [
-  { value: 'optional', label: 'Optional' },
-  { value: 'required', label: 'Pflicht' },
-  { value: 'none', label: 'Nein' },
-];
-
 export function EventSetupForm({
   draft,
   setDraft,
@@ -193,18 +187,13 @@ export function EventSetupForm({
                   value={item.passengerMode ?? 'optional'}
                   onChange={(event) =>
                     updateClass(index, {
-                      passengerMode:
-                        passengerModes.find(
-                          (mode) => mode.value === event.target.value,
-                        )?.value ?? 'optional',
+                      passengerMode: event.target.value as PassengerMode,
                     })
                   }
                 >
-                  {passengerModes.map((mode) => (
-                    <option key={mode.value} value={mode.value}>
-                      {mode.label}
-                    </option>
-                  ))}
+                  <option value="optional">Optional</option>
+                  <option value="required">Pflicht</option>
+                  <option value="none">Nein</option>
                 </SelectField>
                 <TextInput
                   required

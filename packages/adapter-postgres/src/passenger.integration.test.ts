@@ -132,23 +132,24 @@ describe.skipIf(!url)('co-driver, personal link and spare vehicle', () => {
         target: typeof a,
         entriesPatch: Array<Record<string, unknown>>,
         personPatch: Record<string, unknown> = {},
-      ) => ({
-        submissionId: crypto.randomUUID(),
-        formVersion: '1.0' as const,
-        language: 'de' as const,
-        eventSlug: target.event.slug,
-        person: { ...person, ...personPatch },
-        entries: entriesPatch.map((patch) => ({
-          vehicle: {
-            make: 'NSU',
-            model: 'TT',
-            year: 1969,
-            registration: null,
-          },
-          ...patch,
-        })),
-        consents: [consent],
-      }) as never;
+      ) =>
+        ({
+          submissionId: crypto.randomUUID(),
+          formVersion: '1.0' as const,
+          language: 'de' as const,
+          eventSlug: target.event.slug,
+          person: { ...person, ...personPatch },
+          entries: entriesPatch.map((patch) => ({
+            vehicle: {
+              make: 'NSU',
+              model: 'TT',
+              year: 1969,
+              registration: null,
+            },
+            ...patch,
+          })),
+          consents: [consent],
+        }) as never;
       const adminOf = async (target: typeof a, email: string) => {
         const list = await entryRepo.listAdmin!(
           ctx(target.org.id, ['entry:read']),
