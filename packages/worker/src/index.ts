@@ -82,3 +82,11 @@ export type {
 } from './mail.js';
 export { createModuleTasks } from './modules.js';
 export type { ModuleTasksOptions, ModuleJobHandlerInput } from './modules.js';
+export { createProductWorker } from './product.js';
+export type {
+  CloudWorkerEdition,
+  CommunityWorkerEdition,
+  ProductWorker,
+  ProductWorkerEdition,
+  ProductWorkerOptions,
+} from './product.js';

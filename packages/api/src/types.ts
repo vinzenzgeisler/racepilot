@@ -38,6 +38,11 @@ export interface Authenticator {
   authenticate(request: Request): Promise<ExternalIdentity | null>;
 }
 
+export interface ContextResolvers {
+  public(request: Request): Promise<RequestContext | null>;
+  member(request: Request): Promise<RequestContext | null>;
+}
+
 export interface ApiDeps {
   config: {
     deploymentMode: DeploymentMode;
@@ -274,16 +279,7 @@ export interface ApiDeps {
   /** Optional event modules (ADR 0004): registry, activation store, entitlements, routes. */
   modules?: ModuleApiDeps;
   /** Server-owned context resolvers for multi-tenant assemblies. */
-  contextResolvers?: {
-    public(request: Request): Promise<RequestContext | null>;
-    member(request: Request): Promise<RequestContext | null>;
-  };
+  contextResolvers?: ContextResolvers;
   /** One explicit route mount point for trusted, operator-owned code. */
-  mountAdditionalRoutes?: (
-    app: Hono,
-    contexts: {
-      public(request: Request): Promise<RequestContext | null>;
-      member(request: Request): Promise<RequestContext | null>;
-    },
-  ) => void;
+  mountAdditionalRoutes?: (app: Hono, contexts: ContextResolvers) => void;
 }
