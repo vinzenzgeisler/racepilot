@@ -216,6 +216,7 @@ export function AdminApplication() {
         view === 'overview' ? (
           <AdminOverview
             eventId={selectedEvent}
+            onTotalChange={setEntryCount}
             onOpenEntries={(filters) => {
               setSelectedEntry(null);
               setDetailOpen(false);

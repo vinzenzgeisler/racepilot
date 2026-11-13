@@ -102,6 +102,8 @@ export function ExportForm({
               </option>
             ))}
           </SelectField>
+        </div>
+        <div className="export-delimiter">
           <SelectField
             label="Trennzeichen"
             value={draft.delimiter}

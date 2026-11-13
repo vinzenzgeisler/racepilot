@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { EmptyState } from '@racepilot/ui';
 import {
   LoadingNotice,
@@ -17,27 +17,38 @@ import './overview.css';
 type Props = {
   eventId: string;
   onOpenEntries: (filters: EntryFilters) => void;
+  onTotalChange: (total: number) => void;
 };
 
 /** Key figures of the selected event; keyed by event so nothing carries over. */
-export function AdminOverview({ eventId, onOpenEntries }: Props) {
+export function AdminOverview({
+  eventId,
+  onOpenEntries,
+  onTotalChange,
+}: Props) {
   return eventId ? (
     <OverviewForEvent
       key={eventId}
       eventId={eventId}
       onOpenEntries={onOpenEntries}
+      onTotalChange={onTotalChange}
     />
   ) : (
     <NoEventSelected />
   );
 }
 
-function OverviewForEvent({ eventId, onOpenEntries }: Props) {
+function OverviewForEvent({ eventId, onOpenEntries, onTotalChange }: Props) {
   const load = useCallback(
     (signal: AbortSignal) => overviewApi.load(eventId, signal),
     [eventId],
   );
   const { state, reload } = useRemoteResource(load);
+  const total =
+    state.status === 'ready' ? totalEntries(state.data.statuses) : null;
+  useEffect(() => {
+    if (total !== null) onTotalChange(total);
+  }, [total, onTotalChange]);
   if (state.status === 'loading')
     return <LoadingNotice subject="Die Übersicht" />;
   if (state.status === 'error')

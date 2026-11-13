@@ -1,5 +1,6 @@
 .exports-view {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   max-width: var(--workspace-list-max-width);
 }
@@ -17,6 +18,14 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(var(--metric-min-width), 1fr));
   gap: var(--space-4);
+}
+
+.export-delimiter {
+  max-width: calc(var(--metric-min-width) * 2 + var(--space-4));
+}
+
+.export-form > button {
+  justify-self: start;
 }
 
 .export-fields {

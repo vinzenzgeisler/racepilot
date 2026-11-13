@@ -51,7 +51,12 @@ export const APP_NAVIGATION_REGISTRY: Array<{
   {
     label: 'Veranstaltung',
     items: [
-      { id: 'overview', label: 'Übersicht', icon: 'overview' },
+      {
+        id: 'overview',
+        label: 'Übersicht',
+        mobileLabel: 'Start',
+        icon: 'overview',
+      },
       { id: 'entries', label: 'Nennungen', icon: 'list' },
       {
         id: 'setup',

@@ -43,6 +43,7 @@ export function ExportHistory({
                   {job.status === 'finished' && path ? (
                     <Button
                       variant="secondary"
+                      size={32}
                       disabled={downloading === job.jobId}
                       onClick={() => onDownload(job, path)}
                     >
