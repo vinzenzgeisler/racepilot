@@ -29,16 +29,21 @@ request; deployments should bump the version when configuration changes. A
 future cache may key by canonical verified host plus configuration version and
 must expose targeted invalidation before being enabled.
 
-## Cloud integration intentionally open
+## Cloud integration through the shared composition
 
-This public API currently assembles Community only. It does not claim to resolve
-Cloud hosts and does not trust a request host as a Cloud tenant mapping. Cloud
-must provide a server-side verified-host/domain resolver in the private Cloud
-assembly, bind its result to the same contract, return the same neutral response
-for unknown/deactivated domains, and implement versioned host-scoped cache
-invalidation there. The current event lifecycle has no authoritative active-event
-selection, so this bootstrap returns `activeEvent: null`; there is no Cloud control
-plane or event-selection authority in this repository yet.
+The public API now exports `createProductApi`, used by the Community entrypoint
+and available to the private Cloud assembly. It accepts Cloud context resolvers
+instead of treating a request host as an organization. The private assembly must
+verify the host against its server-side domain mapping, bind its result to the
+same bootstrap contract, and return the neutral unavailable response for unknown
+or deactivated domains. The public composition does not implement host lookup.
+Any future host-scoped cache needs versioned invalidation before it is enabled.
+
+The current event lifecycle has no authoritative active-event selection, so
+bootstrap still returns `activeEvent: null`; there is no Cloud control plane or
+event-selection authority in this repository yet. See
+[ADR 0005](../adr/0005-shared-product-composition.md) for the edition ports and
+tenant-origin decision.
 
 One app build supports either contract mode. No tenant-specific assets, CSS, or
 frontend build variants are produced.

@@ -14,6 +14,7 @@ import {
 } from '@racepilot/core';
 import { resolveRegistrationRateLimits } from './rate-limit.js';
 import { readFileSync } from 'node:fs';
+import { testDeps, testRegistration } from './testing.js';
 const config = {
   deploymentMode: 'community' as const,
   organizationId: '10000000-0000-4000-8000-000000000001',
@@ -31,7 +32,7 @@ const org = {
 };
 const foreignEventId = '20000000-0000-4000-8000-000000000022';
 function deps(): ApiDeps {
-  return {
+  return testDeps({
     config,
     organizations: {
       getById: async () => org,
@@ -79,17 +80,19 @@ function deps(): ApiDeps {
       resolvePermissions: async () =>
         new Set(['organization:read', 'organization:update', 'event:read']),
     },
-  };
+  });
 }
 describe('admin organization routes', () => {
   it('reports the authenticated membership role without trusting token role claims', async () => {
     for (const role of ['admin', 'member'] as const) {
-      const app = createApp({
-        ...deps(),
-        memberships: {
-          resolvePermissions: async () => new Set([`role:${role}`]),
-        },
-      });
+      const app = createApp(
+        testDeps({
+          ...deps(),
+          memberships: {
+            resolvePermissions: async () => new Set([`role:${role}`]),
+          },
+        }),
+      );
       const response = await app.request('/admin/session');
       expect(response.status).toBe(200);
       expect(await response.json()).toEqual({ role });
@@ -258,11 +261,13 @@ describe('admin organization routes', () => {
   it('production-style default denies access', async () => {
     expect(
       (
-        await createApp({
-          config,
-          organizations: deps().organizations,
-          events: deps().events,
-        }).request('/admin/organization')
+        await createApp(
+          testDeps({
+            config,
+            organizations: deps().organizations,
+            events: deps().events,
+          }),
+        ).request('/admin/organization')
       ).status,
     ).toBe(401);
   });
@@ -351,17 +356,19 @@ describe('registration administration and public endpoints', () => {
   it('rejects forged tenant/event values for public draft and resume routes', async () => {
     const api = deps();
     let saved = 0;
-    api.publicRegistration = {
-      getForm: async () => null,
-      submit: async () => ({}),
-      verify: async () => false,
-      saveDraft: async () => {
-        saved++;
-        return { sent: true };
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async () => null,
+        submit: async () => ({}),
+        verify: async () => false,
+        saveDraft: async () => {
+          saved++;
+          return { sent: true };
+        },
+        resumeDraft: async () => null,
       },
-      resumeDraft: async () => null,
-    };
-    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+      createInMemoryRegistrationRateLimiter(),
+    );
     const app = createApp(api);
     const draft = {
       firstName: 'A',
@@ -403,16 +410,18 @@ describe('registration administration and public endpoints', () => {
   it('rejects requested-number lookup under a forged organization', async () => {
     const api = deps();
     let checked = 0;
-    api.publicRegistration = {
-      getForm: async () => null,
-      submit: async () => ({}),
-      verify: async () => false,
-      checkRequestedStartNumber: async () => {
-        checked++;
-        return { available: true };
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async () => null,
+        submit: async () => ({}),
+        verify: async () => false,
+        checkRequestedStartNumber: async () => {
+          checked++;
+          return { available: true };
+        },
       },
-    };
-    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+      createInMemoryRegistrationRateLimiter(),
+    );
     const app = createApp(api);
     const response = await app.request(
       '/public/organizations/20000000-0000-4000-8000-000000000002/events/event/registration/start-number?number=88',
@@ -453,15 +462,17 @@ describe('registration administration and public endpoints', () => {
         logoLightObjectId,
       },
     });
-    api.publicRegistration = {
-      getForm: async (_context, slug) => ({
-        registrationFormConfig:
-          slug === 'event-a' ? configFor(logoA) : configFor(logoB),
-      }),
-      submit: async () => ({ accepted: true }),
-      verify: async () => false,
-    };
-    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async (_context, slug) => ({
+          registrationFormConfig:
+            slug === 'event-a' ? configFor(logoA) : configFor(logoB),
+        }),
+        submit: async () => ({ accepted: true }),
+        verify: async () => false,
+      },
+      createInMemoryRegistrationRateLimiter(),
+    );
     const reads: string[] = [];
     api.objectStorage = {
       put: async () => {
@@ -500,28 +511,30 @@ describe('registration administration and public endpoints', () => {
     const objectId = crypto.randomUUID();
     const registered: unknown[] = [];
     let writes = 0;
-    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
-    api.publicRegistration = {
-      getForm: async () => ({
-        registrationFormConfig: {
-          ...defaultRegistrationFormConfig,
-          customFields: [
-            {
-              key: 'vehicle_photo',
-              type: 'file',
-              required: true,
-              label: { de: 'Bild', en: 'Photo' },
-            },
-          ],
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async () => ({
+          registrationFormConfig: {
+            ...defaultRegistrationFormConfig,
+            customFields: [
+              {
+                key: 'vehicle_photo',
+                type: 'file',
+                required: true,
+                label: { de: 'Bild', en: 'Photo' },
+              },
+            ],
+          },
+        }),
+        registerCustomFieldUpload: async (...args) => {
+          registered.push(args);
+          return true;
         },
-      }),
-      registerCustomFieldUpload: async (...args) => {
-        registered.push(args);
-        return true;
+        submit: async () => ({ accepted: true }),
+        verify: async () => false,
       },
-      submit: async () => ({ accepted: true }),
-      verify: async () => false,
-    };
+      createInMemoryRegistrationRateLimiter(),
+    );
     api.objectStorage = {
       put: async ({ organizationId, body, contentType }) => {
         writes++;
@@ -567,17 +580,19 @@ describe('registration administration and public endpoints', () => {
 
   it('keeps custom field files private unless bound to a tenant event entry', async () => {
     const api = deps();
-    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
     api.memberships = {
       resolvePermissions: async () => new Set(['entry:read']),
     };
     let reads = 0;
-    api.publicRegistration = {
-      getForm: async () => null,
-      submit: async () => ({ accepted: true }),
-      verify: async () => false,
-      canDownloadCustomFieldUpload: async () => false,
-    };
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async () => null,
+        submit: async () => ({ accepted: true }),
+        verify: async () => false,
+        canDownloadCustomFieldUpload: async () => false,
+      },
+      createInMemoryRegistrationRateLimiter(),
+    );
     api.objectStorage = {
       put: async () => {
         throw new Error('not used');
@@ -673,20 +688,22 @@ describe('registration administration and public endpoints', () => {
 
   it('does not trust spoofed client forwarding headers for registration rate limits', async () => {
     const api = deps();
-    api.publicRegistration = {
-      getForm: async () => ({ event: { name: 'Demo' } }),
-      submit: async () => ({ accepted: true }),
-      verify: async () => false,
-    };
-    const observed: string[] = [];
-    api.registrationRateLimiter = {
-      consume: async (clientIdentity, scopes) => {
-        observed.push(
-          `${clientIdentity}:${scopes.map((scope) => scope.key).join(',')}`,
-        );
-        return { allowed: true, retryAfterMs: 0 };
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async () => ({ event: { name: 'Demo' } }),
+        submit: async () => ({ accepted: true }),
+        verify: async () => false,
       },
-    };
+      {
+        consume: async (clientIdentity, scopes) => {
+          observed.push(
+            `${clientIdentity}:${scopes.map((scope) => scope.key).join(',')}`,
+          );
+          return { allowed: true, retryAfterMs: 0 };
+        },
+      },
+    );
+    const observed: string[] = [];
     const app = createApp(api);
     const path = `/public/organizations/${config.organizationId}/events/event/registration/submissions`;
     for (const value of ['192.0.2.1', '198.51.100.2', '203.0.113.3']) {
@@ -746,18 +763,20 @@ describe('registration administration and public endpoints', () => {
   it('uses forwarded identities only behind a configured trusted proxy', async () => {
     const api = deps();
     api.config = { ...config, TRUSTED_PROXIES: ['10.0.0.0/8'] };
-    api.publicRegistration = {
-      getForm: async () => ({ event: { name: 'Demo' } }),
-      submit: async () => ({ accepted: true }),
-      verify: async () => false,
-    };
-    const observed: string[] = [];
-    api.registrationRateLimiter = {
-      consume: async (clientIdentity) => {
-        observed.push(clientIdentity);
-        return { allowed: true, retryAfterMs: 0 };
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async () => ({ event: { name: 'Demo' } }),
+        submit: async () => ({ accepted: true }),
+        verify: async () => false,
       },
-    };
+      {
+        consume: async (clientIdentity) => {
+          observed.push(clientIdentity);
+          return { allowed: true, retryAfterMs: 0 };
+        },
+      },
+    );
+    const observed: string[] = [];
     const app = createApp(api);
     await app.request(
       `/public/organizations/${config.organizationId}/events/event/registration/submissions`,
@@ -806,12 +825,14 @@ describe('registration administration and public endpoints', () => {
 
   it('fails closed without a connection identity and requires shared storage in Cloud', async () => {
     const api = deps();
-    api.publicRegistration = {
-      getForm: async () => ({ event: { name: 'Demo' } }),
-      submit: async () => ({ accepted: true }),
-      verify: async () => false,
-    };
-    api.registrationRateLimiter = createInMemoryRegistrationRateLimiter();
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async () => ({ event: { name: 'Demo' } }),
+        submit: async () => ({ accepted: true }),
+        verify: async () => false,
+      },
+      createInMemoryRegistrationRateLimiter(),
+    );
     const app = createApp(api);
     const response = await app.request(
       `/public/organizations/${config.organizationId}/events/event/registration/submissions`,
@@ -839,12 +860,14 @@ describe('registration administration and public endpoints', () => {
       PUBLIC_REGISTRATION_EVENT_LIMIT: 1,
       PUBLIC_REGISTRATION_WINDOW_SECONDS: 60,
     };
-    firstTenant.registrationRateLimiter = limiter;
-    firstTenant.publicRegistration = {
-      getForm: async () => ({ event: { name: 'Demo' } }),
-      submit: async () => ({ accepted: true }),
-      verify: async () => false,
-    };
+    firstTenant.publicRegistration = testRegistration(
+      {
+        getForm: async () => ({ event: { name: 'Demo' } }),
+        submit: async () => ({ accepted: true }),
+        verify: async () => false,
+      },
+      limiter,
+    );
     const secondOrgId = '10000000-0000-4000-8000-000000000002';
     const secondTenant = {
       ...firstTenant,
@@ -963,24 +986,26 @@ describe('registration administration and public endpoints', () => {
       scopes: Array<{ key: string; limit: number; windowMs: number }>;
     }> = [];
     const firstOrg = deps();
-    firstOrg.publicRegistration = {
-      getForm: async () => null,
-      submit: async () => ({}),
-      verify: async () => false,
-    };
-    firstOrg.registrationRateLimiter = {
-      consume: async (_client, scopes) => {
-        seen.push({
-          organizationId: scopes[0]!.key.slice('organization:'.length),
-          scopes: scopes.map(({ key, limit, windowMs }) => ({
-            key,
-            limit,
-            windowMs,
-          })),
-        });
-        return { allowed: true, retryAfterMs: 0 };
+    firstOrg.publicRegistration = testRegistration(
+      {
+        getForm: async () => null,
+        submit: async () => ({}),
+        verify: async () => false,
       },
-    };
+      {
+        consume: async (_client, scopes) => {
+          seen.push({
+            organizationId: scopes[0]!.key.slice('organization:'.length),
+            scopes: scopes.map(({ key, limit, windowMs }) => ({
+              key,
+              limit,
+              windowMs,
+            })),
+          });
+          return { allowed: true, retryAfterMs: 0 };
+        },
+      },
+    );
     firstOrg.publicRegistrationRateLimits = {
       ...firstOrg.publicRegistrationRateLimits!,
       resolvePublicEvent: async (context, slug) => ({
@@ -1000,7 +1025,6 @@ describe('registration administration and public endpoints', () => {
     const secondOrg = deps();
     secondOrg.config = { ...config, organizationId: secondOrgId };
     secondOrg.publicRegistration = firstOrg.publicRegistration;
-    secondOrg.registrationRateLimiter = firstOrg.registrationRateLimiter;
     secondOrg.publicRegistrationRateLimits =
       firstOrg.publicRegistrationRateLimits;
     const secondApp = createApp(secondOrg);
@@ -1129,14 +1153,16 @@ describe('registration administration and public endpoints', () => {
 
   it('uses generic public verification responses and rate-limits by IP and event', async () => {
     const api = deps();
-    api.publicRegistration = {
-      getForm: async () => ({ event: { name: 'Demo' } }),
-      submit: async () => ({ accepted: true }),
-      verify: async () => false,
-    };
-    api.registrationRateLimiter = {
-      consume: async () => ({ allowed: true, retryAfterMs: 0 }),
-    };
+    api.publicRegistration = testRegistration(
+      {
+        getForm: async () => ({ event: { name: 'Demo' } }),
+        submit: async () => ({ accepted: true }),
+        verify: async () => false,
+      },
+      {
+        consume: async () => ({ allowed: true, retryAfterMs: 0 }),
+      },
+    );
     const app = createApp(api);
     const form = await app.request(
       `/public/organizations/${config.organizationId}/events/event/registration/form`,

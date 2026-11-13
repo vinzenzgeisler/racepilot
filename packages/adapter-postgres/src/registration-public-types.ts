@@ -1,8 +1,9 @@
+import type { CanonicalOrigin } from '@racepilot/core';
 import type { Database } from './database.js';
 
 export interface PublicRegistrationDependencies {
   db: Database;
-  options: { canonicalBaseUrl: string; tokenTtlMs?: number };
-  canonicalBase: URL;
+  options: { tokenTtlMs?: number };
+  canonicalOrigin: CanonicalOrigin;
   hashToken: (token: string) => string;
 }

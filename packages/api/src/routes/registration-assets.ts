@@ -1,9 +1,13 @@
-import type { ApiRoutesContext } from './context.js';
+import type {
+  ApiRoutesContext,
+  PublicRegistrationRouteDeps,
+} from './context.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { validateRegistrationImage } from '../registration-assets.js';
 import { resolveRegistrationRateLimits } from '../rate-limit.js';
-import { getPublicEvent } from '@racepilot/core';
+import { getPublicEvent, type ObjectStorageProvider } from '@racepilot/core';
+import type { PublicRegistrationService } from '../services.js';
 import {
   standardRegistrationForm,
   RegistrationFormConfigPatchSchema,
@@ -11,17 +15,11 @@ import {
   mergeRegistrationFormConfig,
 } from '@racepilot/contracts';
 
-export function registerRegistrationAssetRoutes(
-  context: ApiRoutesContext,
+/** The public registration form with consents and the organization's form configuration. */
+export function registerPublicFormRoute(
+  { app, resolvePublicContext }: ApiRoutesContext,
+  service: PublicRegistrationService,
 ): void {
-  const {
-    app,
-    deps,
-    resolvePublicContext,
-    consumeRegistrationBudget,
-    setRetryAfter,
-    rateLimitDefaults,
-  } = context;
   app.get(
     '/public/organizations/:organizationId/events/:slug/registration/form',
     async (c) => {
@@ -33,25 +31,41 @@ export function registerRegistrationAssetRoutes(
         !z.string().uuid().safeParse(orgId).success
       )
         return c.json({ error: 'Not found' }, 404);
-      if (deps.publicRegistration) {
-        const result = await deps.publicRegistration.getForm(
-          context,
-          c.req.param('slug'),
-        );
-        return result
-          ? c.json({
-              form: standardRegistrationForm,
-              ...(result as object),
-              registrationFormConfig: mergeRegistrationFormConfig(
-                defaultRegistrationFormConfig,
-                RegistrationFormConfigPatchSchema.parse(
-                  (result as Record<string, unknown>).registrationFormConfig ??
-                    {},
-                ),
+      const result = await service.getForm(context, c.req.param('slug'));
+      return result
+        ? c.json({
+            form: standardRegistrationForm,
+            ...(result as object),
+            registrationFormConfig: mergeRegistrationFormConfig(
+              defaultRegistrationFormConfig,
+              RegistrationFormConfigPatchSchema.parse(
+                (result as Record<string, unknown>).registrationFormConfig ??
+                  {},
               ),
-            })
-          : c.json({ error: 'Not found' }, 404);
-      }
+            ),
+          })
+        : c.json({ error: 'Not found' }, 404);
+    },
+  );
+}
+
+/** Without public registration only the event itself is shown, with the standard form. */
+export function registerPublicEventFormRoute({
+  app,
+  deps,
+  resolvePublicContext,
+}: ApiRoutesContext): void {
+  app.get(
+    '/public/organizations/:organizationId/events/:slug/registration/form',
+    async (c) => {
+      const orgId = c.req.param('organizationId');
+      const context = await resolvePublicContext(c.req.raw);
+      if (
+        !context ||
+        orgId !== context.organizationId ||
+        !z.string().uuid().safeParse(orgId).success
+      )
+        return c.json({ error: 'Not found' }, 404);
       const event = await getPublicEvent(
         context,
         c.req.param('slug'),
@@ -68,6 +82,20 @@ export function registerRegistrationAssetRoutes(
         : c.json({ error: 'Not found' }, 404);
     },
   );
+}
+
+/** Uploads into custom file fields of the registration form; needs storage and registration. */
+export function registerCustomFieldUploadRoute(
+  { app, deps, resolvePublicContext }: ApiRoutesContext,
+  registration: PublicRegistrationRouteDeps,
+  storage: ObjectStorageProvider,
+): void {
+  const {
+    service,
+    consumeRegistrationBudget,
+    setRetryAfter,
+    rateLimitDefaults,
+  } = registration;
   app.post(
     '/public/organizations/:organizationId/events/:slug/registration/custom-fields/:fieldKey/upload',
     async (c) => {
@@ -78,13 +106,9 @@ export function registerRegistrationAssetRoutes(
       if (
         !context ||
         organizationParam !== context.organizationId ||
-        !deps.publicRegistration?.registerCustomFieldUpload ||
-        !deps.objectStorage ||
         !/^[a-z][a-z0-9_-]{0,39}$/.test(fieldKey)
       )
         return c.json({ error: 'Registration unavailable' }, 404);
-      if (!deps.publicRegistrationRateLimits)
-        return c.json({ error: 'Registration unavailable' }, 503);
       let configured;
       try {
         configured = await deps.publicRegistrationRateLimits.resolvePublicEvent(
@@ -114,9 +138,7 @@ export function registerRegistrationAssetRoutes(
         setRetryAfter(c, budget.retryAfterMs);
         return c.json({ error: 'Registration unavailable' }, 429);
       }
-      const form = await deps.publicRegistration
-        .getForm(context, eventSlug)
-        .catch(() => null);
+      const form = await service.getForm(context, eventSlug).catch(() => null);
       if (!form) return c.json({ error: 'Registration unavailable' }, 404);
       const config = RegistrationFormConfigPatchSchema.safeParse(
         (form as Record<string, unknown>).registrationFormConfig ?? {},
@@ -148,33 +170,29 @@ export function registerRegistrationAssetRoutes(
         .digest('hex');
       let stored;
       try {
-        stored = await deps.objectStorage.put({
+        stored = await storage.put({
           organizationId: context.organizationId,
           body: safeFile.body,
           contentType: safeFile.contentType,
         });
         if (!z.string().uuid().safeParse(stored.objectId).success)
           throw new Error('Invalid object id');
-        const registered =
-          await deps.publicRegistration.registerCustomFieldUpload(
-            context,
-            eventSlug,
-            fieldKey,
-            stored.objectId,
-            uploadTokenHash,
-          );
+        const registered = await service.registerCustomFieldUpload(
+          context,
+          eventSlug,
+          fieldKey,
+          stored.objectId,
+          uploadTokenHash,
+        );
         if (!registered) {
-          await deps.objectStorage.delete(
-            context.organizationId,
-            stored.objectId,
-          );
+          await storage.delete(context.organizationId, stored.objectId);
           return c.json({ error: 'Registration unavailable' }, 400);
         }
         c.header('Cache-Control', 'no-store');
         return c.json({ objectId: stored.objectId, uploadToken }, 201);
       } catch {
         if (stored)
-          await deps.objectStorage
+          await storage
             .delete(context.organizationId, stored.objectId)
             .catch(() => undefined);
         return c.json({ error: 'Registration unavailable' }, 503);

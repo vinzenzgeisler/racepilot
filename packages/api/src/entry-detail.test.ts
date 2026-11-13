@@ -5,6 +5,7 @@ import {
   type EntryAdminActionResult,
 } from '@racepilot/core';
 import { createApp } from './index.js';
+import { testDeps } from './testing.js';
 
 const org = organizationId('11111111-1111-4111-8111-111111111111');
 const entryId = '33333333-3333-4333-8333-333333333333';
@@ -15,58 +16,61 @@ function appWith(
   calls: unknown[] = [],
   actionResult: EntryAdminActionResult = { status: 'updated' },
 ) {
-  return createApp({
-    config: { deploymentMode: 'community', organizationId: org },
-    organizations: { getById: async () => null, update: async () => null },
-    events: { listByOrganization: async () => [], getById: async () => null },
-    authenticator: {
-      authenticate: async () => ({
-        issuer: 'https://id.example',
-        subject: 'admin',
-      }),
-    },
-    memberships: { resolvePermissions: async () => new Set(permissions) },
-    entries: {
-      getById: async (ctx, id) =>
-        id === entryId
-          ? ({ id, organizationId: ctx.organizationId } as Entry)
-          : null,
-      transition: async () => null,
-      softDelete: async () => null,
-    },
-    entryAdminActions: {
-      availableActions: async () => ['change_class', 'delete'],
-      perform: async (ctx, id, action, actor) => {
-        calls.push(['action', ctx.organizationId, id, action, actor]);
-        return actionResult;
+  return createApp(
+    testDeps({
+      config: { deploymentMode: 'community', organizationId: org },
+      organizations: { getById: async () => null, update: async () => null },
+      events: { listByOrganization: async () => [], getById: async () => null },
+      authenticator: {
+        authenticate: async () => ({
+          issuer: 'https://id.example',
+          subject: 'admin',
+        }),
       },
-    },
-    entryDetails: {
-      updateDriver: async (ctx, id, patch, actor) => {
-        calls.push(['driver', ctx.organizationId, id, patch, actor]);
-        if (patch.firstName === 'Shared') return 'person_shared';
-        return id === entryId ? 'updated' : 'not_found';
+      memberships: { resolvePermissions: async () => new Set(permissions) },
+      entries: {
+        getById: async (ctx, id) =>
+          id === entryId
+            ? ({ id, organizationId: ctx.organizationId } as Entry)
+            : null,
+        transition: async () => null,
+        softDelete: async () => null,
       },
-      updateVehicle: async (ctx, id, patch, actor) => {
-        calls.push(['vehicle', ctx.organizationId, id, patch, actor]);
-        return id === entryId ? 'updated' : 'not_found';
+      entryWorkflows: { getPinnedForEntry: async () => null },
+      entryAdminActions: {
+        availableActions: async () => ['change_class', 'delete'],
+        perform: async (ctx, id, action, actor) => {
+          calls.push(['action', ctx.organizationId, id, action, actor]);
+          return actionResult;
+        },
       },
-      listMessages: async (_ctx, id) =>
-        id === entryId
-          ? [
-              {
-                id: '55555555-5555-4555-8555-555555555555',
-                status: 'sent',
-                subject: 'Nennung eingegangen: Bergpreis',
-                templateKey: 'entry-received',
-                recipient: 'tom@example.test',
-                createdAt: '2030-01-01T00:00:00.000Z',
-                sentAt: '2030-01-01T00:00:05.000Z',
-              },
-            ]
-          : null,
-    },
-  });
+      entryDetails: {
+        updateDriver: async (ctx, id, patch, actor) => {
+          calls.push(['driver', ctx.organizationId, id, patch, actor]);
+          if (patch.firstName === 'Shared') return 'person_shared';
+          return id === entryId ? 'updated' : 'not_found';
+        },
+        updateVehicle: async (ctx, id, patch, actor) => {
+          calls.push(['vehicle', ctx.organizationId, id, patch, actor]);
+          return id === entryId ? 'updated' : 'not_found';
+        },
+        listMessages: async (_ctx, id) =>
+          id === entryId
+            ? [
+                {
+                  id: '55555555-5555-4555-8555-555555555555',
+                  status: 'sent',
+                  subject: 'Nennung eingegangen: Bergpreis',
+                  templateKey: 'entry-received',
+                  recipient: 'tom@example.test',
+                  createdAt: '2030-01-01T00:00:00.000Z',
+                  sentAt: '2030-01-01T00:00:05.000Z',
+                },
+              ]
+            : null,
+      },
+    }),
+  );
 }
 const json = (method: string, body: unknown) => ({
   method,

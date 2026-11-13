@@ -1,4 +1,8 @@
-import type { RequestContext } from '@racepilot/core';
+import {
+  resolveCanonicalOrigin,
+  type CanonicalOrigin,
+  type RequestContext,
+} from '@racepilot/core';
 import { createMessageSender } from './messaging-send.js';
 import { messageCampaignDelivery } from '@racepilot/core';
 import type { Database } from './database.js';
@@ -7,16 +11,19 @@ export type MessageQuickAction = 'resend-verification' | 'remind-open-payments';
 
 export function createMessageQuickActions(
   db: Database,
-  canonicalBaseUrl: string | undefined,
+  canonicalOrigin: CanonicalOrigin | undefined,
 ) {
-  const send = createMessageSender(db, undefined, canonicalBaseUrl);
+  const send = createMessageSender(db, undefined, canonicalOrigin);
   return async (
     ctx: RequestContext,
     eventId: string,
     action: MessageQuickAction,
     actor: string,
   ) => {
-    if (action === 'resend-verification' && !canonicalBaseUrl)
+    const originAvailable =
+      canonicalOrigin !== undefined &&
+      (await resolveCanonicalOrigin(canonicalOrigin, ctx)) !== null;
+    if (action === 'resend-verification' && !originAvailable)
       return {
         ok: false as const,
         error: {
@@ -63,7 +70,7 @@ export function createMessageQuickActions(
         ? {
             auditAction: action,
             validateRecipients: (recipients) =>
-              canonicalBaseUrl &&
+              originAvailable &&
               recipients.every((recipient) => recipient.registrationGroupId)
                 ? { ok: true as const }
                 : {

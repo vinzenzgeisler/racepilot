@@ -1,3 +1,4 @@
+import { staticCanonicalOrigin } from '@racepilot/core';
 import { runMigrations } from 'graphile-worker';
 import { and, eq, inArray } from 'drizzle-orm';
 import { describe, expect, it } from 'vitest';
@@ -109,7 +110,7 @@ describe.skipIf(!databaseUrl)('messaging PostgreSQL integration', () => {
       const repo = createMessageRepository(
         db,
         undefined,
-        'https://example.test',
+        staticCanonicalOrigin('https://example.test'),
       );
       const foreignContext = createRequestContext({
         deploymentMode: 'cloud',

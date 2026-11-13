@@ -146,6 +146,10 @@ export interface RegistrationGroupRepository {
   ): Promise<RegistrationGroup>;
 }
 
+/** What an installation's entry repository provides: the admin list and status counters. */
+export type AdminEntryRepository = EntryRepository &
+  Required<Pick<EntryRepository, 'listAdmin' | 'countByStatus'>>;
+
 export interface EntryRepository {
   create?(
     ctx: RequestContext,

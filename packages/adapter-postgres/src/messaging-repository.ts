@@ -1,4 +1,4 @@
-import type { ObjectStorageProvider } from '@racepilot/core';
+import type { CanonicalOrigin, ObjectStorageProvider } from '@racepilot/core';
 import type { Database } from './database.js';
 import { createMessageCampaignRepository } from './messaging-campaigns.js';
 import { createMessageQuickActions } from './messaging-quick-actions.js';
@@ -8,12 +8,12 @@ import { createMessageTemplateRepository } from './messaging-templates.js';
 export function createMessageRepository(
   db: Database,
   storage?: ObjectStorageProvider,
-  canonicalBaseUrl?: string,
+  canonicalOrigin?: CanonicalOrigin,
 ) {
   return {
     ...createMessageTemplateRepository(db),
     ...createMessageCampaignRepository(db),
     send: createMessageSender(db, storage),
-    quickAction: createMessageQuickActions(db, canonicalBaseUrl),
+    quickAction: createMessageQuickActions(db, canonicalOrigin),
   };
 }

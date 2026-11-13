@@ -1,3 +1,4 @@
+import { staticCanonicalOrigin } from '@racepilot/core';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createMailOutboxTask,
@@ -19,10 +20,10 @@ const ctx: JobContext = {
   jobId: 'job',
   correlationId: 'corr',
 };
-function setup() {
+function setup(tenantId = 'org-a') {
   const row: MailOutboxRecord = {
     id: 'mail-1',
-    organizationId: 'org-a',
+    organizationId: tenantId,
     eventId: null,
     templateKey: 'verification',
     templateVersion: 1,
@@ -167,7 +168,7 @@ describe('mail outbox worker', () => {
       getOrganization: async () => ({ status: 'active' }),
       repository: h.repo,
       mail: h.mail,
-      canonicalBaseUrl: 'https://race.example.test',
+      canonicalOrigin: staticCanonicalOrigin('https://race.example.test'),
     });
     await expect(
       task(
@@ -199,6 +200,38 @@ describe('mail outbox worker', () => {
       claims: 0,
     });
   });
+  it('binds verification links to the origin of the job organization', async () => {
+    const tenantId = '11111111-1111-4111-8111-111111111111';
+    const run = async (origin: string | null) => {
+      const h = setup(tenantId);
+      const task = createMailOutboxTask({
+        deploymentMode: 'cloud',
+        getOrganization: async () => ({ status: 'active' }),
+        repository: h.repo,
+        mail: h.mail,
+        canonicalOrigin: async (tenant) =>
+          tenant.organizationId === tenantId
+            ? origin
+            : 'https://other.example.test',
+      });
+      await task(
+        {
+          type: 'mail.outbox',
+          schemaVersion: 1,
+          organizationId: tenantId,
+          correlationId: 'c',
+          payload: { outboxId: 'mail-1' },
+        },
+        { job: { id: 'j' } },
+      );
+      return h;
+    };
+    const sent = await run('https://example.test');
+    expect(sent.mail.send).toHaveBeenCalledOnce();
+    const foreign = run('https://other.example.test');
+    await expect(foreign).rejects.toThrow(/canonical origin/);
+    await expect(run(null)).rejects.toThrow(/unavailable/);
+  });
   it('ends missing and foreign tenant jobs without sending or mutating state', async () => {
     const h = setup();
     const task = (repository: MailOutboxRepository) =>
@@ -207,7 +240,7 @@ describe('mail outbox worker', () => {
         getOrganization: async () => ({ status: 'active' }),
         repository,
         mail: h.mail,
-        canonicalBaseUrl: 'https://race.example.test',
+        canonicalOrigin: staticCanonicalOrigin('https://race.example.test'),
       });
     await task({ ...h.repo, get: async () => null })(
       {
@@ -384,7 +417,7 @@ describe('campaign attachment storage delivery', () => {
           received.push([...(message.attachments ?? [])]);
         },
       },
-      canonicalBaseUrl: 'https://example.test',
+      canonicalOrigin: staticCanonicalOrigin('https://example.test'),
       storage,
     });
     await task(

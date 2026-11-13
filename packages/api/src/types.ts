@@ -1,44 +1,56 @@
-import { Hono } from 'hono';
-import { RequestContext, DeploymentMode } from '@racepilot/core';
-import { type ModuleApiDeps } from './modules.js';
-import { type RegistrationRateLimiter } from './rate-limit.js';
-import {
-  type EventClassRepository,
-  type EventClassPricingRepository,
-  type PaymentRecipientRepository,
-  type InvoicePaymentRepository,
-  type EntryRepository,
-  type EntryDetailRepository,
-  type EntryAdminActionsRepository,
-  type EntryWorkflowRepository,
-  type EntryStatusDimensionRepository,
-  type EntryExportRepository,
-  type OverviewRepository,
-  type EntryConfirmationRepository,
-  type EntryDocumentsRepository,
-  type ArtifactJobRepository,
-  type ObjectStorageProvider,
-  type OrganizationRepository,
-  type EventRepository,
-  type EventConsentTerm,
-  type EventSetupRepository,
-  type MembershipRepository,
-  type MembershipBootstrap,
-  type ExternalIdentity,
-  type MessageCampaignCreate,
-  type MessageCampaignSendResult,
-  type MessageCampaignData,
-  type MessagePreviewResult,
-  type MessageRecipientFilter,
-  type MessageTemplate,
+import type { Hono } from 'hono';
+import type {
+  DeploymentMode,
+  ExternalIdentity,
+  Logger,
+  MembershipBootstrap,
+  MembershipRepository,
+  ObjectStorageProvider,
+  RequestContext,
+  TenantRef,
+  AdminEntryRepository,
+  ArtifactJobRepository,
+  EntryAdminActionsRepository,
+  EntryConfirmationRepository,
+  EntryDetailRepository,
+  EntryDocumentsRepository,
+  EntryExportRepository,
+  EntryStatusDimensionRepository,
+  EntryWorkflowRepository,
+  EventClassPricingRepository,
+  EventClassRepository,
+  EventRepository,
+  EventSetupRepository,
+  InvoicePaymentRepository,
+  OrganizationRepository,
+  OverviewRepository,
+  PaymentRecipientRepository,
 } from '@racepilot/core';
-import { type RegistrationSettings } from '@racepilot/contracts';
+import type { ModuleApiDeps } from './modules.js';
+import type { RegistrationRateLimiter } from './rate-limit.js';
+import type {
+  EventConsentService,
+  MessageService,
+  PublicRegistrationService,
+  RegistrationFormConfigService,
+  RegistrationRateLimitSettings,
+  RegistrationSettingsService,
+} from './services.js';
 
 export interface Authenticator {
   authenticate(request: Request): Promise<ExternalIdentity | null>;
 }
 
-export interface ApiDeps {
+export interface ContextResolvers {
+  public(request: Request): Promise<RequestContext | null>;
+  member(request: Request): Promise<RequestContext | null>;
+}
+
+/**
+ * Dependencies every installation has. They are created from the database, so a
+ * missing one is a wiring error that fails at startup, never an HTTP 404.
+ */
+export interface CoreApiDeps {
   config: {
     deploymentMode: DeploymentMode;
     organizationId?: string;
@@ -47,243 +59,73 @@ export interface ApiDeps {
     PUBLIC_REGISTRATION_EVENT_LIMIT?: number;
     PUBLIC_REGISTRATION_WINDOW_SECONDS?: number;
   };
+  logger: Logger;
   organizations: OrganizationRepository;
   events: EventRepository;
-  eventSetup?: EventSetupRepository;
-  classes?: EventClassRepository;
-  entries?: EntryRepository;
-  messages?: {
-    preview(
-      context: RequestContext,
-      eventId: string,
-      filter: MessageRecipientFilter,
-    ): Promise<
-      MessagePreviewResult<{
-        count: number;
-        recipients: Array<{
-          entryId: string | null;
-          email: string;
-          name: string;
-        }>;
-      }>
-    >;
-    send(
-      context: RequestContext,
-      eventId: string,
-      idempotencyKey: string,
-      input: MessageCampaignCreate,
-      actor: string,
-    ): Promise<MessageCampaignSendResult<MessageCampaignData>>;
-    retryFailed(
-      context: RequestContext,
-      campaignId: string,
-    ): Promise<unknown | null>;
-    list(context: RequestContext, eventId: string): Promise<unknown[] | null>;
-    listTemplates(
-      context: RequestContext,
-      eventId: string,
-    ): Promise<unknown[] | null>;
-    saveTemplate(
-      context: RequestContext,
-      input: MessageTemplate,
-    ): Promise<unknown | null>;
-    previewTemplate(
-      context: RequestContext,
-      eventId: string,
-      filter: MessageRecipientFilter,
-      subject: string,
-      text: string,
-    ): Promise<MessagePreviewResult<unknown>>;
-    quickAction(
-      context: RequestContext,
-      eventId: string,
-      action: 'resend-verification' | 'remind-open-payments',
-      actor: string,
-    ): Promise<MessageCampaignSendResult<MessageCampaignData>>;
+  eventSetup: EventSetupRepository;
+  classes: EventClassRepository;
+  pricing: EventClassPricingRepository;
+  eventConsents: EventConsentService;
+  entries: AdminEntryRepository;
+  entryDetails: EntryDetailRepository;
+  entryAdminActions: EntryAdminActionsRepository;
+  entryWorkflows: EntryWorkflowRepository;
+  entryStatusDimensions: EntryStatusDimensionRepository;
+  entryExports: EntryExportRepository;
+  entryConfirmations: EntryConfirmationRepository;
+  entryDocuments: EntryDocumentsRepository;
+  artifactJobs: ArtifactJobRepository;
+  overview: OverviewRepository;
+  payments: InvoicePaymentRepository;
+  paymentRecipients: PaymentRecipientRepository;
+  messages: MessageService;
+  registrationSettings: RegistrationSettingsService;
+  registrationFormConfigs: RegistrationFormConfigService;
+  publicRegistrationRateLimits: RegistrationRateLimitSettings;
+}
+
+/** Public registration needs mail and a canonical origin; both come as one unit. */
+export interface PublicRegistrationModule {
+  service: PublicRegistrationService;
+  rateLimiter: RegistrationRateLimiter;
+}
+
+export interface RuntimeBootstrapConfig {
+  configurationVersion: string;
+  branding?: {
+    logoUrl?: string | null;
+    primaryColor?: string;
+    accentColor?: string;
+    eventImageUrl?: string | null;
   };
-  entryDetails?: EntryDetailRepository;
-  entryAdminActions?: EntryAdminActionsRepository;
-  entryExports?: EntryExportRepository;
-  overview?: OverviewRepository;
-  entryConfirmations?: EntryConfirmationRepository;
-  entryDocuments?: EntryDocumentsRepository;
-  artifactJobs?: ArtifactJobRepository;
+  legalLinks?: { label: string; href: string }[];
+  capabilities?: string[];
+}
+
+/**
+ * Inputs that depend on the edition or the operator's configuration. Routes that
+ * need one of them are registered only when it is present.
+ */
+export interface EditionApiDeps {
+  /** Documents, exports, uploads, and message attachments need object storage. */
   objectStorage?: ObjectStorageProvider;
-  payments?: InvoicePaymentRepository;
-  paymentRecipients?: PaymentRecipientRepository;
-  pricing?: EventClassPricingRepository;
-  entryWorkflows?: EntryWorkflowRepository;
-  entryStatusDimensions?: EntryStatusDimensionRepository;
-  registrationSettings?: {
-    get(
-      context: import('@racepilot/core').RequestContext,
-    ): Promise<RegistrationSettings>;
-    update(
-      context: import('@racepilot/core').RequestContext,
-      settings: RegistrationSettings,
-      actor: string,
-    ): Promise<RegistrationSettings>;
-  };
-  publicRegistration?: {
-    registerCustomFieldUpload?(
-      context: RequestContext,
-      eventSlug: string,
-      fieldKey: string,
-      objectId: string,
-      uploadTokenHash: string,
-    ): Promise<boolean>;
-    canDownloadCustomFieldUpload?(
-      context: RequestContext,
-      eventId: string,
-      objectId: string,
-    ): Promise<boolean>;
-    checkRequestedStartNumber?(
-      context: RequestContext,
-      eventSlug: string,
-      number: string,
-    ): Promise<{ available: boolean } | null>;
-    getForm(
-      context: import('@racepilot/core').RequestContext,
-      eventSlug: string,
-    ): Promise<unknown | null>;
-    submit(
-      context: import('@racepilot/core').RequestContext,
-      eventSlug: string,
-      payload: import('@racepilot/contracts').PublicRegistrationRequest,
-    ): Promise<unknown>;
-    verify(
-      context: import('@racepilot/core').RequestContext,
-      token: string,
-    ): Promise<boolean>;
-    saveDraft?(
-      context: RequestContext,
-      eventSlug: string,
-      email: string,
-      language: 'de' | 'en',
-      draft: Record<string, unknown>,
-    ): Promise<{ sent: true }>;
-    resumeDraft?(
-      context: RequestContext,
-      token: string,
-    ): Promise<unknown | null>;
-  };
-  registrationFormConfigs?: {
-    getOrganization(context: RequestContext): Promise<unknown | null>;
-    updateOrganization(
-      context: RequestContext,
-      config: Record<string, unknown>,
-      actor: string,
-    ): Promise<unknown | null>;
-    getEvent(context: RequestContext, eventId: string): Promise<unknown | null>;
-    updateEvent(
-      context: RequestContext,
-      eventId: string,
-      config: Record<string, unknown>,
-      actor: string,
-    ): Promise<unknown | null>;
-  };
-  registrationRateLimiter?: RegistrationRateLimiter;
-  publicRegistrationRateLimits?: {
-    getOrganization(context: RequestContext): Promise<{
-      organizationLimit?: number;
-      eventLimit?: number;
-      windowSeconds?: number;
-    } | null>;
-    updateOrganization(
-      context: RequestContext,
-      settings: {
-        organizationLimit?: number | undefined;
-        eventLimit?: number | undefined;
-        windowSeconds?: number | undefined;
-      },
-      actor: string,
-    ): Promise<{
-      organizationLimit?: number;
-      eventLimit?: number;
-      windowSeconds?: number;
-    } | null>;
-    getEvent(
-      context: RequestContext,
-      eventId: string,
-    ): Promise<{
-      eventLimit?: number;
-      windowSeconds?: number;
-    } | null>;
-    updateEvent(
-      context: RequestContext,
-      eventId: string,
-      settings: {
-        eventLimit?: number | undefined;
-        windowSeconds?: number | undefined;
-      },
-      actor: string,
-    ): Promise<{ eventLimit?: number; windowSeconds?: number } | null>;
-    resolvePublicEvent(
-      context: RequestContext,
-      slug: string,
-    ): Promise<{
-      eventId: string;
-      organization: {
-        organizationLimit?: number;
-        eventLimit?: number;
-        windowSeconds?: number;
-      } | null;
-      event: { eventLimit?: number; windowSeconds?: number } | null;
-    } | null>;
-  };
-  canonicalBaseUrl?: string;
-  eventConsents?: {
-    get(
-      context: import('@racepilot/core').RequestContext,
-      eventId: string,
-    ): Promise<EventConsentTerm[] | null>;
-    update(
-      context: import('@racepilot/core').RequestContext,
-      eventId: string,
-      terms: Array<{
-        key: string;
-        version: string;
-        language: 'de' | 'en';
-        text: string;
-        hash: string;
-      }>,
-      actor: string,
-    ): Promise<Array<{
-      key: string;
-      version: string;
-      language: 'de' | 'en';
-      text: string;
-      hash: string;
-    }> | null>;
-  };
+  publicRegistration?: PublicRegistrationModule;
   authenticator?: Authenticator;
   memberships?: MembershipRepository;
   bootstrap?: MembershipBootstrap;
   oidcClient?: { issuerUrl: string; clientId: string; redirectUri: string };
-  runtimeBootstrap?: {
-    configurationVersion: string;
-    branding?: {
-      logoUrl?: string | null;
-      primaryColor?: string;
-      accentColor?: string;
-      eventImageUrl?: string | null;
-    };
-    legalLinks?: { label: string; href: string }[];
-    capabilities?: string[];
-  };
+  runtimeBootstrap?: RuntimeBootstrapConfig;
+  /**
+   * Capabilities that depend on the organization (for example `mail.delivery`).
+   * Resolved per request for the runtime bootstrap, never once at startup.
+   */
+  organizationCapabilities?: (tenant: TenantRef) => Promise<readonly string[]>;
   /** Optional event modules (ADR 0004): registry, activation store, entitlements, routes. */
   modules?: ModuleApiDeps;
   /** Server-owned context resolvers for multi-tenant assemblies. */
-  contextResolvers?: {
-    public(request: Request): Promise<RequestContext | null>;
-    member(request: Request): Promise<RequestContext | null>;
-  };
+  contextResolvers?: ContextResolvers;
   /** One explicit route mount point for trusted, operator-owned code. */
-  mountAdditionalRoutes?: (
-    app: Hono,
-    contexts: {
-      public(request: Request): Promise<RequestContext | null>;
-      member(request: Request): Promise<RequestContext | null>;
-    },
-  ) => void;
+  mountAdditionalRoutes?: (app: Hono, contexts: ContextResolvers) => void;
 }
+
+export type ApiDeps = CoreApiDeps & EditionApiDeps;

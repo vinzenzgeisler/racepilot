@@ -10,10 +10,11 @@ import {
 } from '@racepilot/contracts';
 
 export function registerOrganizationRoutes(context: ApiRoutesContext): void {
-  const { app, deps, resolveMemberContext } = context;
+  const { app, deps, requireMember } = context;
   app.get('/admin/session', async (c) => {
-    const member = await resolveMemberContext(c.req.raw);
-    if (!member) return c.json({ error: 'Unauthorized' }, 401);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const member = guard.context;
     const role = member.permissions.has('role:admin')
       ? 'admin'
       : member.permissions.has('role:member')
@@ -22,8 +23,9 @@ export function registerOrganizationRoutes(context: ApiRoutesContext): void {
     return role ? c.json({ role }) : c.json({ error: 'Forbidden' }, 403);
   });
   app.get('/admin/organization', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     try {
       const org = await getOrganization(context, {
         organizations: deps.organizations,
@@ -36,8 +38,9 @@ export function registerOrganizationRoutes(context: ApiRoutesContext): void {
     }
   });
   app.patch('/admin/organization', async (c) => {
-    const context = await resolveMemberContext(c.req.raw);
-    if (!context) return c.json({ error: 'Unauthorized' }, 401);
+    const guard = await requireMember(c.req.raw);
+    if (!guard.ok) return c.json({ error: guard.error }, guard.status);
+    const context = guard.context;
     const body = await c.req.json().catch(() => null);
     const parsed = UpdateOrganizationRequest.safeParse(body);
     if (!parsed.success) return c.json({ error: 'Invalid request' }, 400);

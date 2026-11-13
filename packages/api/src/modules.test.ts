@@ -9,7 +9,8 @@ import {
   type ModuleDefinition,
   type RequestContext,
 } from '@racepilot/core';
-import { createApp, type ApiDeps, type ModuleApiDeps } from './index.js';
+import { createApp, type ModuleApiDeps } from './index.js';
+import { testDeps } from './testing.js';
 
 const orgA = '10000000-0000-4000-8000-00000000000a';
 const orgB = '10000000-0000-4000-8000-00000000000b';
@@ -111,7 +112,7 @@ function build(
       correlationId: 'test',
     });
   };
-  const deps: ApiDeps = {
+  const deps = testDeps({
     config: { deploymentMode: 'cloud' },
     organizations: {
       getById: async (ctx) => ({
@@ -136,7 +137,7 @@ function build(
       member: async (request) => contextFor(request),
     },
     modules,
-  };
+  });
   return { app: createApp(deps), activations };
 }
 const ADMIN = 'organization:read,organization:update,event:read,event:write';
@@ -570,40 +571,45 @@ describe('event module API in Community mode', () => {
     const activations = createInMemoryModuleActivationRepository(
       (_ctx, eventId) => eventId === eventA,
     );
-    const app = createApp({
-      config: { deploymentMode: 'community', organizationId: orgA },
-      organizations: {
-        getById: async (ctx) => ({
-          id: ctx.organizationId,
-          slug: 'a',
-          name: 'Org',
-          status: 'active',
-          contactEmail: null,
-          websiteUrl: null,
-          timezone: 'UTC',
-          locale: 'en',
-          currency: 'EUR',
-        }),
-        update: async () => null,
-      },
-      events: { listByOrganization: async () => [], getById: async () => null },
-      authenticator: {
-        authenticate: async () => ({ issuer: 'i', subject: 's' }),
-      },
-      memberships: {
-        resolvePermissions: async () => new Set(ADMIN.split(',')),
-      },
-      modules: {
-        registry,
-        activations,
-        routes: {
-          'example.noop': (r) => {
-            r.get('/ping', (c) => c.json({ ok: true }));
-            r.post('/echo', (c) => c.json({ ok: true }));
+    const app = createApp(
+      testDeps({
+        config: { deploymentMode: 'community', organizationId: orgA },
+        organizations: {
+          getById: async (ctx) => ({
+            id: ctx.organizationId,
+            slug: 'a',
+            name: 'Org',
+            status: 'active',
+            contactEmail: null,
+            websiteUrl: null,
+            timezone: 'UTC',
+            locale: 'en',
+            currency: 'EUR',
+          }),
+          update: async () => null,
+        },
+        events: {
+          listByOrganization: async () => [],
+          getById: async () => null,
+        },
+        authenticator: {
+          authenticate: async () => ({ issuer: 'i', subject: 's' }),
+        },
+        memberships: {
+          resolvePermissions: async () => new Set(ADMIN.split(',')),
+        },
+        modules: {
+          registry,
+          activations,
+          routes: {
+            'example.noop': (r) => {
+              r.get('/ping', (c) => c.json({ ok: true }));
+              r.post('/echo', (c) => c.json({ ok: true }));
+            },
           },
         },
-      },
-    });
+      }),
+    );
     const headers = {
       authorization: 'Bearer t',
       'content-type': 'application/json',

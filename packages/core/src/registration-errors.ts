@@ -21,7 +21,8 @@ export type RegistrationUnavailableReason =
   | 'capacity-exceeded'
   | 'shared-email-disallowed'
   | 'draft-field-unknown'
-  | 'draft-upload-invalid';
+  | 'draft-upload-invalid'
+  | 'origin-unavailable';
 
 export class RegistrationUnavailable extends Error {
   constructor(readonly reason: RegistrationUnavailableReason) {

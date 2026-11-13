@@ -11,12 +11,15 @@ import { sql } from 'drizzle-orm';
 import { enqueueMailOutbox } from './mail-outbox.js';
 import { randomUUID } from 'node:crypto';
 import type { PublicRegistrationDependencies } from './registration-public-types.js';
-import { RegistrationUnavailable } from '@racepilot/core';
+import {
+  RegistrationUnavailable,
+  resolveCanonicalOrigin,
+} from '@racepilot/core';
 
 export function createRegistrationSaveDraftMethods(
   dependencies: PublicRegistrationDependencies,
 ) {
-  const { hashToken, db, canonicalBase } = dependencies;
+  const { hashToken, db, canonicalOrigin } = dependencies;
   return {
     saveDraft: async (
       ctx: RequestContext,
@@ -25,6 +28,8 @@ export function createRegistrationSaveDraftMethods(
       language: 'de' | 'en',
       draftData: Record<string, unknown>,
     ) => {
+      const origin = await resolveCanonicalOrigin(canonicalOrigin, ctx);
+      if (!origin) throw new RegistrationUnavailable('origin-unavailable');
       const token = randomBytes(32).toString('base64url');
       const tokenHash = hashToken(token);
       const normalized = normalizeEmail(email);
@@ -176,7 +181,7 @@ export function createRegistrationSaveDraftMethods(
           });
         const resumeUrl = new URL(
           `/registration/resume#token=${encodeURIComponent(token)}`,
-          canonicalBase,
+          origin,
         ).toString();
         await enqueueMailOutbox(
           db,

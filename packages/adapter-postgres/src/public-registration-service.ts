@@ -12,6 +12,8 @@ import type { PublicRegistrationPayload } from './registration-settings.js';
 import { organizations, events } from './schema/organization.js';
 import { eq, and } from 'drizzle-orm';
 import {
+  type CanonicalOrigin,
+  resolveCanonicalOrigin,
   ProviderError,
   RegistrationUnavailable,
   registrationContactMatches,
@@ -27,14 +29,12 @@ import { persistRegistrationSubmission } from './registration-submit-persist.js'
 
 export function createPublicRegistrationService(
   db: Database,
-  options: { canonicalBaseUrl: string; tokenTtlMs?: number },
+  options: { canonicalOrigin: CanonicalOrigin; tokenTtlMs?: number },
 ) {
-  const canonicalBase = new URL(options.canonicalBaseUrl);
-  if (!['https:', 'http:'].includes(canonicalBase.protocol))
-    throw new Error('Invalid canonical URL');
+  const { canonicalOrigin } = options;
   const hashToken = (token: string) =>
     createHash('sha256').update(token).digest('hex');
-  const dependencies = { db, options, canonicalBase, hashToken };
+  const dependencies = { db, options, canonicalOrigin, hashToken };
   return {
     ...createRegistrationUploadMethods(dependencies),
     ...createRegistrationStartNumberMethods(dependencies),
@@ -66,6 +66,8 @@ export function createPublicRegistrationService(
         .update(canonicalize(payload))
         .digest('hex');
       const receivedAt = new Date();
+      const origin = await resolveCanonicalOrigin(canonicalOrigin, ctx);
+      if (!origin) throw new RegistrationUnavailable('origin-unavailable');
       return db.transaction(async (tx) => {
         const [event] = await tx
           .select()
@@ -262,7 +264,7 @@ export function createPublicRegistrationService(
           ...(options.tokenTtlMs === undefined
             ? {}
             : { tokenTtlMs: options.tokenTtlMs }),
-          canonicalBase,
+          canonicalOrigin: origin,
           currency: org.currency,
           groupId,
           personId,

@@ -1,10 +1,10 @@
 import type { Database } from './database.js';
-import type { EntryRepository } from '@racepilot/core';
+import type { AdminEntryRepository } from '@racepilot/core';
 import { createEntryWriteMethods } from './entry-write-methods.js';
 import { createEntryReadMethods } from './entry-read-methods.js';
 import { createEntryCountMethods } from './entry-counts.js';
 import { createEntryTransitionMethod } from './entry-transition-method.js';
-export function createEntryRepository(db: Database): EntryRepository {
+export function createEntryRepository(db: Database): AdminEntryRepository {
   const writes = createEntryWriteMethods(db);
   const reads = createEntryReadMethods(db);
   const transition = createEntryTransitionMethod(db);

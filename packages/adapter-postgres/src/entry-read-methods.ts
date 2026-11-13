@@ -1,5 +1,6 @@
 import { people, vehicles, entries } from './schema/entries.js';
-import { eq, and, desc, asc, ilike, or, count } from 'drizzle-orm';
+import { eq, and, desc, asc, ilike, count } from 'drizzle-orm';
+import { anyOf } from './sql-helpers.js';
 import { sql } from 'drizzle-orm';
 import { eventClasses } from './schema/organization.js';
 import type { Database } from './database.js';
@@ -62,7 +63,7 @@ export function createEntryReadMethods(
         for (const token of search.split(/\s+/)) {
           const pattern = `%${token.replace(/[\\%_]/g, '\\$&')}%`;
           predicates.push(
-            or(
+            anyOf(
               ilike(entries.requestedStartNumber, pattern),
               ilike(entries.orgaCode, pattern),
               sql`${entries.id}::text ilike ${pattern}`,
@@ -72,7 +73,7 @@ export function createEntryReadMethods(
               ilike(vehicles.model, pattern),
               ilike(vehicles.registration, pattern),
               ilike(eventClasses.name, pattern),
-            )!,
+            ),
           );
         }
       }
