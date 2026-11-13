@@ -18,6 +18,7 @@ import { EntryConsentsSection } from './detail/EntryConsentsSection.js';
 import { EntryCustomAnswers } from './detail/EntryCustomAnswers.js';
 import { EntryDriverSection } from './detail/EntryDriverSection.js';
 import { EntryHistorySection } from './detail/EntryHistorySection.js';
+import { EntryConfirmation } from './detail/EntryConfirmation.js';
 import { EntryDetailLabels } from './detail/EntryDetailLabels.js';
 import { EntryDocumentRejectDialog } from './documents/EntryDocumentRejectDialog.js';
 import type { UploadLine } from './documents/documentLines.js';
@@ -233,6 +234,10 @@ export function AdminEntryDetail({
         <EntryMessagesSection
           messages={messages.items}
           failed={messages.failed}
+        />
+        <EntryConfirmation
+          eventId={selected.eventId}
+          groupId={selected.registrationGroupId}
         />
         <EntryHistorySection items={timeline} />
       </DetailLayout>

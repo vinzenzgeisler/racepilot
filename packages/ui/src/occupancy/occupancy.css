@@ -1,0 +1,52 @@
+.nb-occupancy {
+  display: grid;
+  grid-template-columns:
+    minmax(var(--occupancy-label-min), 1fr)
+    minmax(var(--occupancy-track-min), 2fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding-block: var(--space-3);
+  border-bottom: var(--line-row) solid var(--color-line);
+}
+.nb-occupancy-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font: var(--text-body);
+  font-weight: var(--weight-semibold);
+}
+.nb-occupancy-track {
+  height: var(--occupancy-bar-height);
+  background: var(--color-sage);
+  box-shadow: inset 0 0 0 var(--line-group) var(--color-line);
+  background-image: linear-gradient(
+    to right,
+    var(--color-green) var(--nb-occupancy),
+    transparent var(--nb-occupancy)
+  );
+}
+.nb-occupancy.is-full .nb-occupancy-track {
+  background-image: linear-gradient(
+    to right,
+    var(--color-marshal) var(--nb-occupancy),
+    transparent var(--nb-occupancy)
+  );
+}
+.nb-occupancy-open {
+  color: var(--color-graphite);
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+}
+.nb-occupancy-count {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-self: end;
+  font: var(--text-label);
+  letter-spacing: var(--tracking-label);
+}
+.nb-occupancy-count b {
+  color: var(--color-marshal-text);
+  font-weight: var(--weight-bold);
+  text-transform: uppercase;
+}

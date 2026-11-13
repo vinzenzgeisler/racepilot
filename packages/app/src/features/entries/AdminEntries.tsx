@@ -1,20 +1,11 @@
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from 'react';
-import type { EntryResponse as Entry } from '@racepilot/contracts';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { SelectField } from '@racepilot/ui';
 import {
   applyEntrySort,
   initialQuery,
   request,
   type EntryQuery,
-  type WorkflowView,
 } from './AdminEntriesModel.js';
-import type { MessageSeed } from '../messages/messageSeed.js';
 import { AdminEntriesState } from './AdminEntriesState.js';
 import { AdminEntryDetail } from './AdminEntryDetail.js';
 import { AdminEntryList } from './AdminEntryList.js';
@@ -25,30 +16,18 @@ import { usePreviewAdvance } from './usePreviewAdvance.js';
 import { useOpenEntryDetail } from './useOpenEntryDetail.js';
 import { useEntryChangesRefresh } from './useEntryChangesRefresh.js';
 import { useSharedSelection } from './useSharedSelection.js';
+import type { AdminEntriesProps } from './AdminEntriesProps.js';
 import { useEntrySearch } from './useEntrySearch.js';
-type AdminEntriesProps = {
-  detailOpen?: boolean;
-  preview?: ReactNode;
-  mobilePreviewOpen?: boolean | undefined;
-  autoPreview?: boolean;
-  onOpenDetail?: () => void;
-  onMessage?: (seed: MessageSeed) => void;
-  onCloseDetail?: () => void;
-  onSelectionChange?: (entry: Entry | null) => void;
-  onWorkflowChange?: (workflow: WorkflowView | null) => void;
-  entriesRevision?: number;
-  previewAdvance?: { eventId: string; entryId: string } | null | undefined;
-  onPreviewAdvanceHandled?: () => void;
-  selectedEntry?: Entry | null;
-  onTotalChange?: (total: number) => void;
-  eventId?: string;
-  onEventChange?: (id: string) => void;
-};
 
 /** Event changes reset view state and cancel requests scoped to the previous event. */
 
 export function AdminEntries(props: AdminEntriesProps = {}) {
-  return <AdminEntriesView key={props.eventId ?? 'standalone'} {...props} />;
+  return (
+    <AdminEntriesView
+      key={`${props.eventId ?? 'standalone'}:${props.filterRevision ?? 0}`}
+      {...props}
+    />
+  );
 }
 
 function AdminEntriesView({
@@ -67,6 +46,7 @@ function AdminEntriesView({
   selectedEntry: sharedSelectedEntry,
   onTotalChange,
   eventId: sharedEventId,
+  initialFilters = {},
   onEventChange: onSharedEventChange,
 }: AdminEntriesProps) {
   const [internalDetailOpen, setInternalDetailOpen] = useState(false);
@@ -85,8 +65,14 @@ function AdminEntriesView({
   const [page, setPage] = useState(1);
   const pageSize = 12;
   const [refreshRevision, setRefreshRevision] = useState(0);
-  const [draft, setDraft] = useState<EntryQuery>(initialQuery);
-  const [applied, setApplied] = useState<EntryQuery>(initialQuery);
+  const [draft, setDraft] = useState<EntryQuery>({
+    ...initialQuery,
+    ...initialFilters,
+  });
+  const [applied, setApplied] = useState<EntryQuery>({
+    ...initialQuery,
+    ...initialFilters,
+  });
   const [selected, setSelected] = useSharedSelection(
     sharedSelectedEntry,
     onSelectionChange,

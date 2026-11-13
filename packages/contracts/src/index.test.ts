@@ -3,6 +3,7 @@ import {
   healthResponseSchema,
   RuntimeBootstrapResponse,
   MessageRecipientFilterSchema,
+  ExportQueuedSchema,
 } from './index.js';
 import {
   deriveAccessibleBrandColors,
@@ -235,6 +236,21 @@ describe('message recipient filter contract', () => {
     expect(
       MessageRecipientFilterSchema.safeParse({ statuses: ['unverified'] })
         .success,
+    ).toBe(false);
+  });
+});
+
+describe('export queued contract', () => {
+  const jobId = '6f1c8e0a-3f6f-4a43-9c3b-2d6c2f0a9b11';
+  it('accepts the status of both queueing routes', () => {
+    for (const status of ['queued', 'running'])
+      expect(ExportQueuedSchema.safeParse({ jobId, status }).success).toBe(
+        true,
+      );
+  });
+  it('rejects a job that already finished', () => {
+    expect(
+      ExportQueuedSchema.safeParse({ jobId, status: 'finished' }).success,
     ).toBe(false);
   });
 });

@@ -10,7 +10,9 @@ export type IconName =
   | 'search'
   | 'filter'
   | 'more'
-  | 'next';
+  | 'next'
+  | 'overview'
+  | 'export';
 
 const paths: Record<IconName, React.ReactNode> = {
   list: <path d="M4 6h16M4 12h16M4 18h10" />,
@@ -30,6 +32,8 @@ const paths: Record<IconName, React.ReactNode> = {
     <path d="M5 11h2v2H5zM11 11h2v2h-2zM17 11h2v2h-2z" fill="currentColor" />
   ),
   next: <path d="M4 12h16M14 6l6 6-6 6" />,
+  overview: <path d="M4 4h7v7H4zM13 4h7v4h-7zM13 11h7v9h-7zM4 14h7v6H4z" />,
+  export: <path d="M12 3v12M7 10l5 5 5-5M5 20h14" />,
 };
 export function Icon({ name, label }: { name: IconName; label?: string }) {
   return (

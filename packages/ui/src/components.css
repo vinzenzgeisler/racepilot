@@ -54,3 +54,5 @@
 @import url('./registration/registration-footer.css');
 
 @import './message-layout/message-layout.css';
+@import url('./metric/metric.css');
+@import url('./occupancy/occupancy.css');
